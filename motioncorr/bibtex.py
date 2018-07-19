@@ -1,9 +1,9 @@
 # coding: latin-1
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -25,12 +25,6 @@
 # *
 # **************************************************************************
 """
-List of related references in Bibtex format for dosefgpu program
-developed by Xueming Li at Yifan Cheng lab and
-motioncor2 program developed by Shawn Zheng at David Agard lab.
-"""
-
-_bibtexStr = """
 
 @article{Li2013,
   title="Electron counting and beam-induced motion correction enable near-atomic-resolution single-particle cryo-EM",
@@ -58,8 +52,3 @@ _bibtexStr = """
 
 """
 
-
-
-from pyworkflow.utils import parseBibTex
-
-_bibtex = parseBibTex(_bibtexStr)  

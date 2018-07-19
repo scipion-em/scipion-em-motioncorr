@@ -1,8 +1,8 @@
-# ******************************************************************************
+# **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -22,15 +22,12 @@
 # *  All comments concerning this program package may be sent to the
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
-# ******************************************************************************
-"""
-Protocol wrapper around the ResMap tool for local resolution
-"""
+# **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam, PathParam
 from pyworkflow.em.protocol import ProtProcessMovies, ProtImportFiles
 
-from convert import parseMovieAlignment
+from motioncorr.convert import parseMovieAlignment
 
 
 

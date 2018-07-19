@@ -1,8 +1,8 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. de la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import MicrographsView
 import pyworkflow.em.showj as showj
 
-from protocol_motioncorr import ProtMotionCorr
+from motioncorr.protocols import ProtMotionCorr
 
 
 class ProtMotioncorrViewer(Viewer):

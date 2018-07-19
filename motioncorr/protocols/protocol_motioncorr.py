@@ -39,15 +39,17 @@ import pyworkflow.utils as pwutils
 import pyworkflow.em as em
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.data import MovieAlignment
-from pyworkflow.em.packages.xmipp3.convert import writeShiftsMovieAlignment
-from pyworkflow.em.packages.grigoriefflab.convert import (parseMagCorrInput,
-                                                          parseMagEstOutput)
+from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
-from convert import (MOTIONCORR_PATH, MOTIONCOR2_PATH, getVersion, getEnviron,
-                     parseMovieAlignment, parseMovieAlignment2, getCudaLib,
-                     MOTIONCORR_CUDA_LIB, MOTIONCOR2_CUDA_LIB, CUDA_LIB)
-from pyworkflow.protocol import STEPS_PARALLEL
+
+import motioncorr
+from motioncorr.constants import (
+    MOTIONCORR_PATH, MOTIONCOR2_PATH, MOTIONCORR_CUDA_LIB,
+    MOTIONCOR2_CUDA_LIB, CUDA_LIB)
+from motioncorr.convert import (
+    parseMagCorrInput, parseMagEstOutput, writeShiftsMovieAlignment,
+    parseMovieAlignment, parseMovieAlignment2)
 
 
 class ProtMotionCorr(ProtAlignMovies):
@@ -71,7 +73,7 @@ class ProtMotionCorr(ProtAlignMovies):
         """ Return True if it is a semantic version of motioncor2.
         It started with release 1.0.0.
         """
-        return getVersion('MOTIONCOR2').startswith('1.0.')
+        return motioncorr.Plugin.getVersion('MOTIONCOR2').startswith('1.0.')
 
     def versionGE(self, version):
         """ Return True if current version of motioncor2 is greater
@@ -82,7 +84,7 @@ class ProtMotionCorr(ProtAlignMovies):
         if not self.isSemVersion():
             return False
 
-        v1 = map(int, getVersion('MOTIONCOR2').split('.'))
+        v1 = map(int, motioncorr.Plugin.getVersion('MOTIONCOR2').split('.'))
         v2 = map(int, version.split('.'))
 
         for x1, x2 in zip(v1, v2):
@@ -391,7 +393,7 @@ class ProtMotionCorr(ProtAlignMovies):
                         '-kV': inputMovies.getAcquisition().getVoltage(),
                         '-LogFile': logFileBase,
                         }
-            if getVersion('MOTIONCOR2') != '03162016':
+            if motioncorr.Plugin.getVersion('MOTIONCOR2') != '03162016':
                 argsDict['-InitDose'] = preExp
                 argsDict['-OutStack'] = 1 if self.doSaveMovie else 0
 
@@ -407,7 +409,7 @@ class ProtMotionCorr(ProtAlignMovies):
             if self._supportsMagCorrection() and self.doMagCor:
                 if self.useEst:
                     inputEst = self.inputEst.get().getOutputLog()
-                    if getVersion('MOTIONCOR2') == '01302017':
+                    if motioncorr.Plugin.getVersion('MOTIONCOR2') == '01302017':
                         input_params = parseMagCorrInput(inputEst)
                         # this version uses stretch parameters as following:
                         # 1/maj, 1/min, -angle
@@ -451,7 +453,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=getEnviron(self.useMotioncor2))
+                        env=motioncorr.Plugin.getEnviron(self.useMotioncor2))
             self._fixMovie(movie)
 
             # Compute PSDs
@@ -519,7 +521,7 @@ class ProtMotionCorr(ProtAlignMovies):
             errors.append('Missing %s' % program)
 
         # Check CUDA paths
-        cudaLib = getCudaLib(useMC2=self.useMotioncor2)
+        cudaLib = motioncorr.Plugin.getCudaLib(useMC2=self.useMotioncor2)
         cudaConst = (MOTIONCOR2_CUDA_LIB if self.useMotioncor2 else
                      MOTIONCORR_CUDA_LIB)
 
@@ -645,7 +647,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _isOutStackSupport(self):
         # checks if output aligned movies can be saved by motioncor2
-        return True if getVersion('MOTIONCOR2') != '03162016' else False
+        return True if motioncorr.Plugin.getVersion('MOTIONCOR2') != '03162016' else False
 
     def _fixMovie(self, movie):
         if self.doSaveMovie and self.useMotioncor2 and self._isOutStackSupport():
@@ -717,7 +719,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return (self.doSaveAveMic and self.doComputeMicThumbnail)
 
     def _supportsMagCorrection(self):
-        return getVersion('MOTIONCOR2') not in ['03162016', '10192016']
+        return motioncorr.Plugin.getVersion('MOTIONCOR2') not in ['03162016', '10192016']
 
     def _useWorkerThread(self):
         return '--use_worker_thread' in self.extraProtocolParams.get()

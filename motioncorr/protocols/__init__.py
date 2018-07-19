@@ -1,8 +1,8 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -24,9 +24,4 @@
 # *
 # **************************************************************************
 
-from bibtex import _bibtex # Load bibtex dict with references
-#_logo = "motioncorr_logo.png"
-_references = ['Li2013', 'Zheng2017']
-
 from protocol_motioncorr import ProtMotionCorr
-from viewer import ProtMotioncorrViewer
