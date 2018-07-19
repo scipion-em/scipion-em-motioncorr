@@ -136,3 +136,8 @@ class TestMotioncor2AlignMovies(BaseTest):
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
                              (2, 6), [0, 0, 0, 0])
+
+
+if __name__ == "__main__":
+    import unittest
+    unittest.main()
