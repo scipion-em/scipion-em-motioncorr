@@ -63,7 +63,7 @@ class Plugin:
     def getActiveVersion(cls, var):
         varHome = var + '_HOME'
         path = os.environ[varHome]
-        for v in getSupportedVersions(var):
+        for v in cls.getSupportedVersions(var):
             if v in path or v in os.path.realpath(path):
                 return v
         return ''
@@ -76,7 +76,7 @@ class Plugin:
             return ['01302017', '1.0.0', '1.0.2', '1.0.4', '1.0.5']
 
     @classmethod
-    def getCudaLib(environ=None, useMC2=False):
+    def getCudaLib(cls, environ=None, useMC2=False):
 
         e = environ or Environ(os.environ)
         cudaLib = MOTIONCOR2_CUDA_LIB if useMC2 else MOTIONCORR_CUDA_LIB
