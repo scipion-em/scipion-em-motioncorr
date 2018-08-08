@@ -44,9 +44,7 @@ from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
 import motioncorr
-from motioncorr.constants import (
-    MOTIONCORR_PATH, MOTIONCOR2_PATH, MOTIONCORR_CUDA_LIB,
-    MOTIONCOR2_CUDA_LIB, CUDA_LIB)
+from motioncorr.constants import (MOTIONCOR2, MOTIONCORR, CUDA_LIB)
 from motioncorr.convert import (
     parseMagCorrInput, parseMagEstOutput, writeShiftsMovieAlignment,
     parseMovieAlignment, parseMovieAlignment2)
@@ -73,7 +71,7 @@ class ProtMotionCorr(ProtAlignMovies):
         """ Return True if it is a semantic version of motioncor2.
         It started with release 1.0.0.
         """
-        return motioncorr.Plugin.getActiveVersion('MOTIONCOR2').startswith('1.0.')
+        return self._getVersion().startswith('1.0.')
 
     def versionGE(self, version):
         """ Return True if current version of motioncor2 is greater
@@ -84,7 +82,7 @@ class ProtMotionCorr(ProtAlignMovies):
         if not self.isSemVersion():
             return False
 
-        v1 = map(int, motioncorr.Plugin.getActiveVersion('MOTIONCOR2').split('.'))
+        v1 = map(int, self._getVersion().split('.'))
         v2 = map(int, version.split('.'))
 
         for x1, x2 in zip(v1, v2):
@@ -319,6 +317,7 @@ class ProtMotionCorr(ProtAlignMovies):
                                    movieFolder)
 
         a0, aN = self._getRange(movie, 'align')
+        program = self._getProgram()
 
         if not self.useMotioncor2:
             # Get the number of frames and the range to be used
@@ -355,7 +354,6 @@ class ProtMotionCorr(ProtAlignMovies):
 
             args += ' -gpu %(GPU)s'
             args += ' ' + self.extraParams.get()
-            program = MOTIONCORR_PATH
 
         else:
             logFileBase = (logFile.replace('0-Full.log', '').replace(
@@ -393,7 +391,7 @@ class ProtMotionCorr(ProtAlignMovies):
                         '-kV': inputMovies.getAcquisition().getVoltage(),
                         '-LogFile': logFileBase,
                         }
-            if motioncorr.Plugin.getActiveVersion('MOTIONCOR2') != '03162016':
+            if self._getVersion() != '03162016':
                 argsDict['-InitDose'] = preExp
                 argsDict['-OutStack'] = 1 if self.doSaveMovie else 0
 
@@ -409,7 +407,7 @@ class ProtMotionCorr(ProtAlignMovies):
             if self._supportsMagCorrection() and self.doMagCor:
                 if self.useEst:
                     inputEst = self.inputEst.get().getOutputLog()
-                    if motioncorr.Plugin.getActiveVersion('MOTIONCOR2') == '01302017':
+                    if self._getVersion() == '01302017':
                         input_params = parseMagCorrInput(inputEst)
                         # this version uses stretch parameters as following:
                         # 1/maj, 1/min, -angle
@@ -449,7 +447,6 @@ class ProtMotionCorr(ProtAlignMovies):
 
             args += ' -Gpu %(GPU)s'
             args += ' ' + self.extraParams2.get()
-            program = MOTIONCOR2_PATH
 
         try:
             self.runJob(program, args, cwd=movieFolder,
@@ -514,27 +511,26 @@ class ProtMotionCorr(ProtAlignMovies):
     def _validate(self):
         # Check base validation before the specific ones for Motioncorr
         errors = ProtAlignMovies._validate(self)
-
-        program = MOTIONCOR2_PATH if self.useMotioncor2 else MOTIONCORR_PATH
+        program = self._getProgram()
 
         if not os.path.exists(program):
             errors.append('Missing %s' % program)
 
         # Check CUDA paths
-        cudaLib = motioncorr.Plugin.getCudaLib(useMC2=self.useMotioncor2)
-        cudaConst = (MOTIONCOR2_CUDA_LIB if self.useMotioncor2 else
-                     MOTIONCORR_CUDA_LIB)
+        mcVar = self._getMcVar()
+        cudaLib = motioncorr.Plugin.getCudaLib(mcVar)
+        cudaLibVar = '%s_CUDA_LIB' % mcVar
 
         if cudaLib is None:
             errors.append("Do not know where to find CUDA lib path. "
                           " %s or %s variables have None value or are not"
                           " present in scipion configuration."
-                          % (cudaConst, CUDA_LIB))
+                          % (cudaLibVar, CUDA_LIB))
 
         elif not pwutils.existsVariablePaths(cudaLib):
             errors.append("Either %s or %s variables points to a non existing "
                           "path (%s). Please, check scipion configuration."
-                          % (cudaConst, CUDA_LIB, cudaLib))
+                          % (cudaLibVar, CUDA_LIB, cudaLib))
 
         gpu = self.gpuList.get()
 
@@ -579,6 +575,15 @@ class ProtMotionCorr(ProtAlignMovies):
         return errors
 
     # --------------------------- UTILS functions ------------------------------
+    def _getVersion(self, mcVar=MOTIONCOR2):
+        return motioncorr.Plugin.getActiveVersion(mcVar)
+
+    def _getMcVar(self):
+        return MOTIONCOR2 if self.useMotioncor2 else MOTIONCORR
+
+    def _getProgram(self):
+        return motioncorr.Plugin.getProgram(self._getMcVar())
+
     def _getMovieLogFile(self, movie):
         if not self.useMotioncor2:
             return 'micrograph_%06d_Log.txt' % movie.getObjId()
@@ -647,7 +652,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _isOutStackSupport(self):
         # checks if output aligned movies can be saved by motioncor2
-        return True if motioncorr.Plugin.getActiveVersion('MOTIONCOR2') != '03162016' else False
+        return self._getVersion() != '03162016'
 
     def _fixMovie(self, movie):
         if self.doSaveMovie and self.useMotioncor2 and self._isOutStackSupport():

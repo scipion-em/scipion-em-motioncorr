@@ -27,29 +27,37 @@
 import os
 import pyworkflow.utils as pwutils
 
-
 CUDA_LIB = 'CUDA_LIB'
+
+MOTIONCORR = 'MOTIONCORR'
+MOTIONCORR_HOME = 'MOTIONCORR_HOME'
 MOTIONCORR_CUDA_LIB = 'MOTIONCORR_CUDA_LIB'
+MOTIONCORR_BIN = 'MOTIONCORR_BIN'
+
+MOTIONCOR2 = 'MOTIONCOR2'
+MOTIONCOR2_HOME = 'MOTIONCOR2_HOME'
 MOTIONCOR2_CUDA_LIB = 'MOTIONCOR2_CUDA_LIB'
+MOTIONCOR2_BIN = 'MOTIONCOR2_BIN'
 
 
-def _getHome(key, default):
-    """ Get the required home path, if not present..
-    the default value will be used from EM_ROOT.
-    """
-    return os.environ.get(key, os.path.join(os.environ['EM_ROOT'], default))
-
-# For some reason all variables end up with SCIPION HOME prepended %&%#!
-MOTIONCORR = pwutils.getEnvVariable('MOTIONCORR')
-MOTIONCORR = os.path.basename(MOTIONCORR)
-
-MOTIONCOR2_BIN = pwutils.getEnvVariable('MOTIONCOR2_BIN', 'motioncor2')
-MOTIONCOR2_BIN = os.path.basename(MOTIONCOR2_BIN)
-
-MOTIONCORR_PATH = os.path.join(_getHome('MOTIONCORR_HOME', 'motioncorr'),
-                               'bin', MOTIONCORR)
-
-MOTIONCOR2_PATH = os.path.join(_getHome('MOTIONCOR2_HOME', 'motioncor2'),
-                               'bin', MOTIONCOR2_BIN)
+# FIXME: Remove the following block when done
+# def _getHome(key, default):
+#     """ Get the required home path, if not present..
+#     the default value will be used from EM_ROOT.
+#     """
+#     return os.environ.get(key, os.path.join(os.environ['EM_ROOT'], default))
+#
+# # For some reason all variables end up with SCIPION HOME prepended %&%#!
+# MOTIONCORR = pwutils.getEnvVariable('MOTIONCORR')
+# MOTIONCORR = os.path.basename(MOTIONCORR)
+#
+# MOTIONCOR2_BIN = pwutils.getEnvVariable('MOTIONCOR2_BIN', 'motioncor2')
+# MOTIONCOR2_BIN = os.path.basename(MOTIONCOR2_BIN)
+#
+# MOTIONCORR_PATH = os.path.join(_getHome('MOTIONCORR_HOME', 'motioncorr'),
+#                                'bin', MOTIONCORR)
+#
+# MOTIONCOR2_PATH = os.path.join(_getHome('MOTIONCOR2_HOME', 'motioncor2'),
+#                                'bin', MOTIONCOR2_BIN)
 
 

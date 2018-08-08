@@ -26,71 +26,59 @@
 
 import os
 
-import pyworkflow.em
-from pyworkflow.utils import Environ, getEnvVariable
+import pyworkflow.em as pwem
+import pyworkflow.utils as pwutils
 
 from .constants import *
 
 
 _references = ['Li2013', 'Zheng2017']
 
-# The following class is required for Scipion to detect this Python module
-# as a Scipion Plugin. It needs to specify the PluginMeta __metaclass__
-# Some function related to the underlying package binaries need to be
-# implemented
-class Plugin:
-    __metaclass__ = pyworkflow.em.PluginMeta
+
+class Plugin(pwem.Plugin):
+    _homeVar = MOTIONCOR2_HOME
+    _pathVars = [MOTIONCOR2_HOME]
+    _versions = {
+        MOTIONCOR2: ['01302017', '1.0.0', '1.0.2', '1.0.4', '1.0.5'],
+        MOTIONCORR: ['2.1']}
 
     @classmethod
-    def getEnviron(cls, useMC2=False):
-        """ Return the environ settings to run motioncorr programs. """
-        environ = Environ(os.environ)
+    def _defineVariables(cls):
+        cls._defineEmVar(MOTIONCORR_HOME, 'motioncorr')
+        cls._defineVar(MOTIONCORR_BIN, 'motioncorr')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2')
+        cls._defineVar(MOTIONCOR2_BIN, 'motioncor2')
 
-        if os.path.exists(MOTIONCORR_PATH) and not useMC2:
-            environ.update({'PATH': os.path.join(os.environ['MOTIONCORR_HOME'], 'bin')},
-                           position=Environ.BEGIN)
+    @classmethod
+    def getProgram(cls, mcVar=MOTIONCOR2):
+        """ Re-implement this method because this plugin really deals
+        with two different programs that can be the "home".
+        """
+        return os.path.join(cls.getVar('%s_HOME' % mcVar), 'bin',
+                            os.path.basename(cls.getVar('%s_BIN' % mcVar)))
 
-        if os.path.exists(MOTIONCOR2_PATH):
-            environ.update({'PATH': os.path.join(os.environ['MOTIONCOR2_HOME'], 'bin')},
-                           position=Environ.BEGIN)
-
-        cudaLib = cls.getCudaLib(environ, useMC2)
+    @classmethod
+    def getEnviron(cls, mcVar=MOTIONCOR2):
+        """ Return the environment to run motioncor2 or motioncorr. """
+        environ = pwutils.Environ(os.environ)
+        cudaLib = cls.getCudaLib(mcVar, environ)
         environ.addLibrary(cudaLib)
 
         return environ
 
     @classmethod
-    def getActiveVersion(cls, var):
-        varHome = var + '_HOME'
-        path = os.environ[varHome]
-        for v in cls.getSupportedVersions(var):
-            if v in path or v in os.path.realpath(path):
-                return v
-        return ''
+    def getActiveVersion(cls, mcVar=MOTIONCOR2):
+        return pwem.Plugin.getActiveVersion(home=cls.getProgram(mcVar),
+                                            versions=cls._versions[mcVar])
 
     @classmethod
-    def getSupportedVersions(cls, var):
-        if var == 'MOTIONCORR':
-            return ['2.1']
-        elif var == 'MOTIONCOR2':
-            return ['01302017', '1.0.0', '1.0.2', '1.0.4', '1.0.5']
+    def getSupportedVersions(cls, mcVar=MOTIONCOR2):
+        return cls._versions[mcVar]
 
     @classmethod
-    def getCudaLib(cls, environ=None, useMC2=False):
+    def getCudaLib(cls, mcVar=MOTIONCOR2, environ=None):
+        e = environ or pwutils.Environ(os.environ)
+        return e.getFirst(['%s_CUDA_LIB' % mcVar, CUDA_LIB])
 
-        e = environ or Environ(os.environ)
-        cudaLib = MOTIONCOR2_CUDA_LIB if useMC2 else MOTIONCORR_CUDA_LIB
-        return e.getFirst(cudaLib, CUDA_LIB)
 
-    @classmethod
-    def validateInstallation(cls):
-        """ This function will be used to check if package is
-        properly installed."""
-        environ = cls.getEnviron()
-
-        missingPaths = ["%s: %s" % (var, environ[var])
-                        for var in [GAUTOMATCH_HOME]
-                        if not os.path.os.path.exists(environ[var])]
-
-        return (["Missing variables:"] + missingPaths) if missingPaths else []
-
+pwem.Domain.registerPlugin(__name__)
