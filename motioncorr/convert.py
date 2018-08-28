@@ -25,6 +25,8 @@
 # **************************************************************************
 
 import os
+import re
+from itertools import izip
 
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
@@ -151,8 +153,7 @@ def getMovieFileName(movie):
 
 
 def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
-    """
-    Note: Function copied from xmipp3.convert to avoid dependency.
+    """Note: Function copied from xmipp3.convert to avoid dependency.
     """
     movieAlignment = movie.getAlignment()
     shiftListX, shiftListY = movieAlignment.getShifts()
@@ -170,7 +171,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
 
     for shiftX, shiftY in izip(shiftListX, shiftListY):
-        if alFrame >= s0 and alFrame <= sN:
+        if s0 <= alFrame <= sN:
             objId = globalShiftsMD.addObject()
             imgFn = ImageHandler.locationToXmipp(alFrame, getMovieFileName(movie))
             globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)

@@ -3,7 +3,7 @@
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *              Vahid Abrishami (vabrishami@cnb.csic.es)
 # *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *              Grigory Sharov (sharov@igbmc.fr)
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -37,17 +37,14 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
 import pyworkflow.em as em
-from pyworkflow import VERSION_1_1
 from pyworkflow.em.data import MovieAlignment
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
 import motioncorr
-from motioncorr.constants import (MOTIONCOR2, MOTIONCORR, CUDA_LIB)
-from motioncorr.convert import (
-    parseMagCorrInput, parseMagEstOutput, writeShiftsMovieAlignment,
-    parseMovieAlignment, parseMovieAlignment2)
+from motioncorr.constants import MOTIONCOR2, MOTIONCORR, CUDA_LIB
+from motioncorr.convert import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
@@ -60,7 +57,6 @@ class ProtMotionCorr(ProtAlignMovies):
     """
 
     _label = 'motioncorr alignment'
-    _lastUpdateVersion = VERSION_1_1
     CONVERT_TO_MRC = 'mrc'
 
     def __init__(self, **args):
@@ -92,7 +88,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return True
 
     def _getConvertExtension(self, filename):
-        """ Check wether it is needed to convert to .mrc or not """
+        """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
         return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif'] else 'mrc'
 
@@ -103,13 +99,13 @@ class ProtMotionCorr(ProtAlignMovies):
                             ' libraries and a Nvidia GPU')
 
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label="Choose GPU IDs",
-                      help="GPU may have several cores. Set it to zero"
-                           " if you do not know what we are talking about."
-                           " First core index is 0, second 1 and so on."
-                           " Motioncor2 can use multiple GPUs - in that case"
-                           " set to i.e. *0 1 2*.")
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " Motioncor2 can use multiple GPUs - in that case"
+                            " set to i.e. *0 1 2*.")
 
         ProtAlignMovies._defineAlignmentParams(self, form)
 
@@ -138,19 +134,18 @@ class ProtMotionCorr(ProtAlignMovies):
         form.addParam('extraParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional parameters',
-                      help="""Extra parameters for motioncorr (NOT motioncor2)\n
-        -bft       150               BFactor in pix^2.
-        -pbx       96                Box dimension for searching CC peak.
-        -fod       2                 Number of frame offset for frame comparison.
-        -nps       0                 Radius of noise peak.
-        -sub       0                 1: Save as sub-area corrected sum. 0: Not.
-        -srs       0                 1: Save uncorrected sum. 0: Not.
-        -scc       0                 1: Save CC Map. 0: Not.
-        -slg       1                 1: Save Log. 0: Not.
-        -atm       1                 1: Align to middle frame. 0: Not.
-        -dsp       1                 1: Save quick results. 0: Not.
-        -fsc       0                 1: Calculate and log FSC. 0: Not.
-                                    """)
+                      help="""*Extra parameters for motioncorr* (NOT motioncor2):\n
+        -bft\t\t150\t\tBFactor in pix^2.\n
+        -pbx\t\t96\t\tBox dimension for searching CC peak.\n
+        -fod\t\t2\t\tNumber of frame offset for frame comparison.\n
+        -nps\t\t0\t\tRadius of noise peak.\n
+        -sub\t\t0\t\t1: Save as sub-area corrected sum. 0: Not.\n
+        -srs\t\t0\t\t1: Save uncorrected sum. 0: Not.\n
+        -scc\t\t0\t\t1: Save CC Map. 0: Not.\n
+        -slg\t\t1\t\t1: Save Log. 0: Not.\n
+        -atm\t\t1\t\t1: Align to middle frame. 0: Not.\n
+        -dsp\t\t1\t\t1: Save quick results. 0: Not.\n
+        -fsc\t\t0\t\t1: Calculate and log FSC. 0: Not.""")
 
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -158,7 +153,7 @@ class ProtMotionCorr(ProtAlignMovies):
                       help="Here you can provide some extra parameters for the "
                            "protocol, not the underlying motioncor program."
                            "You can provide many options separated by space. "
-                           "\n*Options:* \n"
+                           "\n\n*Options:* \n\n"
                            "--use_worker_thread \n"
                            " Use an extra thread to compute"
                            " PSD and thumbnail. This will allow a more effective"
@@ -188,10 +183,10 @@ class ProtMotionCorr(ProtAlignMovies):
                           condition='useMotioncor2',
                           label='Patches Overlap (%)',
                           help='In versions > 1.0.1 it is possible to specify'
-                                 'the overlapping between patches. '
-                                 '\nFor example, overlap=20 means that '
-                                 'each patch will have a 20% overlapping \n'
-                                 'with its neighboring patches in each dimension.')
+                               'the overlapping between patches. '
+                               '\nFor example, overlap=20 means that '
+                               'each patch will have a 20% overlapping \n'
+                               'with its neighboring patches in each dimension.')
 
         form.addParam('group', params.IntParam, default='1',
                       label='Group N frames', condition='useMotioncor2',
@@ -262,37 +257,37 @@ class ProtMotionCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       condition='useMotioncor2',
                       label='Additional parameters',
-                      help="""Extra parameters for motioncor2\n
-        -Bft       100        BFactor for alignment, in px^2.
-        -Iter      5          Maximum iterations for iterative alignment.
-        -MaskCent  0 0        Center of subarea that will be used for alignment,
-                              default *0 0* corresponding to the frame center.
-        -MaskSize  1.0 1.0    The size of subarea that will be used for alignment,
-                              default *1.0 1.0* corresponding full size.
-        -Align     1          Generate aligned sum (1) or simple sum (0).
-        -FmRef     -1         Specify which frame to be the reference to which
-                              all other frames are aligned, by default (-1) the
-                              the central frame is chosen. The central frame is
-                              at N/2 based upon zero indexing where N is the
-                              number of frames that will be summed, i.e., not
-                              including the frames thrown away.
-        -RotGain   0          Rotate gain reference counter-clockwise: 0 - no rotation,
-                              1 - 90 degrees, 2 - 180 degrees, 3 - 270 degrees.
-        -FlipGain  0          Flip gain reference after gain rotation: 0 - no flipping,
-                              1 - flip upside down, 2 - flip left right.
-        -Tilt      0 0        Tilt angle range for a dose fractionated tomographic
-                              tilt series, e.g. *-60 60*
-    Since version *1.1.0*:
-        -GpuMemUsage 0.5      Specify how much GPU memory is used to buffer movie frames.
-                              It is recommended when running side by side processes in
-                              the same card. By default is 50% (i. e 0.5)
-        -InFmMotion 1         Takes into account of motion-induced blurring of
-                              each frame. It has shown resolution improvement
-                              in some test cases. By default this option is off.
-        -Bft 500 150          Since version 1.1.0 this option can take two arguments.
-                              First one is used in global-motion measurement and the
-                              second one is for local-motion. (default 500 150).
-                              """)
+                      help="""*Extra parameters for motioncor2:*\n
+        -Bft\t\t100\t\tBFactor for alignment, in px^2.\n
+        -Iter\t\t5\t\tMaximum iterations for iterative alignment.\n
+        -MaskCent\t\t0 0\t\tCenter of subarea that will be used for alignment,
+        \t\t\t\tdefault *0 0* corresponding to the frame center.\n
+        -MaskSize\t\t1.0 1.0\t\tThe size of subarea that will be used for alignment,
+        \t\t\t\tdefault *1.0 1.0* corresponding full size.\n
+        -Align\t\t1\t\tGenerate aligned sum (1) or simple sum (0).\n
+        -FmRef\t\t-1\t\tSpecify which frame to be the reference to which
+        \t\t\t\tall other frames are aligned, by default (-1) the
+        \t\t\t\tthe central frame is chosen. The central frame is
+        \t\t\t\tat N/2 based upon zero indexing where N is the
+        \t\t\t\tnumber of frames that will be summed, i.e., not
+        \t\t\t\tincluding the frames thrown away.\n
+        -RotGain\t\t0\t\tRotate gain reference counter-clockwise: 0 - no rotation,
+        \t\t\t\t1 - 90 degrees, 2 - 180 degrees, 3 - 270 degrees.\n
+        -FlipGain\t\t0\t\tFlip gain reference after gain rotation: 0 - no flipping,
+        \t\t\t\t1 - flip upside down, 2 - flip left right.\n
+        -Tilt\t\t0 0\t\tTilt angle range for a dose fractionated tomographic
+        \t\t\t\ttilt series, e.g. *-60 60*\n
+
+    Since version *1.1.0*:\n
+        -GpuMemUsage\t\t0.5\t\tSpecify how much GPU memory is used to buffer movie frames.
+        \t\t\t\tIt is recommended when running side by side processes in
+        \t\t\t\tthe same card. By default is 50% (i. e 0.5).\n
+        -InFmMotion\t\t1\t\tTakes into account of motion-induced blurring of
+        \t\t\t\teach frame. It has shown resolution improvement
+        \t\t\t\tin some test cases. By default this option is off.\n
+        -Bft\t\t500 150\t\tSince version 1.1.0 this option can take two arguments.
+        \t\t\t\tFirst one is used in global-motion measurement and the
+        \t\t\t\tsecond one is for local-motion. (default 500 150).""")
 
         form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
                       condition='doSaveAveMic and useMotioncor2 and doApplyDoseFilter',
@@ -300,7 +295,6 @@ class ProtMotionCorr(ProtAlignMovies):
                       help="Yes by default, if you have selected to apply a "
                            "dose-dependent filter to the frames")
 
-        # Since only runs on GPU, do not allow neither threads nor mpi
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -------------------------------
@@ -511,10 +505,6 @@ class ProtMotionCorr(ProtAlignMovies):
     def _validate(self):
         # Check base validation before the specific ones for Motioncorr
         errors = ProtAlignMovies._validate(self)
-        program = self._getProgram()
-
-        if not os.path.exists(program):
-            errors.append('Missing %s' % program)
 
         # Check CUDA paths
         mcVar = self._getMcVar()
@@ -737,8 +727,6 @@ def createGlobalAlignmentPlot(meanX, meanY, first):
     """ Create a plotter with the shift per frame. """
     sumMeanX = []
     sumMeanY = []
-    preX = 0.0
-    preY = 0.0
 
     figureSize = (6, 4)
     plotter = Plotter(*figureSize)
@@ -748,23 +736,18 @@ def createGlobalAlignmentPlot(meanX, meanY, first):
     ax.set_title('Alignment based upon full frames')
     ax.set_xlabel('Shift x (pixels)')
     ax.set_ylabel('Shift y (pixels)')
-    # motioncor2 (1.0.2) values refer to the middle frame, so first frame is no longer 0,0
-    #if meanX[0] != 0 or meanY[0] != 0:
-    #    raise Exception("First frame shift must be (0,0)!")
-    i = first
 
+    i = first
     # ROB no accumulation is needed
     # see Motioncor2 user manual: "The output and log files list the shifts relative to the first frame."
     # or middle frame for motioncor2 1.0.2
 
-    # ROB unit seems to be pixels since samplingrate is only asked by the program if
+    # ROB unit seems to be pixels since sampling rate is only asked by the program if
     # dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
     for x, y in izip(meanX, meanY):
-        #preX += x
-        #preY += y
         preX = x
         preY = y
         sumMeanX.append(preX)

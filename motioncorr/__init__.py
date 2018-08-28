@@ -39,15 +39,15 @@ class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
     _versions = {
-        MOTIONCOR2: ['01302017', '1.0.0', '1.0.2', '1.0.4', '1.0.5'],
+        MOTIONCOR2: ['01302017', '1.0.2', '1.0.5', '1.1.0'],
         MOTIONCORR: ['2.1']}
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCORR_HOME, 'motioncorr')
-        cls._defineVar(MOTIONCORR_BIN, 'motioncorr')
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2')
-        cls._defineVar(MOTIONCOR2_BIN, 'motioncor2')
+        cls._defineEmVar(MOTIONCORR_HOME, 'motioncorr-2.1')
+        cls._defineVar(MOTIONCORR_BIN, 'dosefgpu_driftcorr_7.5')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.1.0')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.1.0-Cuda80')
 
     @classmethod
     def getProgram(cls, mcVar=MOTIONCOR2):

@@ -32,8 +32,6 @@ from motioncorr.protocols import ProtMotionCorr
 from motioncorr.constants import MOTIONCORR
 
 
-# Some utility functions to import movies that are used
-# in several tests.
 class TestMotioncorrAlignMovies(BaseTest):
     @classmethod
     def setData(cls):
@@ -42,7 +40,7 @@ class TestMotioncorrAlignMovies(BaseTest):
     @classmethod
     def runImportMovies(cls, pattern, **kwargs):
         """ Run an Import micrograph protocol. """
-        # We have two options: passe the SamplingRate or the
+        # We have two options: pass the SamplingRate or the
         # ScannedPixelSize + microscope magnification
         params = {'samplingRate': 1.14,
                   'voltage': 300,
