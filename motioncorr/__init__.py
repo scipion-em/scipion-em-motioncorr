@@ -80,5 +80,24 @@ class Plugin(pwem.Plugin):
         e = environ or pwutils.Environ(os.environ)
         return e.getFirst(['%s_CUDA_LIB' % mcVar, CUDA_LIB])
 
+    @classmethod
+    def defineBinaries(cls, env):
+        env.addPackage('motioncorr', version='2.1',
+                       tar='motioncorr_v2.1.tgz',
+                       default=True)
+
+        env.addPackage('motioncor2', version='17.01.30',
+                       tar='motioncor2_01302017.tgz')
+
+        env.addPackage('motioncor2', version='1.0.2',
+                       tar='motioncor2-1.0.2.tgz')
+
+        env.addPackage('motioncor2', version='1.0.5',
+                       tar='motioncor2-1.0.5.tgz')
+
+        env.addPackage('motioncor2', version='1.1.0',
+                       tar='motioncor2-1.1.0.tgz',
+                       default=True)
+
 
 pwem.Domain.registerPlugin(__name__)

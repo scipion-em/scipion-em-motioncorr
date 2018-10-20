@@ -48,15 +48,15 @@ from motioncorr.convert import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
-    """
-    Wrapper protocol to movie alignment programs developed at UCSF:
+    """ This protocol wraps movie alignment programs developed at UCSF.
+
     motioncorr: Flat fielding and Drift correction
         (written by Xueming Li @ Yifan Cheng Lab)
     motioncor2: anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
-    _label = 'motioncorr alignment'
+    _label = 'movie alignment'
     CONVERT_TO_MRC = 'mrc'
 
     def __init__(self, **args):
@@ -444,7 +444,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=motioncorr.Plugin.getEnviron(self.useMotioncor2))
+                        env=motioncorr.Plugin.getEnviron(self._getMcVar()))
             self._fixMovie(movie)
 
             # Compute PSDs
