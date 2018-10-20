@@ -444,7 +444,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=motioncorr.Plugin.getEnviron(self.useMotioncor2))
+                        env=motioncorr.Plugin.getEnviron(self._getMcVar()))
             self._fixMovie(movie)
 
             # Compute PSDs

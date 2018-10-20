@@ -29,7 +29,6 @@ from pyworkflow.em import ProtImportMovies
 from pyworkflow.tests import *
 
 from motioncorr.protocols import ProtMotionCorr
-from motioncorr.constants import MOTIONCORR
 
 
 class TestMotioncorrAlignMovies(BaseTest):
@@ -130,9 +129,6 @@ class TestMotioncorrAlignMovies(BaseTest):
 
         self._checkMicrographs(prot)
 
-        expected = ([0.0, 0.3646, 0.2604], [0.0, -0.1354, -0.3958])
-
-        if "7.5" in MOTIONCORR:
-            expected = ([0.0, 0.3333, 0.2292], [0.0, -0.2187, -0.4688])
+        expected = ([0.0, 0.3333, 0.2292], [0.0, -0.2187, -0.4688])
         self._checkAlignment(prot.outputMovies[1],
                              (3, 5), [10, 10, 0, 0], expected)
