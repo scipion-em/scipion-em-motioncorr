@@ -56,6 +56,8 @@ class ProtMotionCorr(ProtAlignMovies):
 
     _label = 'movie alignment'
     CONVERT_TO_MRC = 'mrc'
+    doSaveAveMic = True
+    useAlignToSum = True
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)
@@ -122,10 +124,6 @@ class ProtMotionCorr(ProtAlignMovies):
         line.addParam('cropDimY', params.IntParam, default=0, label='Y',
                       expertLevel=cons.LEVEL_ADVANCED)
 
-        form.addParam('doSaveAveMic', params.BooleanParam, default=True,
-                      label="Save aligned micrograph",
-                      expertLevel=cons.LEVEL_ADVANCED)
-
         form.addParam('doSaveMovie', params.BooleanParam, default=False,
                       label="Save movie",
                       help="Save Aligned movie")
@@ -137,25 +135,24 @@ class ProtMotionCorr(ProtAlignMovies):
                            "for comparison")
 
         form.addParam('doComputeMicThumbnail', params.BooleanParam,
-                      expertLevel=cons.LEVEL_ADVANCED,
                       default=False,
                       label='Compute micrograph thumbnail?',
                       help='When using this option, we will compute a '
                            'micrograph thumbnail and keep it with the '
                            'micrograph object for visualization purposes. ')
 
-        form.addParam('computeAllFramesAvg', params.BooleanParam,
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      default=False,
-                      label='Compute all frames average?',
-                      help='Computing all the frames average could provide a '
-                           'sanity check about the microscope and the camera.')
+        #form.addParam('computeAllFramesAvg', params.BooleanParam,
+        #              expertLevel=cons.LEVEL_ADVANCED,
+        #              default=False,
+        #              label='Compute all frames average?',
+        #              help='Computing all the frames average could provide a '
+        #                   'sanity check about the microscope and the camera.')
 
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional protocol parameters',
                       help="Here you can provide some extra parameters for the "
-                           "protocol, not the underlying motioncor program."
+                           "protocol, not the underlying motioncor2 program."
                            "You can provide many options separated by space. "
                            "\n\n*Options:* \n\n"
                            "--use_worker_thread \n"
@@ -453,13 +450,6 @@ class ProtMotionCorr(ProtAlignMovies):
     def _validate(self):
         # Check base validation before the specific ones
         errors = ProtAlignMovies._validate(self)
-
-        if not self.doSaveAveMic:
-            errors.append('Option not supported. Please select Yes for '
-                          'Save aligned micrograph. '
-                          'Optionally you could add -Align 0 to additional '
-                          'parameters so that protocol '
-                          'produces simple movie sum.')
 
         if self.doApplyDoseFilter and self.inputMovies.get():
             inputMovies = self.inputMovies.get()
