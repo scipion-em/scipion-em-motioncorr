@@ -56,8 +56,6 @@ class ProtMotionCorr(ProtAlignMovies):
 
     _label = 'movie alignment'
     CONVERT_TO_MRC = 'mrc'
-    doSaveAveMic = True
-    useAlignToSum = True
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)
@@ -92,6 +90,11 @@ class ProtMotionCorr(ProtAlignMovies):
                             " First core index is 0, second 1 and so on."
                             " Motioncor2 can use multiple GPUs - in that case"
                             " set to i.e. *0 1 2*.")
+
+        form.addHidden('doSaveAveMic', params.BooleanParam,
+                       default=True)
+        form.addHidden('useAlignToSum', params.BooleanParam,
+                       default=True)
 
         group = form.addGroup('Alignment')
         line = group.addLine('Frames to ALIGN and SUM',
