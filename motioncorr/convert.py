@@ -32,31 +32,9 @@ from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 
 
-def parseMovieAlignment(logFile):
-    """ Get global frame shifts relative to the first frame
-    (for the plots). Motioncorr old version
-    """
-    f = open(logFile, 'a+')
-    first = None
-    xshifts = []
-    yshifts = []
-
-    for line in f:
-        l = line.strip()
-        if 'Shift of Frame #' in l:
-            parts = l.split()
-            if first is None:  # read the first frame number
-                first = int(parts[3][1:])  # take the id from #000 format
-            # take the id from the last two columns of the line
-            xshifts.append(float(parts[-2]))
-            yshifts.append(float(parts[-1]))
-    f.close()
-    return xshifts, yshifts
-
-
 def parseMovieAlignment2(logFile):
     """ Get global frame shifts relative to the first frame
-    (for the plots). Motioncor2.
+    (for the plots)
     """
     f = open(logFile, 'a+')
     first = None

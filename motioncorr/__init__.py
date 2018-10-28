@@ -32,63 +32,35 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-_references = ['Li2013', 'Zheng2017']
+_references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _versions = {
-        MOTIONCOR2: ['01302017', '1.0.2', '1.0.5', '1.1.0'],
-        MOTIONCORR: ['2.1']}
+    _supportedVersions = ['1.0.2', '1.0.5', '1.1.0']
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCORR_HOME, 'motioncorr-2.1')
-        cls._defineVar(MOTIONCORR_BIN, 'dosefgpu_driftcorr_7.5')
         cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.1.0')
         cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.1.0-Cuda80')
 
     @classmethod
-    def getProgram(cls, mcVar=MOTIONCOR2):
-        """ Re-implement this method because this plugin really deals
-        with two different programs that can be the "home".
-        """
-        return os.path.join(cls.getVar('%s_HOME' % mcVar), 'bin',
-                            os.path.basename(cls.getVar('%s_BIN' % mcVar)))
+    def getProgram(cls):
+        return os.path.join(cls.getHome('bin'),
+                            os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
 
     @classmethod
-    def getEnviron(cls, mcVar=MOTIONCOR2):
-        """ Return the environment to run motioncor2 or motioncorr. """
+    def getEnviron(cls):
+        """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = cls.getCudaLib(mcVar, environ)
+        cudaLib = environ.getFirst((MOTIONCOR2_CUDA_LIB, CUDA_LIB))
         environ.addLibrary(cudaLib)
 
         return environ
 
     @classmethod
-    def getActiveVersion(cls, mcVar=MOTIONCOR2):
-        return pwem.Plugin.getActiveVersion(home=cls.getProgram(mcVar),
-                                            versions=cls._versions[mcVar])
-
-    @classmethod
-    def getSupportedVersions(cls, mcVar=MOTIONCOR2):
-        return cls._versions[mcVar]
-
-    @classmethod
-    def getCudaLib(cls, mcVar=MOTIONCOR2, environ=None):
-        e = environ or pwutils.Environ(os.environ)
-        return e.getFirst(['%s_CUDA_LIB' % mcVar, CUDA_LIB])
-
-    @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('motioncorr', version='2.1',
-                       tar='motioncorr_v2.1.tgz',
-                       default=True)
-
-        env.addPackage('motioncor2', version='17.01.30',
-                       tar='motioncor2_01302017.tgz')
-
         env.addPackage('motioncor2', version='1.0.2',
                        tar='motioncor2-1.0.2.tgz')
 

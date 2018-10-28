@@ -43,16 +43,14 @@ from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
 import motioncorr
-from motioncorr.constants import MOTIONCOR2, MOTIONCORR, CUDA_LIB
 from motioncorr.convert import *
+from motioncorr.constants import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
-    """ This protocol wraps movie alignment programs developed at UCSF.
+    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
 
-    motioncorr: Flat fielding and Drift correction
-        (written by Xueming Li @ Yifan Cheng Lab)
-    motioncor2: anisotropic drift correction and dose weighting
+    Motioncor2 performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -63,26 +61,16 @@ class ProtMotionCorr(ProtAlignMovies):
         ProtAlignMovies.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
 
-    def isSemVersion(self):
-        """ Return True if it is a semantic version of motioncor2.
-        It started with release 1.0.0.
-        """
-        return self._getVersion().startswith('1.')
-
     def versionGE(self, version):
         """ Return True if current version of motioncor2 is greater
          or equal than the input argument.
          Params:
             version: string version (semantic version, e.g 1.0.1)
         """
-        if not self.isSemVersion():
-            return False
+        v1 = int(self._getVersion().replace('.', ''))
+        v2 = int(version.replace('.', ''))
 
-        v1 = map(int, self._getVersion().split('.'))
-        v2 = map(int, version.split('.'))
-
-        for x1, x2 in zip(v1, v2):
-            if x1 < x2:
+        if v1 < v2:
                 return False
 
         return True
@@ -94,10 +82,6 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
-        form.addParam('gpuMsg', params.LabelParam, default=True,
-                      label='WARNING! You need to have installed CUDA'
-                            ' libraries and a Nvidia GPU')
-
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -107,10 +91,46 @@ class ProtMotionCorr(ProtAlignMovies):
                             " Motioncor2 can use multiple GPUs - in that case"
                             " set to i.e. *0 1 2*.")
 
-        ProtAlignMovies._defineAlignmentParams(self, form)
+        group = form.addGroup('Alignment')
+        line = group.addLine('Frames to ALIGN and SUM',
+                             help='Frames range to ALIGN and SUM on each movie. The '
+                                  'first frame is 1. If you set 0 in the final '
+                                  'frame to align, it means that you will '
+                                  'align until the last frame of the movie.')
+        line.addParam('alignFrame0', params.IntParam, default=1,
+                      label='from')
+        line.addParam('alignFrameN', params.IntParam, default=0,
+                      label='to')
+
+        group.addParam('binFactor', params.FloatParam, default=1.,
+                       label='Binning factor',
+                       help='1x or 2x. Bin stack before processing.')
+
+        line = group.addLine('Crop offsets (px)',
+                             expertLevel=cons.LEVEL_ADVANCED)
+        line.addParam('cropOffsetX', params.IntParam, default=0, label='X',
+                      expertLevel=cons.LEVEL_ADVANCED)
+        line.addParam('cropOffsetY', params.IntParam, default=0, label='Y',
+                      expertLevel=cons.LEVEL_ADVANCED)
+
+        line = group.addLine('Crop dimensions (px)',
+                             help='How many pixels to crop from offset\n'
+                                  'If equal to 0, use maximum size.',
+                             expertLevel=cons.LEVEL_ADVANCED)
+        line.addParam('cropDimX', params.IntParam, default=0, label='X',
+                      expertLevel=cons.LEVEL_ADVANCED)
+        line.addParam('cropDimY', params.IntParam, default=0, label='Y',
+                      expertLevel=cons.LEVEL_ADVANCED)
+
+        form.addParam('doSaveAveMic', params.BooleanParam, default=True,
+                      label="Save aligned micrograph",
+                      expertLevel=cons.LEVEL_ADVANCED)
+
+        form.addParam('doSaveMovie', params.BooleanParam, default=False,
+                      label="Save movie",
+                      help="Save Aligned movie")
 
         form.addParam('doComputePSD', params.BooleanParam, default=False,
-                      expertLevel=cons.LEVEL_ADVANCED,
                       label="Compute PSD (before/after)?",
                       help="If Yes, the protocol will compute for each movie "
                            "the average PSD before and after alignment, "
@@ -131,22 +151,6 @@ class ProtMotionCorr(ProtAlignMovies):
                       help='Computing all the frames average could provide a '
                            'sanity check about the microscope and the camera.')
 
-        form.addParam('extraParams', params.StringParam, default='',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label='Additional parameters',
-                      help="""*Extra parameters for motioncorr* (NOT motioncor2):\n
-        -bft\t\t150\t\tBFactor in pix^2.\n
-        -pbx\t\t96\t\tBox dimension for searching CC peak.\n
-        -fod\t\t2\t\tNumber of frame offset for frame comparison.\n
-        -nps\t\t0\t\tRadius of noise peak.\n
-        -sub\t\t0\t\t1: Save as sub-area corrected sum. 0: Not.\n
-        -srs\t\t0\t\t1: Save uncorrected sum. 0: Not.\n
-        -scc\t\t0\t\t1: Save CC Map. 0: Not.\n
-        -slg\t\t1\t\t1: Save Log. 0: Not.\n
-        -atm\t\t1\t\t1: Align to middle frame. 0: Not.\n
-        -dsp\t\t1\t\t1: Save quick results. 0: Not.\n
-        -fsc\t\t0\t\t1: Calculate and log FSC. 0: Not.""")
-
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional protocol parameters',
@@ -159,19 +163,14 @@ class ProtMotionCorr(ProtAlignMovies):
                            " PSD and thumbnail. This will allow a more effective"
                            " use of the GPU card, but requires an extra CPU. ")
 
-        form.addSection(label="Motioncor2")
-        form.addParam('useMotioncor2', params.BooleanParam, default=True,
-                      label='Use motioncor2',
-                      help='Use new *motioncor2* program with local '
-                           'patch-based motion correction and dose weighting.')
+        form.addSection(label="Motioncor2 params")
         form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
-                      condition='useMotioncor2',
-                      label='Apply Dose filter',
+                      label='Apply dose filter',
                       help='Apply a dose-dependent filter to frames before '
                            'summing them. Pre-exposure and dose per frame '
                            'should  be specified during movies import.')
 
-        line = form.addLine('Number of patches', condition='useMotioncor2',
+        line = form.addLine('Number of patches',
                             help='Number of patches to be used for patch based '
                                  'alignment. Set to *0 0* to do only global motion '
                                  'correction. \n')
@@ -180,8 +179,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self.versionGE('1.0.1'): # Patch overlap was introduced in 1.0.1
             form.addParam('patchOverlap', params.IntParam, default=0,
-                          condition='useMotioncor2',
-                          label='Patches Overlap (%)',
+                          label='Patches overlap (%)',
                           help='In versions > 1.0.1 it is possible to specify'
                                'the overlapping between patches. '
                                '\nFor example, overlap=20 means that '
@@ -189,75 +187,82 @@ class ProtMotionCorr(ProtAlignMovies):
                                'with its neighboring patches in each dimension.')
 
         form.addParam('group', params.IntParam, default='1',
-                      label='Group N frames', condition='useMotioncor2',
+                      label='Group N frames',
                       help='Group every specified number of frames by adding '
                            'them together. The alignment is then performed on '
                            'the summed frames. By default, no grouping is '
                            'performed.')
+
         form.addParam('tol', params.FloatParam, default='0.5',
-                      label='Tolerance (px)', condition='useMotioncor2',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.5px*.')
 
-        if self._supportsMagCorrection():
-            group = form.addGroup('Magnification correction')
-            group.addParam('doMagCor', params.BooleanParam, default=False,
-                           label='Correct anisotropic magnification?',
-                           condition='useMotioncor2',
-                           help='Correct anisotropic magnification by '
-                                'stretching image along the major axis, '
-                                'the axis where the lower magnification is '
-                                'detected.')
-            group.addParam('useEst', params.BooleanParam, default=True,
-                           label='Use previous estimation?',
-                           condition='useMotioncor2 and doMagCor',
-                           help='Use previously calculated parameters of '
-                                'magnification anisotropy (from magnification '
-                                'distortion estimation protocol).')
-            group.addParam('inputEst', params.PointerParam,
-                           pointerClass='ProtMagDistEst',
-                           condition='useEst and useMotioncor2 and doMagCor',
-                           label='Input protocol',
-                           help='Select previously executed estimation protocol.')
-            group.addParam('scaleMaj', params.FloatParam, default=1.0,
-                           condition='not useEst and useMotioncor2 and doMagCor',
-                           label='Major scale factor',
-                           help='Major scale factor.')
-            group.addParam('scaleMin', params.FloatParam, default=1.0,
-                           condition='not useEst and useMotioncor2 and doMagCor',
-                           label='Minor scale factor',
-                           help='Minor scale factor.')
-            group.addParam('angDist', params.FloatParam, default=0.0,
-                           condition='not useEst and useMotioncor2 and doMagCor',
-                           label='Distortion angle (deg)',
-                           help='Distortion angle, in degrees.')
-        else:
-            form.addParam('motioncor2Version', params.LabelParam,
-                          condition='useMotioncor2',
-                          label='Scipion supports some versions of motioncor2 '
-                                'that can do magnification correction, '
-                                'but they do not seems to be installed. Check '
-                                'available versions with: \n'
-                                'scipion install --help.\n'
-                                'Also, make sure MOTIONCOR2_CUDA_LIB or '
-                                'CUDA_LIB point to cuda-8.0/lib path')
+        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
+                      condition='doSaveAveMic and doApplyDoseFilter',
+                      label="Save unweighted micrographs?",
+                      help="Yes by default, if you have selected to apply a "
+                           "dose-dependent filter to the frames")
 
-        if self.isSemVersion():
-            form.addParam('defectFile', params.FileParam, allowsNull=True,
-                          expertLevel=cons.LEVEL_ADVANCED,
-                          condition='useMotioncor2',
-                          label='Camera defects file',
-                          help='Defect file that stores entries of defects on camera.\n'
-                               'Each entry corresponds to a rectangular region in image. '
-                               'The pixels in such a region are replaced by '
-                               'neighboring good pixel values. Each entry contains '
-                               '4 integers x, y, w, h representing the x, y '
-                               'coordinates, width, and height, respectively.')
+        group = form.addGroup('Magnification correction')
+        group.addParam('doMagCor', params.BooleanParam, default=False,
+                       label='Correct anisotropic magnification?',
+                       help='Correct anisotropic magnification by '
+                            'stretching image along the major axis, '
+                            'the axis where the lower magnification is '
+                            'detected.')
+        group.addParam('useEst', params.BooleanParam, default=True,
+                       label='Use previous estimation?',
+                       condition='doMagCor',
+                       help='Use previously calculated parameters of '
+                            'magnification anisotropy (from magnification '
+                            'distortion estimation protocol).')
+        group.addParam('inputEst', params.PointerParam,
+                       pointerClass='ProtMagDistEst',
+                       condition='useEst and doMagCor',
+                       label='Input protocol',
+                       help='Select previously executed estimation protocol.')
+        group.addParam('scaleMaj', params.FloatParam, default=1.0,
+                       condition='not useEst and doMagCor',
+                       label='Major scale factor',
+                       help='Major scale factor.')
+        group.addParam('scaleMin', params.FloatParam, default=1.0,
+                       condition='not useEst and doMagCor',
+                       label='Minor scale factor',
+                       help='Minor scale factor.')
+        group.addParam('angDist', params.FloatParam, default=0.0,
+                       condition='not useEst and doMagCor',
+                       label='Distortion angle (deg)',
+                       help='Distortion angle, in degrees.')
+
+        form.addParam('gainRot', params.EnumParam,
+                      choices=['no rotation', '90 degrees',
+                               '180 degrees', '270 degrees'],
+                      label="Rotate gain reference:",
+                      default=NO_ROTATION,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Rotate gain reference counter-clockwise.")
+
+        form.addParam('gainFlip', params.EnumParam,
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      choices=['no flip', 'upside down', 'left right'],
+                      label="Flip gain reference:", default=NO_FLIP,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Flip gain reference after rotation.")
+
+        form.addParam('defectFile', params.FileParam, allowsNull=True,
+                      label='Camera defects file',
+                      help='Defect file that stores entries of defects on camera.\n'
+                           'Each entry corresponds to a rectangular region in image. '
+                           'The pixels in such a region are replaced by '
+                           'neighboring good pixel values. Each entry contains '
+                           '4 integers x, y, w, h representing the x, y '
+                           'coordinates, width, and height, respectively.')
 
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
-                      condition='useMotioncor2',
                       label='Additional parameters',
-                      help="""*Extra parameters for motioncor2:*\n
+                      help="""*Extra parameters:*\n
         -Bft\t\t100\t\tBFactor for alignment, in px^2.\n
         -Iter\t\t5\t\tMaximum iterations for iterative alignment.\n
         -MaskCent\t\t0 0\t\tCenter of subarea that will be used for alignment,
@@ -271,10 +276,6 @@ class ProtMotionCorr(ProtAlignMovies):
         \t\t\t\tat N/2 based upon zero indexing where N is the
         \t\t\t\tnumber of frames that will be summed, i.e., not
         \t\t\t\tincluding the frames thrown away.\n
-        -RotGain\t\t0\t\tRotate gain reference counter-clockwise: 0 - no rotation,
-        \t\t\t\t1 - 90 degrees, 2 - 180 degrees, 3 - 270 degrees.\n
-        -FlipGain\t\t0\t\tFlip gain reference after gain rotation: 0 - no flipping,
-        \t\t\t\t1 - flip upside down, 2 - flip left right.\n
         -Tilt\t\t0 0\t\tTilt angle range for a dose fractionated tomographic
         \t\t\t\ttilt series, e.g. *-60 60*\n
 
@@ -289,15 +290,9 @@ class ProtMotionCorr(ProtAlignMovies):
         \t\t\t\tFirst one is used in global-motion measurement and the
         \t\t\t\tsecond one is for local-motion. (default 500 150).""")
 
-        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
-                      condition='doSaveAveMic and useMotioncor2 and doApplyDoseFilter',
-                      label="Save unweighted micrographs?",
-                      help="Yes by default, if you have selected to apply a "
-                           "dose-dependent filter to the frames")
-
         form.addParallelSection(threads=1, mpi=1)
 
-    # --------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -----------------------------
     def _processMovie(self, movie):
         inputMovies = self.inputMovies.get()
         movieFolder = self._getOutputMovieFolder(movie)
@@ -313,138 +308,91 @@ class ProtMotionCorr(ProtAlignMovies):
         a0, aN = self._getRange(movie, 'align')
         program = self._getProgram()
 
-        if not self.useMotioncor2:
-            # Get the number of frames and the range to be used
-            # for alignment and sum
-            s0, sN = self._getRange(movie, 'sum')
+        logFileBase = (logFile.replace('0-Full.log', '').replace(
+            '0-Patch-Full.log', ''))
+        # default values for motioncor2 are (1, 1)
+        cropDimX = self.cropDimX.get() or 1
+        cropDimY = self.cropDimY.get() or 1
 
-            argsDict = {'-crx': self.cropOffsetX.get(),
-                        '-cry': self.cropOffsetY.get(),
-                        '-cdx': self.cropDimX.get(),
-                        '-cdy': self.cropDimY.get(),
-                        '-bin': self.binFactor.get(),
-                        '-nst': '%d' % a0,
-                        '-ned': '%d' % aN,
-                        '-nss': '%d' % s0,
-                        '-nes': '%d' % sN,
-                        '-flg': logFile,
-                        }
+        numbOfFrames = self._getNumberOfFrames(movie)
 
-            args = '"%s" ' % movie.getBaseName()
-            args += ' '.join(
-                ['%s %s' % (k, v) for k, v in argsDict.iteritems()])
-
-            if inputMovies.getGain():
-                args += ' -fgr "%s"' % inputMovies.getGain()
-
-            if inputMovies.getDark():
-                args += ' -fdr "%s"' % inputMovies.getDark()
-
-            if self.doSaveAveMic:
-                args += ' -fcs "%s" ' % outputMicFn
-
-            if self.doSaveMovie:
-                args += ' -fct "%s" -ssc 1' % outputMovieFn
-
-            args += ' -gpu %(GPU)s'
-            args += ' ' + self.extraParams.get()
-
+        if self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies)
         else:
-            logFileBase = (logFile.replace('0-Full.log', '').replace(
-                '0-Patch-Full.log', ''))
-            # default values for motioncor2 are (1, 1)
-            cropDimX = self.cropDimX.get() or 1
-            cropDimY = self.cropDimY.get() or 1
+            preExp, dose = 0.0, 0.0
 
-            numbOfFrames = self._getNumberOfFrames(movie)
+        # reset values = 1 to 0 (motioncor2 does it automatically,
+        # but we need to keep this for consistency)
+        if self.patchX.get() == 1:
+            self.patchX.set(0)
+        if self.patchY.get() == 1:
+            self.patchY.set(0)
 
-            if self.doApplyDoseFilter:
-                preExp, dose = self._getCorrectedDose(inputMovies)
+        argsDict = {'-OutMrc': '"%s"' % outputMicFn,
+                    '-Patch': '%d %d' % (self.patchX, self.patchY),
+                    '-MaskCent': '%d %d' % (self.cropOffsetX,
+                                            self.cropOffsetY),
+                    '-MaskSize': '%d %d' % (cropDimX, cropDimY),
+                    '-FtBin': self.binFactor.get(),
+                    '-Tol': self.tol.get(),
+                    '-Group': self.group.get(),
+                    '-FmDose': dose,
+                    '-Throw': '%d' % a0,
+                    '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
+                    '-PixSize': inputMovies.getSamplingRate(),
+                    '-kV': inputMovies.getAcquisition().getVoltage(),
+                    '-LogFile': logFileBase,
+                    }
+        argsDict['-InitDose'] = preExp
+        argsDict['-OutStack'] = 1 if self.doSaveMovie else 0
+
+        if self.defectFile.get():
+            argsDict['-DefectFile'] = self.defectFile.get()
+
+            if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
+                patchOverlap = self.getAttributeValue('patchOverlap', None)
+                if patchOverlap:  # 0 or None is False
+                    argsDict['-Patch'] += " %d" % patchOverlap
+
+        if self.doMagCor:
+            if self.useEst:
+                inputEst = self.inputEst.get().getOutputLog()
+                input_params = parseMagEstOutput(inputEst)
+                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
+                    input_params[1],
+                    input_params[2],
+                    input_params[0])
             else:
-                preExp, dose = 0.0, 0.0
-            
-            # reset values = 1 to 0 (motioncor2 does it automatically,
-            # but we need to keep this for consistency)
-            if self.patchX.get() == 1:
-                self.patchX.set(0)
-            if self.patchY.get() == 1:
-                self.patchY.set(0)
+                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
+                                                          self.scaleMin,
+                                                          self.angDist)
 
-            argsDict = {'-OutMrc': '"%s"' % outputMicFn,
-                        '-Patch': '%d %d' % (self.patchX, self.patchY),
-                        '-MaskCent': '%d %d' % (self.cropOffsetX,
-                                                self.cropOffsetY),
-                        '-MaskSize': '%d %d' % (cropDimX, cropDimY),
-                        '-FtBin': self.binFactor.get(),
-                        '-Tol': self.tol.get(),
-                        '-Group': self.group.get(),
-                        '-FmDose': dose,
-                        '-Throw': '%d' % a0,
-                        '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
-                        '-PixSize': inputMovies.getSamplingRate(),
-                        '-kV': inputMovies.getAcquisition().getVoltage(),
-                        '-LogFile': logFileBase,
-                        }
-            if self._getVersion() != '03162016':
-                argsDict['-InitDose'] = preExp
-                argsDict['-OutStack'] = 1 if self.doSaveMovie else 0
+        ext = pwutils.getExt(movie.getFileName()).lower()
 
-            if self.isSemVersion():
-                if self.defectFile.get():
-                    argsDict['-DefectFile'] = self.defectFile.get()
+        if ext in ['.mrc', '.mrcs']:
+            args = ' -InMrc "%s" ' % movie.getBaseName()
+        elif ext in ['.tif', '.tiff']:
+            args = ' -InTiff "%s" ' % movie.getBaseName()
+        else:
+            raise Exception("Unsupported format: %s" % ext)
 
-                if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
-                    patchOverlap = self.getAttributeValue('patchOverlap', None)
-                    if patchOverlap: # 0 or None is False
-                        argsDict['-Patch'] += " %d" % patchOverlap
+        args += ' '.join(['%s %s' % (k, v)
+                          for k, v in argsDict.iteritems()])
 
-            if self._supportsMagCorrection() and self.doMagCor:
-                if self.useEst:
-                    inputEst = self.inputEst.get().getOutputLog()
-                    if self._getVersion() == '01302017':
-                        input_params = parseMagCorrInput(inputEst)
-                        # this version uses stretch parameters as following:
-                        # 1/maj, 1/min, -angle
-                        argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
-                            1.0 / input_params[1],
-                            1.0 / input_params[2],
-                            -1 * input_params[0])
-                    else:
-                        # While motioncor2 >=1.0.0 uses estimation params AS IS
-                        input_params = parseMagEstOutput(inputEst)
-                        argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
-                            input_params[1],
-                            input_params[2],
-                            input_params[0])
-                else:
-                    argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
-                                                              self.scaleMin,
-                                                              self.angDist)
+        if inputMovies.getGain():
+            args += ' -Gain "%s" ' % inputMovies.getGain()
+            args += ' -RotGain %d' % self.gainRot.get()
+            args += ' -FlipGain %d' % self.gainFlip.get()
 
-            ext = pwutils.getExt(movie.getFileName()).lower()
+        if inputMovies.getDark():
+            args += ' -Dark "%s"' % inputMovies.getDark()
 
-            if ext in ['.mrc', '.mrcs']:
-                args = ' -InMrc "%s" ' % movie.getBaseName()
-            elif ext in ['.tif', '.tiff']:
-                args = ' -InTiff "%s" ' % movie.getBaseName()
-            else:
-                raise Exception("Unsupported format: %s" % ext)
-
-            args += ' '.join(['%s %s' % (k, v)
-                              for k, v in argsDict.iteritems()])
-
-            if inputMovies.getGain():
-                args += ' -Gain "%s" ' % inputMovies.getGain()
-
-            if inputMovies.getDark():
-                args += ' -Dark "%s"' % inputMovies.getDark()
-
-            args += ' -Gpu %(GPU)s'
-            args += ' ' + self.extraParams2.get()
+        args += ' -Gpu %(GPU)s'
+        args += ' ' + self.extraParams2.get()
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=motioncorr.Plugin.getEnviron(self._getMcVar()))
+                        env=motioncorr.Plugin.getEnviron())
             self._fixMovie(movie)
 
             # Compute PSDs
@@ -459,6 +407,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     roi = [self.cropOffsetX.get(), self.cropOffsetY.get(),
                            self.cropDimX.get(), self.cropDimY.get()]
                     fakeShiftsFn = self.writeZeroShifts(movie)
+                    # FIXME: implement gain flip/rotation
                     self.averageMovie(movie, fakeShiftsFn, aveMicFn,
                                       binFactor=self.binFactor.get(),
                                       roi=roi, dark=inputMovies.getDark(),
@@ -473,7 +422,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     self.computeThumbnail(outMicFn,
                                           outputFn=self._getOutputMicThumbnail(
                                               movie))
-                # This protocols takes control of clean up the temporary movie folder
+                # This protocols cleans up the temporary movie folder
                 # which is required mainly when using a thread for this extra work
                 self._cleanMovieFolder(movieFolder)
 
@@ -486,7 +435,6 @@ class ProtMotionCorr(ProtAlignMovies):
             print("ERROR: Movie %s failed\n" % movie.getName())
 
     def _insertFinalSteps(self, deps):
-        """ This should be implemented in subclasses"""
         stepId = self._insertFunctionStep('waitForThreadStep', prerequisites=deps)
         return [stepId]
 
@@ -495,93 +443,46 @@ class ProtMotionCorr(ProtAlignMovies):
         # if the PSD and thumbnail were computed with a thread
         # If running in streaming this will not be necessary
         if self._useWorkerThread():
-            time.sleep(60) # wait 1 min to give some time the thread to finish
+            time.sleep(60)  # wait 1 min to give some time the thread to finish
 
-    # --------------------------- INFO functions --------------------------------
+    # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
         return summary
 
     def _validate(self):
-        # Check base validation before the specific ones for Motioncorr
+        # Check base validation before the specific ones
         errors = ProtAlignMovies._validate(self)
 
-        # Check CUDA paths
-        mcVar = self._getMcVar()
-        cudaLib = motioncorr.Plugin.getCudaLib(mcVar)
-        cudaLibVar = '%s_CUDA_LIB' % mcVar
+        if not self.doSaveAveMic:
+            errors.append('Option not supported. Please select Yes for '
+                          'Save aligned micrograph. '
+                          'Optionally you could add -Align 0 to additional '
+                          'parameters so that protocol '
+                          'produces simple movie sum.')
 
-        if cudaLib is None:
-            errors.append("Do not know where to find CUDA lib path. "
-                          " %s or %s variables have None value or are not"
-                          " present in scipion configuration."
-                          % (cudaLibVar, CUDA_LIB))
+        if self.doApplyDoseFilter and self.inputMovies.get():
+            inputMovies = self.inputMovies.get()
+            doseFrame = inputMovies.getAcquisition().getDosePerFrame()
 
-        elif not pwutils.existsVariablePaths(cudaLib):
-            errors.append("Either %s or %s variables points to a non existing "
-                          "path (%s). Please, check scipion configuration."
-                          % (cudaLibVar, CUDA_LIB, cudaLib))
-
-        gpu = self.gpuList.get()
-
-        if not self.useMotioncor2:
-            bin = self.binFactor.get()
-
-            if not (bin == 1.0 or bin == 2.0):
-                errors.append("Binning factor can only be 1 or 2")
-
-            if len(gpu) > 1:
-                errors.append("Old motioncorr2.1 does not support multiple "
-                              "GPUs, use motioncor2.")
-        else:
-            if not self.doSaveAveMic:
-                errors.append('Option not supported. Please select Yes for '
-                              'Save aligned micrograph. '
-                              'Optionally you could add -Align 0 to additional '
-                              'parameters so that protocol '
-                              'produces simple movie sum.')
-
-            if self.doSaveMovie and not self._isOutStackSupport:
-                errors.append('Saving aligned movies is not supported by '
-                              'this version of motioncor2. '
-                              'By default, the protocol will produce '
-                              'outputMovies equivalent to the input '
-                              'however containing alignment information.')
-
-            if not self.useAlignToSum:
-                errors.append('Frame range for ALIGN and SUM must be '
-                              'equivalent in case of motioncor2. \n Please, '
-                              'set *YES* _Use ALIGN frames range to SUM?_ '
-                              'flag or use motioncorr')
-
-            if self.doApplyDoseFilter and self.inputMovies.get():
-                inputMovies = self.inputMovies.get()
-                doseFrame = inputMovies.getAcquisition().getDosePerFrame()
-
-                if doseFrame == 0.0 or doseFrame is None:
-                    errors.append('Dose per frame for input movies is 0 or not '
-                                  'set. You cannot apply dose filter.')
+            if doseFrame == 0.0 or doseFrame is None:
+                errors.append('Dose per frame for input movies is 0 or not '
+                              'set. You cannot apply dose filter.')
 
         return errors
 
-    # --------------------------- UTILS functions ------------------------------
-    def _getVersion(self, mcVar=MOTIONCOR2):
-        return motioncorr.Plugin.getActiveVersion(mcVar)
-
-    def _getMcVar(self):
-        return MOTIONCOR2 if self.useMotioncor2 else MOTIONCORR
+    # --------------------------- UTILS functions -----------------------------
+    def _getVersion(self):
+        return motioncorr.Plugin.getActiveVersion()
 
     def _getProgram(self):
-        return motioncorr.Plugin.getProgram(self._getMcVar())
+        return motioncorr.Plugin.getProgram()
 
     def _getMovieLogFile(self, movie):
-        if not self.useMotioncor2:
-            return 'micrograph_%06d_Log.txt' % movie.getObjId()
+        if self.patchX == 0 and self.patchY == 0:
+            return 'micrograph_%06d_0-Full.log' % movie.getObjId()
         else:
-            if self.patchX == 0 and self.patchY == 0:
-                return 'micrograph_%06d_0-Full.log' % movie.getObjId()
-            else:
-                return 'micrograph_%06d_0-Patch-Full.log' % movie.getObjId()
+            return 'micrograph_%06d_0-Patch-Full.log' % movie.getObjId()
 
     def _getAbsPath(self, baseName):
         return os.path.abspath(self._getExtraPath(baseName))
@@ -607,20 +508,11 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _getMovieShifts(self, movie):
         """ Returns the x and y shifts for the alignment of this movie.
-        The shifts should refer to the original micrograph without any binning.
-        In case of a binning greater than 1, the shifts should be scaled.
+        The shifts are in pixels irrespective of any binning.
         """
         logPath = self._getExtraPath(self._getMovieLogFile(movie))
-        binning = self.binFactor.get()
-        if not self.useMotioncor2:
-            xShifts, yShifts = parseMovieAlignment(logPath)
-        else:
-            xShifts, yShifts = parseMovieAlignment2(logPath)
-        # ROB: this is wrong, shifts are given in "original pixels"
-        # even if bin is requested
-        # xSfhtsCorr = [x * binning for x in xShifts]
-        # ySfhtsCorr = [y * binning for y in yShifts]
-        # return xSfhtsCorr, ySfhtsCorr
+        xShifts, yShifts = parseMovieAlignment2(logPath)
+
         return xShifts, yShifts
 
     def _setPlotInfo(self, movie, mic):
@@ -640,19 +532,15 @@ class ProtMotionCorr(ProtAlignMovies):
         plotter.savefig(self._getPlotGlobal(movie))
         plotter.close()
 
-    def _isOutStackSupport(self):
-        # checks if output aligned movies can be saved by motioncor2
-        return self._getVersion() != '03162016'
-
     def _fixMovie(self, movie):
-        if self.doSaveMovie and self.useMotioncor2 and self._isOutStackSupport():
+        if self.doSaveMovie:
             outputMicFn = self._getExtraPath(self._getOutputMicName(movie))
             outputMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
             movieFn = outputMicFn.replace('_aligned_mic.mrc',
                                           '_aligned_mic_Stk.mrc')
             pwutils.moveFile(movieFn, outputMovieFn)
 
-        if self.useMotioncor2 and not self.doSaveUnweightedMic:
+        if not self.doSaveUnweightedMic:
             fnToDelete = self._getExtraPath(self._getOutputMicName(movie))
             pwutils.cleanPath(fnToDelete)
 
@@ -707,14 +595,10 @@ class ProtMotionCorr(ProtAlignMovies):
                 (not createWeighted or self.doSaveUnweightedMic))
 
     def _createOutputWeightedMicrographs(self):
-        return (self.doSaveAveMic and self.useMotioncor2 and
-                self.doApplyDoseFilter)
+        return (self.doSaveAveMic and self.doApplyDoseFilter)
 
     def _doComputeMicThumbnail(self):
         return (self.doSaveAveMic and self.doComputeMicThumbnail)
-
-    def _supportsMagCorrection(self):
-        return motioncorr.Plugin.getActiveVersion('MOTIONCOR2') not in ['03162016', '10192016']
 
     def _useWorkerThread(self):
         return '--use_worker_thread' in self.extraProtocolParams.get()
@@ -738,22 +622,19 @@ def createGlobalAlignmentPlot(meanX, meanY, first):
     ax.set_ylabel('Shift y (pixels)')
 
     i = first
-    # ROB no accumulation is needed
-    # see Motioncor2 user manual: "The output and log files list the shifts relative to the first frame."
-    # or middle frame for motioncor2 1.0.2
+    # The output and log files list the shifts relative to the first frame.
+    # or middle frame for motioncor2 1.0.2?
 
-    # ROB unit seems to be pixels since sampling rate is only asked by the program if
-    # dose filtering is required
+    # ROB unit seems to be pixels since sampling rate is only asked
+    # by the program if dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
     for x, y in izip(meanX, meanY):
-        preX = x
-        preY = y
-        sumMeanX.append(preX)
-        sumMeanY.append(preY)
+        sumMeanX.append(x)
+        sumMeanY.append(y)
         if labelTick == 1:
-            ax.text(preX - 0.02, preY + 0.02, str(i))
+            ax.text(x - 0.02, y + 0.02, str(i))
             labelTick = skipLabels
         else:
             labelTick -= 1
