@@ -165,7 +165,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     if s0 < a0:
         for i in range(s0, a0):
             objId = globalShiftsMD.addObject()
-            imgFn = ImageHandler.locationToXmipp(i, getMovieFileName(movie))
+            imgFn = ImageHandler.locationToXmipp((i, getMovieFileName(movie)))
             globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
@@ -173,7 +173,8 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     for shiftX, shiftY in izip(shiftListX, shiftListY):
         if s0 <= alFrame <= sN:
             objId = globalShiftsMD.addObject()
-            imgFn = ImageHandler.locationToXmipp(alFrame, getMovieFileName(movie))
+
+            imgFn = ImageHandler.locationToXmipp((alFrame, getMovieFileName(movie)))
             globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_X, shiftX, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, shiftY, objId)
@@ -182,7 +183,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     if sN > aN:
         for j in range(aN, sN):
             objId = globalShiftsMD.addObject()
-            imgFn = ImageHandler.locationToXmipp(j+1, getMovieFileName(movie))
+            imgFn = ImageHandler.locationToXmipp((j+1, getMovieFileName(movie)))
             globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)

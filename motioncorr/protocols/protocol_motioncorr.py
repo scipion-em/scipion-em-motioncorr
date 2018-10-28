@@ -67,7 +67,7 @@ class ProtMotionCorr(ProtAlignMovies):
         """ Return True if it is a semantic version of motioncor2.
         It started with release 1.0.0.
         """
-        return self._getVersion().startswith('1.0.')
+        return self._getVersion().startswith('1.')
 
     def versionGE(self, version):
         """ Return True if current version of motioncor2 is greater
