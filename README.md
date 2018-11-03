@@ -7,3 +7,5 @@ Motioncorr and motioncor2 are GPU-accelerated programs for correction of electro
 Supported versions of Motioncorr: 2.1
 
 Supported version  of Motioncor2: 17.01.30, 1.0.2, 1.0.5, 1.1.0
+
+![build status](http://heisenberg.cnb.csic.es:9980/badges/motioncorr_devel.svg "Build status")
