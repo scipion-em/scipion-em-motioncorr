@@ -6,3 +6,5 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
 
 
 Supported version  of Motioncor2: 1.0.2, 1.0.5, 1.1.0, 1.2.1
+
+![build status](http://heisenberg.cnb.csic.es:9980/badges/motioncorr_devel.svg "Build status")
