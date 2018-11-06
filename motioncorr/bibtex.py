@@ -26,18 +26,6 @@
 # **************************************************************************
 """
 
-@article{Li2013,
-  title="Electron counting and beam-induced motion correction enable near-atomic-resolution single-particle cryo-EM",
-  author="Li, Xueming and Mooney, Paul and Zheng, Shawn and Booth, Christopher R and Braunfeld, Michael B and Gubbens, Sander and Agard, David A and Cheng, Yifan",
-  journal="Nature methods",
-  volume="10",
-  number="6",
-  pages="584-590",
-  year="2013",
-  publisher="Nature Publishing Group",
-  doi = {http://dx.doi.org/10.1038/nmeth.2727}
-}
-
 @article{Zheng2017,
   title="MotionCor2: anisotropic correction of beam-induced motion for improved cryo-electron microscopy",
   author="Zheng, Shawn and Palovcak, Eugene and Armache, Jean-Paule and Verba, Kliment and Cheng, Yifan and Agard, David",
