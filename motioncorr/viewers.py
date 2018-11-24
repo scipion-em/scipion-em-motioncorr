@@ -25,8 +25,8 @@
 # **************************************************************************
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewer import MicrographsView
-import pyworkflow.em.showj as showj
+from pyworkflow.em.viewers import MicrographsView
+import pyworkflow.em.viewers.showj as showj
 
 from motioncorr.protocols import ProtMotionCorr
 
