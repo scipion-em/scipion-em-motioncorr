@@ -349,10 +349,10 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
 
-            if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
-                patchOverlap = self.getAttributeValue('patchOverlap', None)
-                if patchOverlap:  # 0 or None is False
-                    argsDict['-Patch'] += " %d" % patchOverlap
+        if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
+            patchOverlap = self.getAttributeValue('patchOverlap', None)
+            if patchOverlap:  # 0 or None is False
+                argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
             if self.useEst:
