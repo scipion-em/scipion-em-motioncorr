@@ -1,9 +1,13 @@
-1.0.2:
+1.0.3:
     - Fixed indentation bug affecting overlapping parameter
+
+1.0.2:
     - Include protocol.conf to create the source distribution
+
 1.0.1:
 	- Updated viewers imports, added protocols.conf
 	- Removing motioncorr v2.1 and all mc2 versions older than 1.0.x;
 	- Cleaning up protocol GUI form, which, in my opinion, was overloaded with params;
 	- Add mc2 1.2.1 as latest default version
+
 1.0.0 - First version of the plugin
