@@ -1,5 +1,6 @@
-1.0.2: Include protocol.conf to create the source distribution
-
+1.0.2:
+    - Fixed indentation bug affecting overlapping parameter
+    - Include protocol.conf to create the source distribution
 1.0.1:
 	- Updated viewers imports, added protocols.conf
 	- Removing motioncorr v2.1 and all mc2 versions older than 1.0.x;
