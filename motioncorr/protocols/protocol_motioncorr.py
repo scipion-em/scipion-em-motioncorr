@@ -349,10 +349,10 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
 
-            if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
-                patchOverlap = self.getAttributeValue('patchOverlap', None)
-                if patchOverlap:  # 0 or None is False
-                    argsDict['-Patch'] += " %d" % patchOverlap
+        if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
+            patchOverlap = self.getAttributeValue('patchOverlap', None)
+            if patchOverlap:  # 0 or None is False
+                argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
             if self.useEst:
@@ -448,7 +448,26 @@ class ProtMotionCorr(ProtAlignMovies):
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
+
+        if hasattr(self, 'outputMicrographs'):
+            summary.append('Aligned %d movies using motioncor2.'
+                           % self.inputMovies.get().getSize())
+        else:
+            summary.append('Output is not ready')
+
         return summary
+
+    def _methods(self):
+        methods = []
+
+        if self.doApplyDoseFilter:
+            methods.append(' - Applied dose filtering')
+        if self.patchX > 1 and self.patchY > 1:
+            methods.append(' - Used patch-based alignment')
+        if self.group > 1:
+            methods.append(' - Grouped %d frames' % self.group)
+
+        return methods
 
     def _validate(self):
         # Check base validation before the specific ones
