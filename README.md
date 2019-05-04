@@ -6,7 +6,6 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
 
 ![build status](http://scipion-test.cnb.csic.es:9980/badges/motioncorr_devel.svg "Build status")
 
-This plugin provide a wrapper around [motioncor2](http://msg.ucsf.edu/em/software/motioncor2.html).
 
 ## Installation
 
