@@ -61,12 +61,6 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('motioncor2', version='1.0.2',
-                       tar='motioncor2-1.0.2.tgz')
-
-        env.addPackage('motioncor2', version='1.0.5',
-                       tar='motioncor2-1.0.5.tgz')
-
         env.addPackage('motioncor2', version='1.1.0',
                        tar='motioncor2-1.1.0.tgz')
 
