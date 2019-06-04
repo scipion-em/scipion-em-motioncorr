@@ -390,49 +390,49 @@ class ProtMotionCorr(ProtAlignMovies):
         args += ' -Gpu %(GPU)s'
         args += ' ' + self.extraParams2.get()
 
-        #try:
-        self.runJob(program, args, cwd=movieFolder,
-                    env=motioncorr.Plugin.getEnviron())
-        self._fixMovie(movie)
+        try:
+            self.runJob(program, args, cwd=movieFolder,
+                        env=motioncorr.Plugin.getEnviron())
+            self._fixMovie(movie)
 
-        # Compute PSDs
-        outMicFn = self._getExtraPath(self._getOutputMicName(movie))
-        if not os.path.exists(outMicFn):
-            # if only DW mic is saved
-            outMicFn = self._getExtraPath(self._getOutputMicWtName(movie))
+            # Compute PSDs
+            outMicFn = self._getExtraPath(self._getOutputMicName(movie))
+            if not os.path.exists(outMicFn):
+                # if only DW mic is saved
+                outMicFn = self._getExtraPath(self._getOutputMicWtName(movie))
 
-        def _extraWork():
-            if self.doComputePSD:
-                # Compute uncorrected avg mic
-                roi = [self.cropOffsetX.get(), self.cropOffsetY.get(),
-                       self.cropDimX.get(), self.cropDimY.get()]
-                fakeShiftsFn = self.writeZeroShifts(movie)
-                # FIXME: implement gain flip/rotation
-                self.averageMovie(movie, fakeShiftsFn, aveMicFn,
-                                  binFactor=self.binFactor.get(),
-                                  roi=roi, dark=inputMovies.getDark(),
-                                  gain=inputMovies.getGain())
+            def _extraWork():
+                if self.doComputePSD:
+                    # Compute uncorrected avg mic
+                    roi = [self.cropOffsetX.get(), self.cropOffsetY.get(),
+                           self.cropDimX.get(), self.cropDimY.get()]
+                    fakeShiftsFn = self.writeZeroShifts(movie)
+                    # FIXME: implement gain flip/rotation
+                    self.averageMovie(movie, fakeShiftsFn, aveMicFn,
+                                      binFactor=self.binFactor.get(),
+                                      roi=roi, dark=inputMovies.getDark(),
+                                      gain=inputMovies.getGain())
 
-                self.computePSDs(movie, aveMicFn, outMicFn,
-                                 outputFnCorrected=self._getPsdJpeg(movie))
+                    self.computePSDs(movie, aveMicFn, outMicFn,
+                                     outputFnCorrected=self._getPsdJpeg(movie))
 
-            self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
+                self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
-            if self._doComputeMicThumbnail():
-                self.computeThumbnail(outMicFn,
-                                      outputFn=self._getOutputMicThumbnail(
-                                          movie))
-            # This protocols cleans up the temporary movie folder
-            # which is required mainly when using a thread for this extra work
-            self._cleanMovieFolder(movieFolder)
+                if self._doComputeMicThumbnail():
+                    self.computeThumbnail(outMicFn,
+                                          outputFn=self._getOutputMicThumbnail(
+                                              movie))
+                # This protocols cleans up the temporary movie folder
+                # which is required mainly when using a thread for this extra work
+                self._cleanMovieFolder(movieFolder)
 
-        if self._useWorkerThread():
-            thread = Thread(target=_extraWork)
-            thread.start()
-        else:
-            _extraWork()
-        #except:
-        #    print("ERROR: Movie %s failed\n" % movie.getName())
+            if self._useWorkerThread():
+                thread = Thread(target=_extraWork)
+                thread.start()
+            else:
+                _extraWork()
+        except:
+            print("ERROR: Movie %s failed\n" % movie.getName())
 
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep', prerequisites=deps)
