@@ -416,7 +416,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     self.computePSDs(movie, aveMicFn, outMicFn,
                                      outputFnCorrected=self._getPsdJpeg(movie))
 
-                self._saveAlignmentPlots(movie)
+                self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
                 if self._doComputeMicThumbnail():
                     self.computeThumbnail(outMicFn,
@@ -536,11 +536,11 @@ class ProtMotionCorr(ProtAlignMovies):
             mic.thumbnail = em.Image(
                 location=self._getOutputMicThumbnail(movie))
 
-    def _saveAlignmentPlots(self, movie):
+    def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
         shiftsX, shiftsY = self._getMovieShifts(movie)
         first, _ = self._getFrameRange(movie.getNumberOfFrames(), 'align')
-        plotter = createGlobalAlignmentPlot(shiftsX, shiftsY, first)
+        plotter = createGlobalAlignmentPlot(shiftsX, shiftsY, first, pixSize)
         plotter.savefig(self._getPlotGlobal(movie))
         plotter.close()
 
@@ -619,23 +619,34 @@ class ProtMotionCorr(ProtAlignMovies):
         return False
 
 
-def createGlobalAlignmentPlot(meanX, meanY, first):
+def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     """ Create a plotter with the shift per frame. """
     sumMeanX = []
     sumMeanY = []
 
+    def px_to_ang(ax_px):
+        y1, y2 = ax_px.get_ylim()
+        x1, x2 = ax_px.get_xlim()
+        ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
+        ax_ang.set_xlim(x1*pixSize, x2*pixSize)
+        ax_ang.figure.canvas.draw()
+        ax_ang2.figure.canvas.draw()
+
     figureSize = (6, 4)
     plotter = Plotter(*figureSize)
     figure = plotter.getFigure()
-    ax = figure.add_subplot(111)
-    ax.grid()
-    ax.set_title('Alignment based upon full frames')
-    ax.set_xlabel('Shift x (pixels)')
-    ax.set_ylabel('Shift y (pixels)')
+    ax_px = figure.add_subplot(111)
+    ax_px.grid()
+    ax_px.set_xlabel('Shift x (px)')
+    ax_px.set_ylabel('Shift y (px)')
+
+    ax_ang = ax_px.twiny()
+    ax_ang.set_xlabel('Shift x (A)')
+    ax_ang2 = ax_px.twinx()
+    ax_ang2.set_ylabel('Shift y (A)')
 
     i = first
     # The output and log files list the shifts relative to the first frame.
-    # or middle frame for motioncor2 1.0.2?
 
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
@@ -646,15 +657,22 @@ def createGlobalAlignmentPlot(meanX, meanY, first):
         sumMeanX.append(x)
         sumMeanY.append(y)
         if labelTick == 1:
-            ax.text(x - 0.02, y + 0.02, str(i))
+            ax_px.text(x - 0.02, y + 0.02, str(i))
             labelTick = skipLabels
         else:
             labelTick -= 1
         i += 1
 
-    ax.plot(sumMeanX, sumMeanY, color='b')
-    ax.plot(sumMeanX, sumMeanY, 'yo')
+    # automatically update lim of ax_ang when lim of ax_px changes.
+    ax_px.callbacks.connect("ylim_changed", px_to_ang)
+    ax_px.callbacks.connect("xlim_changed", px_to_ang)
+
+    ax_px.plot(sumMeanX, sumMeanY, color='b')
+    ax_px.plot(sumMeanX, sumMeanY, 'yo')
+    ax_px.plot(sumMeanX[0], sumMeanY[0],'ro',markersize=10,linewidth=0.5)
+    #ax_ang2.set_title('Full-frame alignment')
 
     plotter.tightLayout()
 
     return plotter
+
