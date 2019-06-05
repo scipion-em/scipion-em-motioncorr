@@ -38,7 +38,7 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.0.2', '1.0.5', '1.1.0', '1.2.1', '1.2.3']
+    _supportedVersions = ['1.1.0', '1.2.1', '1.2.3']
 
     @classmethod
     def _defineVariables(cls):
