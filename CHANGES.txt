@@ -1,5 +1,5 @@
 1.0.4:
-    - added 1.2.3 version support, switched from md to rst
+    - added 1.2.3, 1.2.6 version support, switched from md to rst
     - drop support for versions <1.1.0
     - add axes in Angstroms for plots
 1.0.3:

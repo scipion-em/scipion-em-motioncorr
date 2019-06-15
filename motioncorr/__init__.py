@@ -38,12 +38,12 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.1.0', '1.2.1', '1.2.3']
+    _supportedVersions = ['1.1.0', '1.2.1', '1.2.3', '1.2.6']
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.2.3')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.2.3-Cuda80')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.2.6')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.2.6-Cuda80')
 
     @classmethod
     def getProgram(cls):
@@ -68,7 +68,11 @@ class Plugin(pwem.Plugin):
                        tar='motioncor2-1.2.1.tgz')
 
         env.addPackage('motioncor2', version='1.2.3',
-                       tar='motioncor2-1.2.3.tgz',
+                       tar='motioncor2-1.2.3.tgz')
+
+        env.addPackage('motioncor2', version='1.2.6',
+                       tar='motioncor2-1.2.6.tgz',
                        default=True)
+
 
 pwem.Domain.registerPlugin(__name__)
