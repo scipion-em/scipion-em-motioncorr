@@ -144,13 +144,6 @@ class ProtMotionCorr(ProtAlignMovies):
                            'micrograph thumbnail and keep it with the '
                            'micrograph object for visualization purposes. ')
 
-        #form.addParam('computeAllFramesAvg', params.BooleanParam,
-        #              expertLevel=cons.LEVEL_ADVANCED,
-        #              default=False,
-        #              label='Compute all frames average?',
-        #              help='Computing all the frames average could provide a '
-        #                   'sanity check about the microscope and the camera.')
-
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional protocol parameters',
@@ -177,14 +170,13 @@ class ProtMotionCorr(ProtAlignMovies):
         line.addParam('patchX', params.IntParam, default=5, label='X')
         line.addParam('patchY', params.IntParam, default=5, label='Y')
 
-        if self.versionGE('1.0.1'): # Patch overlap was introduced in 1.0.1
-            form.addParam('patchOverlap', params.IntParam, default=0,
-                          label='Patches overlap (%)',
-                          help='In versions > 1.0.1 it is possible to specify'
-                               'the overlapping between patches. '
-                               '\nFor example, overlap=20 means that '
-                               'each patch will have a 20% overlapping \n'
-                               'with its neighboring patches in each dimension.')
+        form.addParam('patchOverlap', params.IntParam, default=0,
+                      label='Patches overlap (%)',
+                      help='In versions > 1.0.1 it is possible to specify'
+                           'the overlapping between patches. '
+                           '\nFor example, overlap=20 means that '
+                           'each patch will have a 20% overlapping \n'
+                           'with its neighboring patches in each dimension.')
 
         form.addParam('group', params.IntParam, default='1',
                       label='Group N frames',
@@ -263,32 +255,29 @@ class ProtMotionCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional parameters',
                       help="""*Extra parameters:*\n
-        -Bft\t\t100\t\tBFactor for alignment, in px^2.\n
+        -Align\t\t1\t\tGenerate aligned sum (1) or simple sum (0).\n              
+        -Bft\t\t500 100\t\tBFactor for alignment, in px^2.\n
+        \t\t\t\tFirst one is used in global-motion measurement and the
+        \t\t\t\tsecond one is for local-motion. (default *500 150*)\n
+        -GpuMemUsage\t\t0.5\t\tSpecify how much GPU memory is used to buffer movie frames.
+        \t\t\t\tIt is recommended when running side by side processes in
+        \t\t\t\tthe same card. By default is 50% (i.e. *0.5*).\n
+        -InFmMotion\t\t1\t\tTakes into account of motion-induced blurring of
+        \t\t\t\teach frame. It has shown resolution improvement
+        \t\t\t\tin some test cases. By default this option is off.\n
         -Iter\t\t5\t\tMaximum iterations for iterative alignment.\n
         -MaskCent\t\t0 0\t\tCenter of subarea that will be used for alignment,
         \t\t\t\tdefault *0 0* corresponding to the frame center.\n
         -MaskSize\t\t1.0 1.0\t\tThe size of subarea that will be used for alignment,
         \t\t\t\tdefault *1.0 1.0* corresponding full size.\n
-        -Align\t\t1\t\tGenerate aligned sum (1) or simple sum (0).\n
         -FmRef\t\t-1\t\tSpecify which frame to be the reference to which
-        \t\t\t\tall other frames are aligned, by default (-1) the
+        \t\t\t\tall other frames are aligned, by default (*-1*) the
         \t\t\t\tthe central frame is chosen. The central frame is
         \t\t\t\tat N/2 based upon zero indexing where N is the
         \t\t\t\tnumber of frames that will be summed, i.e., not
         \t\t\t\tincluding the frames thrown away.\n
         -Tilt\t\t0 0\t\tTilt angle range for a dose fractionated tomographic
-        \t\t\t\ttilt series, e.g. *-60 60*\n
-
-    Since version *1.1.0*:\n
-        -GpuMemUsage\t\t0.5\t\tSpecify how much GPU memory is used to buffer movie frames.
-        \t\t\t\tIt is recommended when running side by side processes in
-        \t\t\t\tthe same card. By default is 50% (i. e 0.5).\n
-        -InFmMotion\t\t1\t\tTakes into account of motion-induced blurring of
-        \t\t\t\teach frame. It has shown resolution improvement
-        \t\t\t\tin some test cases. By default this option is off.\n
-        -Bft\t\t500 150\t\tSince version 1.1.0 this option can take two arguments.
-        \t\t\t\tFirst one is used in global-motion measurement and the
-        \t\t\t\tsecond one is for local-motion. (default 500 150).""")
+        \t\t\t\ttilt series, e.g. *-60 60*\n""")
 
         form.addParallelSection(threads=1, mpi=1)
 
@@ -349,10 +338,9 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
 
-        if self.versionGE('1.0.1'):  # Patch overlap was introduced in 1.0.1
-            patchOverlap = self.getAttributeValue('patchOverlap', None)
-            if patchOverlap:  # 0 or None is False
-                argsDict['-Patch'] += " %d" % patchOverlap
+        patchOverlap = self.getAttributeValue('patchOverlap', None)
+        if patchOverlap:  # 0 or None is False
+            argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
             if self.useEst:
@@ -388,6 +376,7 @@ class ProtMotionCorr(ProtAlignMovies):
             args += ' -Dark "%s"' % inputMovies.getDark()
 
         args += ' -Gpu %(GPU)s'
+        args += ' -SumRange 0.0 0.0'  # switch off writing out DWS
         args += ' ' + self.extraParams2.get()
 
         try:
@@ -435,7 +424,8 @@ class ProtMotionCorr(ProtAlignMovies):
             print("ERROR: Movie %s failed\n" % movie.getName())
 
     def _insertFinalSteps(self, deps):
-        stepId = self._insertFunctionStep('waitForThreadStep', prerequisites=deps)
+        stepId = self._insertFunctionStep('waitForThreadStep',
+                                          prerequisites=deps)
         return [stepId]
 
     def waitForThreadStep(self):
@@ -669,7 +659,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
 
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
-    ax_px.plot(sumMeanX[0], sumMeanY[0],'ro',markersize=10,linewidth=0.5)
+    ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
     #ax_ang2.set_title('Full-frame alignment')
 
     plotter.tightLayout()

@@ -36,7 +36,7 @@ b) Developer's version
       scipion installp -p path_to_scipion-em-motioncorr --devel
 
 Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/motioncor2-1.2.3``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.2.3-Cuda80`` to a different one by explicitly setting *MOTIONCOR2* variable. If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
+Default installation path assumed is ``software/em/motioncor2-1.2.6``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.2.6-Cuda80`` to a different one by explicitly setting *MOTIONCOR2* variable. If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
 To check the installation, simply run the following Scipion test: 
 
@@ -45,7 +45,7 @@ To check the installation, simply run the following Scipion test:
 Supported versions
 ------------------
 
-1.1.0, 1.2.1, 1.2.3
+1.1.0, 1.2.1, 1.2.3, 1.2.6
 
 Protocols
 ---------
