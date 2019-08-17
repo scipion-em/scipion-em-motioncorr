@@ -251,6 +251,17 @@ class ProtMotionCorr(ProtAlignMovies):
                            '4 integers x, y, w, h representing the x, y '
                            'coordinates, width, and height, respectively.')
 
+        form.addParam('defectMap', params.FileParam, allowsNull=True,
+                      label='Camera defects map',
+                      help='1. Defect map is a binary (0 or 1) map where defective '
+                           ' pixels are assigned value of 1 and good pixels have '
+                           'value of 0.\n2. The defective pixels are corrected '
+                           'with a random pick of good pixels in its neighborhood. '
+                           '\n3. This is map must have the same dimension and '
+                           'orientation as the input movie frame.\n4. This map '
+                           'can be provided as either MRC or TIFF file that has '
+                           'MRC mode of 0 or 5 (unsigned 8 bit).')
+
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional parameters',
@@ -337,6 +348,8 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
+        if self.defectMap.get():
+            argsDict['-DefectMap'] = self.defectMap.get()
 
         patchOverlap = self.getAttributeValue('patchOverlap', None)
         if patchOverlap:  # 0 or None is False
