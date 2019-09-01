@@ -1,8 +1,10 @@
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
 # *
 # * [1] SciLifeLab, Stockholm University
+# * [2] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -24,45 +26,120 @@
 # *
 # **************************************************************************
 
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.utils import cleanPath
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewers import MicrographsView
+from pyworkflow.protocol.params import LabelParam
 import pyworkflow.em.viewers.showj as showj
 
 from motioncorr.protocols import ProtMotionCorr
 
 
-class ProtMotioncorrViewer(Viewer):
+class ProtMotioncorrViewer(ProtocolViewer):
+    """ Visualization of Motioncor2 results. """
+
     _targets = [ProtMotionCorr]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-
     _label = 'viewer motioncorr'
 
-    def _visualize(self, obj, **kwargs):
+    def _defineParams(self, form):
+        form.addSection(label='Visualization')
+        form.addParam('doShowMics', LabelParam,
+                      label="Show aligned micrographs?", default=True,
+                      help="Show the output aligned micrographs.")
+        form.addParam('doShowMicsDW', LabelParam,
+                      label="Show aligned DOSE-WEIGHTED micrographs?",
+                      default=True,
+                      help="Show the output aligned dose-weighted "
+                           "micrographs.")
+        form.addParam('doShowMovies', LabelParam,
+                      label="Show output movies?", default=True,
+                      help="Show the output movies with alignment "
+                           "information.")
+        form.addParam('doShowFailedMovies', LabelParam,
+                      label="Show FAILED movies?", default=True,
+                      help="Create a set of failed movies "
+                           "and display it.")
+
+    def _getVisualizeDict(self):
+        self._errors = []
+        visualizeDict =  {'doShowMics': self._viewParam,
+                          'doShowMicsDW': self._viewParam,
+                          'doShowMovies': self._viewParam,
+                          'doShowFailedMovies': self._viewParam
+                          }
+
+        # If the is some error during the load, just show that instead
+        # of any viewer
+        if self._errors:
+            for k in visualizeDict.keys():
+                visualizeDict[k] = self._showErrors
+
+        return visualizeDict
+
+    def _viewParam(self, param=None):
+        if param == 'doShowMics':
+            if getattr(self.protocol, 'outputMicrographs', None) is not None:
+                return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographs)]
+            else:
+                self._errors.append('No output micrographs found!')
+
+        elif param == 'doShowMicsDW':
+            if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
+                return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographsDoseWeighted)]
+            else:
+                self._errors.append('No output dose-weighted micrographs found!')
+
+        elif param == 'doShowMovies':
+            if getattr(self.protocol, 'outputMovies', None) is not None:
+                labelsDef = 'enabled id _filename _samplingRate '
+                labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
+                viewParamsDef = {showj.MODE: showj.MODE_MD,
+                                 showj.ORDER: labelsDef,
+                                 showj.VISIBLE: labelsDef,
+                                 showj.RENDER: None
+                                 }
+                output = self.protocol.outputMovies
+                return [self.objectView(output, viewParams=viewParamsDef)]
+            else:
+                self._errors.append('No output movies found!')
+
+        elif param == 'doShowFailedMovies':
+            failedList = self.protocol._readFailedList()
+            if not failedList:
+                self._errors.append("No failed movies found!")
+            else:
+                labelsDef = 'enabled id _filename _samplingRate '
+                labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
+                viewParamsDef = {showj.MODE: showj.MODE_MD,
+                                 showj.ORDER: labelsDef,
+                                 showj.VISIBLE: labelsDef,
+                                 showj.RENDER: None
+                                 }
+                sqliteFn = self.protocol._getExtraPath('movies_failed.sqlite')
+                self.createFailedMoviesSqlite(failedList, sqliteFn)
+                return [self.objectView(sqliteFn, viewParams=viewParamsDef)]
+
+    def createFailedMoviesSqlite(self, failedList, path):
+        inputMovies = self.protocol.inputMovies
+        inputSet = [movie.clone() for movie in inputMovies]
+
+        from pyworkflow.em import SetOfMovies
+        cleanPath(path)
+        movieSet = SetOfMovies(filename=path)
+        movieSet.copyInfo(inputMovies)
+
+        for movie in inputSet:
+            if movie.getObjId() in failedList:
+                movieSet.append(movie)
+        movieSet.write()
+        movieSet.close()
+
+        return movieSet
+
+    def _showErrors(self, param=None):
         views = []
-
-        labelsDef = 'enabled id _filename'
-        viewParamsDef = {showj.MODE: showj.MODE_MD,
-                         showj.ORDER: labelsDef,
-                         showj.VISIBLE: labelsDef,
-                         showj.RENDER: None
-                         }
-
-        outputLabels = ['outputMicrographs', 'outputMicrographsDoseWeighted',
-                        'outputMovies']
-
-        if not any(obj.hasAttribute(l) for l in outputLabels):
-            return [self.infoMessage("Output (micrographs or movies) have "
-                                     "not been produced yet.")]
-
-        # Display only the first available output, showing all of them
-        # can be confusing and not useful.
-        # The user can still double-click in the specific output
-        for l in outputLabels:
-            if obj.hasAttribute(l):
-                output = getattr(obj, l)
-                if 'Micrographs' in l:
-                    return [MicrographsView(self.getProject(), output)]
-                else:  # Movies case
-                    return [self.objectView(output, viewParams=viewParamsDef)]
-
+        self.errorList(self._errors, views)
         return views
