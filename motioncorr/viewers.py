@@ -29,6 +29,7 @@
 from pyworkflow.utils import cleanPath
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewers import MicrographsView
+from pyworkflow.em import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
 import pyworkflow.em.viewers.showj as showj
 
@@ -63,11 +64,11 @@ class ProtMotioncorrViewer(ProtocolViewer):
 
     def _getVisualizeDict(self):
         self._errors = []
-        visualizeDict =  {'doShowMics': self._viewParam,
-                          'doShowMicsDW': self._viewParam,
-                          'doShowMovies': self._viewParam,
-                          'doShowFailedMovies': self._viewParam
-                          }
+        visualizeDict = {'doShowMics': self._viewParam,
+                         'doShowMicsDW': self._viewParam,
+                         'doShowMovies': self._viewParam,
+                         'doShowFailedMovies': self._viewParam
+                         }
 
         # If the is some error during the load, just show that instead
         # of any viewer
@@ -88,7 +89,7 @@ class ProtMotioncorrViewer(ProtocolViewer):
         elif param == 'doShowMicsDW':
             if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
                 return [MicrographsView(self.getProject(),
-                                    self.protocol.outputMicrographsDoseWeighted)]
+                                        self.protocol.outputMicrographsDoseWeighted)]
             else:
                 self._errors.append('No output dose-weighted micrographs found!')
 
@@ -107,8 +108,8 @@ class ProtMotioncorrViewer(ProtocolViewer):
                 self._errors.append('No output movies found!')
 
         elif param == 'doShowFailedMovies':
-            failedList = self.protocol._readFailedList()
-            if not failedList:
+            self.failedList = self.protocol._readFailedList()
+            if not self.failedList:
                 self._errors.append("No failed movies found!")
             else:
                 labelsDef = 'enabled id _filename _samplingRate '
@@ -118,26 +119,26 @@ class ProtMotioncorrViewer(ProtocolViewer):
                                  showj.VISIBLE: labelsDef,
                                  showj.RENDER: None
                                  }
-                sqliteFn = self.protocol._getExtraPath('movies_failed.sqlite')
-                self.createFailedMoviesSqlite(failedList, sqliteFn)
+                sqliteFn = self.protocol._getPath('movies_failed.sqlite')
+                self.createFailedMoviesSqlite(sqliteFn)
                 return [self.objectView(sqliteFn, viewParams=viewParamsDef)]
 
-    def createFailedMoviesSqlite(self, failedList, path):
-        inputMovies = self.protocol.inputMovies
-        inputSet = [movie.clone() for movie in inputMovies]
-
-        from pyworkflow.em import SetOfMovies
+    def createFailedMoviesSqlite(self, path):
+        inputMovies = self.protocol.inputMovies.get()
         cleanPath(path)
         movieSet = SetOfMovies(filename=path)
         movieSet.copyInfo(inputMovies)
+        movieSet.copyItems(inputMovies,
+                           updateItemCallback=self._findFailedMovies)
 
-        for movie in inputSet:
-            if movie.getObjId() in failedList:
-                movieSet.append(movie)
         movieSet.write()
         movieSet.close()
 
         return movieSet
+
+    def _findFailedMovies(self, item, row):
+        if item.getObjId() not in self.failedList:
+            setattr(item, "_appendItem", False)
 
     def _showErrors(self, param=None):
         views = []
