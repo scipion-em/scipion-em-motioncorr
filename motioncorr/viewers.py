@@ -41,7 +41,7 @@ class ProtMotioncorrViewer(ProtocolViewer):
 
     _targets = [ProtMotionCorr]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _label = 'viewer motioncorr'
+    _label = 'viewer'
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
@@ -69,22 +69,23 @@ class ProtMotioncorrViewer(ProtocolViewer):
                          'doShowMovies': self._viewParam,
                          'doShowFailedMovies': self._viewParam
                          }
-
-        # If the is some error during the load, just show that instead
-        # of any viewer
-        if self._errors:
-            for k in visualizeDict.keys():
-                visualizeDict[k] = self._showErrors
-
         return visualizeDict
 
     def _viewParam(self, param=None):
+        labelsDef = 'enabled id _filename _samplingRate '
+        labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
+        viewParamsDef = {showj.MODE: showj.MODE_MD,
+                         showj.ORDER: labelsDef,
+                         showj.VISIBLE: labelsDef,
+                         showj.RENDER: None
+                         }
         if param == 'doShowMics':
             if getattr(self.protocol, 'outputMicrographs', None) is not None:
                 return [MicrographsView(self.getProject(),
-                                    self.protocol.outputMicrographs)]
+                                        self.protocol.outputMicrographs)]
             else:
                 self._errors.append('No output micrographs found!')
+                self._showErrors()
 
         elif param == 'doShowMicsDW':
             if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
@@ -92,33 +93,22 @@ class ProtMotioncorrViewer(ProtocolViewer):
                                         self.protocol.outputMicrographsDoseWeighted)]
             else:
                 self._errors.append('No output dose-weighted micrographs found!')
+                self._showErrors()
 
         elif param == 'doShowMovies':
             if getattr(self.protocol, 'outputMovies', None) is not None:
-                labelsDef = 'enabled id _filename _samplingRate '
-                labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
-                viewParamsDef = {showj.MODE: showj.MODE_MD,
-                                 showj.ORDER: labelsDef,
-                                 showj.VISIBLE: labelsDef,
-                                 showj.RENDER: None
-                                 }
                 output = self.protocol.outputMovies
                 return [self.objectView(output, viewParams=viewParamsDef)]
             else:
                 self._errors.append('No output movies found!')
+                self._showErrors()
 
         elif param == 'doShowFailedMovies':
             self.failedList = self.protocol._readFailedList()
             if not self.failedList:
                 self._errors.append("No failed movies found!")
+                self._showErrors()
             else:
-                labelsDef = 'enabled id _filename _samplingRate '
-                labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
-                viewParamsDef = {showj.MODE: showj.MODE_MD,
-                                 showj.ORDER: labelsDef,
-                                 showj.VISIBLE: labelsDef,
-                                 showj.RENDER: None
-                                 }
                 sqliteFn = self.protocol._getPath('movies_failed.sqlite')
                 self.createFailedMoviesSqlite(sqliteFn)
                 return [self.objectView(sqliteFn, viewParams=viewParamsDef)]
