@@ -84,30 +84,30 @@ class ProtMotioncorrViewer(ProtocolViewer):
                 return [MicrographsView(self.getProject(),
                                         self.protocol.outputMicrographs)]
             else:
-                self._errors.append('No output micrographs found!')
-                self._showErrors()
+                return [self.errorMessage('No output micrographs found!',
+                                          title="Visualization error")]
 
         elif param == 'doShowMicsDW':
             if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
                 return [MicrographsView(self.getProject(),
                                         self.protocol.outputMicrographsDoseWeighted)]
             else:
-                self._errors.append('No output dose-weighted micrographs found!')
-                self._showErrors()
+                return [self.errorMessage('No output dose-weighted micrographs found!',
+                                          title="Visualization error")]
 
         elif param == 'doShowMovies':
             if getattr(self.protocol, 'outputMovies', None) is not None:
                 output = self.protocol.outputMovies
                 return [self.objectView(output, viewParams=viewParamsDef)]
             else:
-                self._errors.append('No output movies found!')
-                self._showErrors()
+                return [self.errorMessage('No output movies found!',
+                                          title="Visualization error")]
 
         elif param == 'doShowFailedMovies':
             self.failedList = self.protocol._readFailedList()
             if not self.failedList:
-                self._errors.append("No failed movies found!")
-                self._showErrors()
+                return [self.errorMessage('No failed movies found!',
+                                          title="Visualization error")]
             else:
                 sqliteFn = self.protocol._getPath('movies_failed.sqlite')
                 self.createFailedMoviesSqlite(sqliteFn)
@@ -129,8 +129,3 @@ class ProtMotioncorrViewer(ProtocolViewer):
     def _findFailedMovies(self, item, row):
         if item.getObjId() not in self.failedList:
             setattr(item, "_appendItem", False)
-
-    def _showErrors(self, param=None):
-        views = []
-        self.errorList(self._errors, views)
-        return views
