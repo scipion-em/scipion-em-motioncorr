@@ -452,7 +452,8 @@ class ProtMotionCorr(ProtAlignMovies):
     def _summary(self):
         summary = []
 
-        if hasattr(self, 'outputMicrographs'):
+        if hasattr(self, 'outputMicrographs') or \
+                hasattr(self, 'outputMicrographsDoseWeighted'):
             summary.append('Aligned %d movies using motioncor2.'
                            % self.inputMovies.get().getSize())
         else:
@@ -650,7 +651,6 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
 
     i = first
     # The output and log files list the shifts relative to the first frame.
-
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
@@ -678,4 +678,3 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     plotter.tightLayout()
 
     return plotter
-
