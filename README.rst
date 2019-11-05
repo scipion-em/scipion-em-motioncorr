@@ -45,7 +45,7 @@ To check the installation, simply run the following Scipion test:
 Supported versions
 ------------------
 
-1.1.0, 1.2.1, 1.2.3, 1.2.6
+1.2.3, 1.2.6, 1.3.0
 
 Protocols
 ---------

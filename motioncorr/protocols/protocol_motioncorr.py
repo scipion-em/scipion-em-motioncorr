@@ -9,7 +9,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -172,8 +172,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         form.addParam('patchOverlap', params.IntParam, default=0,
                       label='Patches overlap (%)',
-                      help='In versions > 1.0.1 it is possible to specify'
-                           'the overlapping between patches. '
+                      help='Specify the overlapping between patches. '
                            '\nFor example, overlap=20 means that '
                            'each patch will have a 20% overlapping \n'
                            'with its neighboring patches in each dimension.')
