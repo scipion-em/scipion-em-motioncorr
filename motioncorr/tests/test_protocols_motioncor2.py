@@ -1,10 +1,12 @@
 # **************************************************************************
 # *
-# * Authors:    Laura del Cano (ldelcano@cnb.csic.es)
-# *             Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *             Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
+# * Authors:    Laura del Cano (ldelcano@cnb.csic.es) [1]
+# *             Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca) [2]
+# *             Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [3]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [2] Department of Anatomy and Cell Biology, McGill University
+# * [3] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by

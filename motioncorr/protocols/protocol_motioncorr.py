@@ -1,11 +1,14 @@
 # ******************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
-# *              Vahid Abrishami (vabrishami@cnb.csic.es)
-# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# *              Vahid Abrishami (vabrishami@cnb.csic.es) [2]
+# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca) [3]
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [4]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
+# * [2] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [3] Department of Anatomy and Cell Biology, McGill University
+# * [4] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by

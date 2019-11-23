@@ -1,7 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
-# * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
 # *
 # * [1] SciLifeLab, Stockholm University
 # * [2] MRC Laboratory of Molecular Biology (MRC-LMB)
