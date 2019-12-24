@@ -30,24 +30,26 @@
 # *
 # ******************************************************************************
 
-import os
 import time
-from itertools import izip
+try:
+    from itertools import izip
+except:
+    izip = zip
 from math import ceil
 from threading import Thread
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
-import pyworkflow.em as em
-from pyworkflow.em.data import MovieAlignment
+import pwem
+from pwem.objects import MovieAlignment
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.protocol import ProtAlignMovies
+from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
 import motioncorr
-from motioncorr.convert import *
-from motioncorr.constants import *
+from ..convert import *
+from ..constants import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
@@ -74,8 +76,7 @@ class ProtMotionCorr(ProtAlignMovies):
         v2 = int(version.replace('.', ''))
 
         if v1 < v2:
-                return False
-
+            return False
         return True
 
     def _getConvertExtension(self, filename):
@@ -534,12 +535,12 @@ class ProtMotionCorr(ProtAlignMovies):
         return xShifts, yShifts
 
     def _setPlotInfo(self, movie, mic):
-        mic.plotGlobal = em.Image(location=self._getPlotGlobal(movie))
+        mic.plotGlobal = pwem.objects.Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
-            mic.psdCorr = em.Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = em.Image(location=self._getPsdJpeg(movie))
+            mic.psdCorr = pwem.objects.Image(location=self._getPsdCorr(movie))
+            mic.psdJpeg = pwem.objects.Image(location=self._getPsdJpeg(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = em.Image(
+            mic.thumbnail = pwem.objects.Image(
                 location=self._getOutputMicThumbnail(movie))
 
     def _saveAlignmentPlots(self, movie, pixSize):

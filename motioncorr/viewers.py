@@ -28,12 +28,12 @@
 
 from pyworkflow.utils import cleanPath
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import MicrographsView
-from pyworkflow.em import SetOfMovies
+from pwem.viewers import MicrographsView
+from pwem.objects import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
-import pyworkflow.em.viewers.showj as showj
+import pwem.viewers.showj as showj
 
-from motioncorr.protocols import ProtMotionCorr
+from .protocols import ProtMotionCorr
 
 
 class ProtMotioncorrViewer(ProtocolViewer):

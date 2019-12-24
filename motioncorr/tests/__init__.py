@@ -1,0 +1,2 @@
+
+from .test_protocols_motioncor2 import TestMotioncor2AlignMovies

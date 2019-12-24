@@ -28,10 +28,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import ProtImportMovies
+from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import *
 
-from motioncorr.protocols import ProtMotionCorr
+from ..protocols import ProtMotionCorr
 
 
 class TestMotioncor2AlignMovies(BaseTest):

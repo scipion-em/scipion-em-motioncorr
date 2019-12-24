@@ -26,7 +26,7 @@
 
 import os
 
-import pyworkflow.em as pwem
+import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import *

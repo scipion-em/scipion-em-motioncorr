@@ -26,10 +26,13 @@
 
 import os
 import re
-from itertools import izip
+try:
+    from itertools import izip
+except:
+    izip = zip
 
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
+from pwem.convert import ImageHandler
+import pwem.metadata as md
 
 
 def parseMovieAlignment2(logFile):
