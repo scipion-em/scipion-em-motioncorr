@@ -33,7 +33,7 @@
 import time
 try:
     from itertools import izip
-except:
+except ImportError:
     izip = zip
 from math import ceil
 from threading import Thread
@@ -381,7 +381,7 @@ class ProtMotionCorr(ProtAlignMovies):
             raise Exception("Unsupported format: %s" % ext)
 
         args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.iteritems()])
+                          for k, v in argsDict.items()])
 
         if inputMovies.getGain():
             args += ' -Gain "%s" ' % inputMovies.getGain()

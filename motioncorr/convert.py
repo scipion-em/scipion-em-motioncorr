@@ -28,7 +28,7 @@ import os
 import re
 try:
     from itertools import izip
-except:
+except ImportError:
     izip = zip
 
 from pwem.convert import ImageHandler
