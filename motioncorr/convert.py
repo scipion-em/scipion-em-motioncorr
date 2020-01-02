@@ -39,7 +39,7 @@ def parseMovieAlignment2(logFile):
     """ Get global frame shifts relative to the first frame
     (for the plots)
     """
-    f = open(logFile, 'a+')
+    f = open(logFile, 'r')
     first = None
     xshifts = []
     yshifts = []
