@@ -79,13 +79,13 @@ class TestMotioncor2AlignMovies(BaseTest):
 
     def _checkAlignment(self, movie, goldRange, goldRoi):
         alignment = movie.getAlignment()
-        range = alignment.getRange()
-        aliFrames = range[1] - range[0] + 1
+        rangeFrames = alignment.getRange()
+        aliFrames = rangeFrames[1] - rangeFrames[0] + 1
         msgRange = "Alignment range must be %s (%s) and it is %s (%s)"
-        self.assertEqual(goldRange, range, msgRange % (goldRange,
+        self.assertEqual(goldRange, rangeFrames, msgRange % (goldRange,
                                                        type(goldRange),
-                                                       range,
-                                                       type(range)))
+                                                       rangeFrames,
+                                                       type(rangeFrames)))
         roi = alignment.getRoi()
         shifts = alignment.getShifts()
         zeroShifts = (aliFrames * [0], aliFrames * [0])

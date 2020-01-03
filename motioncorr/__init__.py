@@ -71,4 +71,5 @@ class Plugin(pwem.Plugin):
                        tar='motioncor2-1.3.0.tgz',
                        default=True)
 
+
 pwem.Domain.registerPlugin(__name__)

@@ -47,7 +47,7 @@ from pyworkflow.protocol import STEPS_PARALLEL
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
-import motioncorr
+from .. import Plugin
 from ..convert import *
 from ..constants import *
 
@@ -397,7 +397,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=motioncorr.Plugin.getEnviron())
+                        env=Plugin.getEnviron())
             self._fixMovie(movie)
 
             # Compute PSDs
@@ -418,8 +418,8 @@ class ProtMotionCorr(ProtAlignMovies):
                                       roi=roi, dark=inputMovies.getDark(),
                                       gain=inputMovies.getGain())
 
-                    self.computePSDs(movie, aveMicFn, outMicFn,
-                                     outputFnCorrected=self._getPsdJpeg(movie))
+                    self.computePSDImages(movie, aveMicFn, outMicFn,
+                                          outputFnCorrected=self._getPsdJpeg(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
@@ -492,10 +492,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # --------------------------- UTILS functions -----------------------------
     def _getVersion(self):
-        return motioncorr.Plugin.getActiveVersion()
+        return Plugin.getActiveVersion()
 
     def _getProgram(self):
-        return motioncorr.Plugin.getProgram()
+        return Plugin.getProgram()
 
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
@@ -614,10 +614,10 @@ class ProtMotionCorr(ProtAlignMovies):
                 (not createWeighted or self.doSaveUnweightedMic))
 
     def _createOutputWeightedMicrographs(self):
-        return (self.doSaveAveMic and self.doApplyDoseFilter)
+        return self.doSaveAveMic and self.doApplyDoseFilter
 
     def _doComputeMicThumbnail(self):
-        return (self.doSaveAveMic and self.doComputeMicThumbnail)
+        return self.doSaveAveMic and self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
         return '--use_worker_thread' in self.extraProtocolParams.get()
@@ -631,9 +631,9 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     sumMeanX = []
     sumMeanY = []
 
-    def px_to_ang(ax_px):
-        y1, y2 = ax_px.get_ylim()
-        x1, x2 = ax_px.get_xlim()
+    def px_to_ang(px):
+        y1, y2 = px.get_ylim()
+        x1, x2 = px.get_xlim()
         ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
         ax_ang.set_xlim(x1*pixSize, x2*pixSize)
         ax_ang.figure.canvas.draw()
@@ -676,7 +676,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    #ax_ang2.set_title('Full-frame alignment')
+    # ax_ang2.set_title('Full-frame alignment')
 
     plotter.tightLayout()
 
