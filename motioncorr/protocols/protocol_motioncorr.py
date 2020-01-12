@@ -1,15 +1,18 @@
 # ******************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
-# *              Vahid Abrishami (vabrishami@cnb.csic.es)
-# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# *              Vahid Abrishami (vabrishami@cnb.csic.es) [2]
+# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca) [3]
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [4]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
+# * [2] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [3] Department of Anatomy and Cell Biology, McGill University
+# * [4] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -172,8 +175,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         form.addParam('patchOverlap', params.IntParam, default=0,
                       label='Patches overlap (%)',
-                      help='In versions > 1.0.1 it is possible to specify'
-                           'the overlapping between patches. '
+                      help='Specify the overlapping between patches. '
                            '\nFor example, overlap=20 means that '
                            'each patch will have a 20% overlapping \n'
                            'with its neighboring patches in each dimension.')
@@ -250,6 +252,17 @@ class ProtMotionCorr(ProtAlignMovies):
                            'neighboring good pixel values. Each entry contains '
                            '4 integers x, y, w, h representing the x, y '
                            'coordinates, width, and height, respectively.')
+
+        form.addParam('defectMap', params.FileParam, allowsNull=True,
+                      label='Camera defects map',
+                      help='1. Defect map is a binary (0 or 1) map where defective '
+                           ' pixels are assigned value of 1 and good pixels have '
+                           'value of 0.\n2. The defective pixels are corrected '
+                           'with a random pick of good pixels in its neighborhood. '
+                           '\n3. This is map must have the same dimension and '
+                           'orientation as the input movie frame.\n4. This map '
+                           'can be provided as either MRC or TIFF file that has '
+                           'MRC mode of 0 or 5 (unsigned 8 bit).')
 
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -337,6 +350,8 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
+        if self.defectMap.get():
+            argsDict['-DefectMap'] = self.defectMap.get()
 
         patchOverlap = self.getAttributeValue('patchOverlap', None)
         if patchOverlap:  # 0 or None is False
@@ -439,7 +454,8 @@ class ProtMotionCorr(ProtAlignMovies):
     def _summary(self):
         summary = []
 
-        if hasattr(self, 'outputMicrographs'):
+        if hasattr(self, 'outputMicrographs') or \
+                hasattr(self, 'outputMicrographsDoseWeighted'):
             summary.append('Aligned %d movies using motioncor2.'
                            % self.inputMovies.get().getSize())
         else:
@@ -637,7 +653,6 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
 
     i = first
     # The output and log files list the shifts relative to the first frame.
-
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
@@ -665,4 +680,3 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     plotter.tightLayout()
 
     return plotter
-
