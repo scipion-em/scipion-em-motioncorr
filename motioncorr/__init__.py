@@ -70,6 +70,3 @@ class Plugin(pwem.Plugin):
         env.addPackage('motioncor2', version='1.3.0',
                        tar='motioncor2-1.3.0.tgz',
                        default=True)
-
-
-pwem.Domain.registerPlugin(__name__)

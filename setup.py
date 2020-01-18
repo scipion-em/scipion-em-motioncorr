@@ -199,4 +199,7 @@ setup(
         'Bug Reports': 'https://github.com/scipion-em/scipion-em-motioncorr/issues',
         'Source': 'https://github.com/scipion-em/scipion-em-motioncorr/',
     },
+    entry_points={
+        'pyworkflow.plugin': 'motioncorr = motioncorr'
+    }
 )
