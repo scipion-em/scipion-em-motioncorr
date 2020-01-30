@@ -31,8 +31,8 @@ try:
 except ImportError:
     izip = zip
 
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
 
 def parseMovieAlignment2(logFile):
