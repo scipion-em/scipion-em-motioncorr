@@ -26,10 +26,6 @@
 
 import os
 import re
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
 
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
@@ -151,7 +147,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
             globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
 
-    for shiftX, shiftY in izip(shiftListX, shiftListY):
+    for shiftX, shiftY in zip(shiftListX, shiftListY):
         if s0 <= alFrame <= sN:
             objId = globalShiftsMD.addObject()
 

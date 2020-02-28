@@ -27,8 +27,8 @@
 # **************************************************************************
 
 from pyworkflow.utils import cleanPath
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import MicrographsView
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import MicrographsView, EmProtocolViewer
 from pwem.objects import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
 import pwem.viewers.showj as showj
@@ -36,7 +36,7 @@ import pwem.viewers.showj as showj
 from .protocols import ProtMotionCorr
 
 
-class ProtMotioncorrViewer(ProtocolViewer):
+class ProtMotioncorrViewer(EmProtocolViewer):
     """ Visualization of Motioncor2 results. """
 
     _targets = [ProtMotionCorr]
