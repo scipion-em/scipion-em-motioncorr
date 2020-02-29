@@ -71,15 +71,15 @@ def parseMagEstOutput(filename):
             if parsing:
                 if 'Distortion Angle' in line:
                     result.append(float(line.split()[3]))
-                if 'Major Scale' in line:
+                elif 'Major Scale' in line:
                     result.append(float(line.split()[3]))
-                if 'Minor Scale' in line:
+                elif 'Minor Scale' in line:
                     result.append(float(line.split()[3]))
             if line.startswith("Stretch only parameters would be as follows"):
                 parsing = False
             if 'Corrected Pixel Size' in line:
                 result.append(float(line.split()[4]))
-            if 'The Total Distortion =' in line:
+            elif 'The Total Distortion =' in line:
                 result.append(float(line.split()[4]))
         f.close()
 

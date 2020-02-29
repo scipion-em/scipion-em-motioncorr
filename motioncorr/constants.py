@@ -24,8 +24,6 @@
 # *
 # **************************************************************************
 
-CUDA_LIB = 'CUDA_LIB'
-
 MOTIONCOR2 = 'MOTIONCOR2'
 MOTIONCOR2_HOME = 'MOTIONCOR2_HOME'
 MOTIONCOR2_CUDA_LIB = 'MOTIONCOR2_CUDA_LIB'
