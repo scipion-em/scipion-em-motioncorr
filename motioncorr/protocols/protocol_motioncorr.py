@@ -202,27 +202,16 @@ class ProtMotionCorr(ProtAlignMovies):
                             'stretching image along the major axis, '
                             'the axis where the lower magnification is '
                             'detected.')
-        group.addParam('useEst', params.BooleanParam, default=True,
-                       label='Use previous estimation?',
-                       condition='doMagCor',
-                       help='Use previously calculated parameters of '
-                            'magnification anisotropy (from magnification '
-                            'distortion estimation protocol).')
-        group.addParam('inputEst', params.PointerParam,
-                       pointerClass='ProtMagDistEst',
-                       condition='useEst and doMagCor',
-                       label='Input protocol',
-                       help='Select previously executed estimation protocol.')
         group.addParam('scaleMaj', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Major scale factor',
                        help='Major scale factor.')
         group.addParam('scaleMin', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Minor scale factor',
                        help='Minor scale factor.')
         group.addParam('angDist', params.FloatParam, default=0.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Distortion angle (deg)',
                        help='Distortion angle, in degrees.')
 
@@ -355,17 +344,9 @@ class ProtMotionCorr(ProtAlignMovies):
             argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
-            if self.useEst:
-                inputEst = self.inputEst.get().getOutputLog()
-                input_params = parseMagEstOutput(inputEst)
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
-                    input_params[1],
-                    input_params[2],
-                    input_params[0])
-            else:
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
-                                                          self.scaleMin,
-                                                          self.angDist)
+            argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
+                                                      self.scaleMin,
+                                                      self.angDist)
 
         ext = pwutils.getExt(movie.getFileName()).lower()
 
