@@ -6,9 +6,13 @@ This plugin allows to use motioncor2 program within the Scipion framework.
 
 Motioncor2 is a GPU-accelerated program for correction of electron beam-induced sample motion. It is developed by `Shawn Zheng <https://emcore.ucsf.edu/ucsf-motioncor2>`_.
 
-.. figure:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_devel.svg
-   :align: left
-   :alt: build status
++------------------+------------------+
+| stable: |stable| | devel: | |devel| |
++------------------+------------------+
+
+.. |stable| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_prod.svg
+.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_sdevel.svg
+
 
 Installation
 ------------
