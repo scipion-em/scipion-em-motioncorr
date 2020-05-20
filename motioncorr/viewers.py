@@ -28,7 +28,7 @@
 
 from pyworkflow.utils import cleanPath
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import MicrographsView, EmProtocolViewer
+from pwem.viewers import MicrographsView, EmProtocolViewer, EmPlotter
 from pwem.objects import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
 import pwem.viewers.showj as showj
@@ -61,13 +61,18 @@ class ProtMotioncorrViewer(EmProtocolViewer):
                       label="Show FAILED movies?", default=True,
                       help="Create a set of failed movies "
                            "and display it.")
+        form.addParam('doShowMotion', LabelParam,
+                      label="Plot motion per frame", default=True,
+                      help="Show accumulated motion for all micrographs. "
+                           "Early motion default cut-off is 4 e/A2.")
 
     def _getVisualizeDict(self):
         self._errors = []
         visualizeDict = {'doShowMics': self._viewParam,
                          'doShowMicsDW': self._viewParam,
                          'doShowMovies': self._viewParam,
-                         'doShowFailedMovies': self._viewParam
+                         'doShowFailedMovies': self._viewParam,
+                         'doShowMotion': self._plotMotion,
                          }
         return visualizeDict
 
@@ -129,3 +134,26 @@ class ProtMotioncorrViewer(EmProtocolViewer):
     def _findFailedMovies(self, item, row):
         if item.getObjId() not in self.failedList:
             setattr(item, "_appendItem", False)
+
+    def _plotMotion(self, param=None):
+        if getattr(self.protocol, 'outputMicrographs', None) is not None:
+            output = self.protocol.outputMicrographs
+        else:
+            output = self.protocol.outputMicrographsDoseWeighted
+
+        columns = '_rlnAccumMotionTotal _rlnAccumMotionEarly _rlnAccumMotionLate'
+        xplotter = EmPlotter.createFromFile(output.getFileName(), '',
+                                            plotType='Plot',
+                                            columnsStr=columns,
+                                            colorsStr='r g b',
+                                            linesStr='- - -',
+                                            markersStr='. . .',
+                                            xcolumn='id',
+                                            ylabel='Motion per frame (A)',
+                                            xlabel='Micrograph',
+                                            title='Accumulated motion per frame',
+                                            bins=False,
+                                            orderColumn='id',
+                                            orderDirection='ASC')
+
+        return [xplotter]

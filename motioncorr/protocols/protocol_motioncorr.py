@@ -32,14 +32,13 @@
 
 import os
 import time
-from math import ceil
+from math import ceil, sqrt
 from threading import Thread
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
 import pwem
-from pwem.objects import MovieAlignment
 from pyworkflow.protocol import STEPS_PARALLEL
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
@@ -283,7 +282,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # --------------------------- STEPS functions -----------------------------
     def _processMovie(self, movie):
-        inputMovies = self.inputMovies.get()
+        inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
         outputMicFn = self._getRelPath(self._getOutputMicName(movie),
                                        movieFolder)
@@ -306,7 +305,7 @@ class ProtMotionCorr(ProtAlignMovies):
         numbOfFrames = self._getNumberOfFrames(movie)
 
         if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
+            preExp, dose = self._getFrameMotionParams()
         else:
             preExp, dose = 0.0, 0.0
 
@@ -386,14 +385,11 @@ class ProtMotionCorr(ProtAlignMovies):
 
             def _extraWork():
                 if self.doComputePSD:
+                    movieFn = movie.getFileName()
                     # Compute uncorrected avg mic
-                    roi = [self.cropOffsetX.get(), self.cropOffsetY.get(),
-                           self.cropDimX.get(), self.cropDimY.get()]
-                    fakeShiftsFn = self.writeZeroShifts(movie)
-                    # FIXME: implement gain flip/rotation
-                    self.averageMovie(movie, fakeShiftsFn, aveMicFn,
+                    self.averageMovie(movie, movieFn, aveMicFn,
                                       binFactor=self.binFactor.get(),
-                                      roi=roi, dark=inputMovies.getDark(),
+                                      dark=inputMovies.getDark(),
                                       gain=inputMovies.getGain())
 
                     self.computePSDImages(movie, aveMicFn, outMicFn,
@@ -418,16 +414,17 @@ class ProtMotionCorr(ProtAlignMovies):
             print("ERROR: Movie %s failed\n" % movie.getName())
 
     def _insertFinalSteps(self, deps):
-        stepId = self._insertFunctionStep('waitForThreadStep',
-                                          prerequisites=deps)
-        return [stepId]
+        stepsId = []
+        if self._useWorkerThread():
+            stepsId.append(self._insertFunctionStep('waitForThreadStep',
+                                                    prerequisites=deps))
+        return stepsId
 
     def waitForThreadStep(self):
         # Quick and dirty (maybe desperate) way to wait
         # if the PSD and thumbnail were computed with a thread
         # If running in streaming this will not be necessary
-        if self._useWorkerThread():
-            time.sleep(60)  # wait 1 min to give some time the thread to finish
+        time.sleep(60)  # wait 1 min to give some time the thread to finish
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -500,6 +497,9 @@ class ProtMotionCorr(ProtAlignMovies):
     def _getPsdJpeg(self, movie):
         return self._getNameExt(movie, '_psd', 'jpeg', extra=True)
 
+    def getInputMovies(self):
+        return self.inputMovies.get()
+
     def _preprocessOutputMicrograph(self, mic, movie):
         self._setPlotInfo(movie, mic)
 
@@ -520,6 +520,10 @@ class ProtMotionCorr(ProtAlignMovies):
         if self._doComputeMicThumbnail():
             mic.thumbnail = pwem.objects.Image(
                 location=self._getOutputMicThumbnail(movie))
+        total, early, late = self.calcFrameMotion(movie)
+        mic._rlnAccumMotionTotal = pwem.objects.Float(total)
+        mic._rlnAccumMotionEarly = pwem.objects.Float(early)
+        mic._rlnAccumMotionLate = pwem.objects.Float(late)
 
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
@@ -540,21 +544,6 @@ class ProtMotionCorr(ProtAlignMovies):
         if not self.doSaveUnweightedMic:
             fnToDelete = self._getExtraPath(self._getOutputMicName(movie))
             pwutils.cleanPath(fnToDelete)
-
-    def writeZeroShifts(self, movie):
-        # TODO: find another way to do this
-        shiftsMd = self._getTmpPath('zero_shifts.xmd')
-        pwutils.cleanPath(shiftsMd)
-        xshifts = [0] * movie.getNumberOfFrames()
-        yshifts = xshifts
-        alignment = MovieAlignment(first=1, last=movie.getNumberOfFrames(),
-                                   xshifts=xshifts, yshifts=yshifts)
-        roiList = [0, 0, 0, 0]
-        alignment.setRoi(roiList)
-        movie.setAlignment(alignment)
-        writeShiftsMovieAlignment(movie, shiftsMd,
-                                  1, movie.getNumberOfFrames())
-        return shiftsMd
 
     def _getRange(self, movie, prefix):
 
@@ -602,6 +591,38 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _doMovieFolderCleanUp(self):
         return False
+
+    def getSamplingRate(self):
+        return self.getInputMovies().getSamplingRate()
+
+    def calcFrameMotion(self, movie):
+        # based on relion 3.1 motioncorr_runner.cpp
+        shiftsX, shiftsY = self._getMovieShifts(movie)
+        a0, aN = self._getRange(movie, "align")
+        nframes = aN - a0 + 1
+        preExp, dose = self._getFrameMotionParams()
+        cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
+        total, early, late = 0., 0., 0.
+        x, y, xOld, yOld = 0., 0., 0., 0.
+        pix = self.getSamplingRate()
+        for frame in range(1, nframes + 1):
+            if frame >= 2:
+                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
+                total += d
+                if frame <= cutoff:
+                    early += d
+                else:
+                    late += d
+            xOld = x
+            yOld = y
+        return total*pix, early*pix, late*pix
+
+    def _getFrameMotionParams(self):
+        # we assume all movies have the same N of frames
+        inputMovies = self.getInputMovies()
+        preExp, dose = self._getCorrectedDose(inputMovies)
+        return preExp, dose
 
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
@@ -654,7 +675,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    # ax_ang2.set_title('Full-frame alignment')
+    ax_px.set_title('Global frame alignment')
 
     plotter.tightLayout()
 
