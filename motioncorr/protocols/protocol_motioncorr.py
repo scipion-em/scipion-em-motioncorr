@@ -305,7 +305,7 @@ class ProtMotionCorr(ProtAlignMovies):
         numbOfFrames = self._getNumberOfFrames(movie)
 
         if self.doApplyDoseFilter:
-            preExp, dose = self._getFrameMotionParams()
+            preExp, dose = self._getCorrectedDose(inputMovies)
         else:
             preExp, dose = 0.0, 0.0
 
@@ -600,7 +600,7 @@ class ProtMotionCorr(ProtAlignMovies):
         shiftsX, shiftsY = self._getMovieShifts(movie)
         a0, aN = self._getRange(movie, "align")
         nframes = aN - a0 + 1
-        preExp, dose = self._getFrameMotionParams()
+        preExp, dose = self._getCorrectedDose(self.getInputMovies())
         cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
         total, early, late = 0., 0., 0.
         x, y, xOld, yOld = 0., 0., 0., 0.
@@ -617,12 +617,6 @@ class ProtMotionCorr(ProtAlignMovies):
             xOld = x
             yOld = y
         return total*pix, early*pix, late*pix
-
-    def _getFrameMotionParams(self):
-        # we assume all movies have the same N of frames
-        inputMovies = self.getInputMovies()
-        preExp, dose = self._getCorrectedDose(inputMovies)
-        return preExp, dose
 
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
