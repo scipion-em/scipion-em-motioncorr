@@ -26,7 +26,7 @@
 
 import os
 
-import pyworkflow.em as pwem
+import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import *
@@ -38,12 +38,12 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.2.3', '1.2.6', '1.3.0']
+    _supportedVersions = ['1.2.3', '1.2.6', '1.3.0', '1.3.1']
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.3.0')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.3.0-Cuda80')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.3.1')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_v1.3.1-Cuda92')
 
     @classmethod
     def getProgram(cls):
@@ -54,7 +54,7 @@ class Plugin(pwem.Plugin):
     def getEnviron(cls):
         """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = environ.getFirst((MOTIONCOR2_CUDA_LIB, CUDA_LIB))
+        cudaLib = environ.get(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
 
         return environ
@@ -68,7 +68,8 @@ class Plugin(pwem.Plugin):
                        tar='motioncor2-1.2.6.tgz')
 
         env.addPackage('motioncor2', version='1.3.0',
-                       tar='motioncor2-1.3.0.tgz',
-                       default=True)
+                       tar='motioncor2-1.3.0.tgz')
 
-pwem.Domain.registerPlugin(__name__)
+        env.addPackage('motioncor2', version='1.3.1',
+                       tar='motioncor2-1.3.1.tgz',
+                       default=True)
