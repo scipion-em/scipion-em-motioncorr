@@ -24,4 +24,4 @@
 # *
 # **************************************************************************
 
-from protocol_motioncorr import ProtMotionCorr
+from .protocol_motioncorr import ProtMotionCorr

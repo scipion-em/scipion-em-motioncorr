@@ -32,22 +32,20 @@
 
 import os
 import time
-from itertools import izip
-from math import ceil
+from math import ceil, sqrt
 from threading import Thread
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
-import pyworkflow.em as em
-from pyworkflow.em.data import MovieAlignment
+import pwem
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.protocol import ProtAlignMovies
+from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
 
-import motioncorr
-from motioncorr.convert import *
-from motioncorr.constants import *
+from .. import Plugin
+from ..convert import *
+from ..constants import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
@@ -74,8 +72,7 @@ class ProtMotionCorr(ProtAlignMovies):
         v2 = int(version.replace('.', ''))
 
         if v1 < v2:
-                return False
-
+            return False
         return True
 
     def _getConvertExtension(self, filename):
@@ -205,27 +202,16 @@ class ProtMotionCorr(ProtAlignMovies):
                             'stretching image along the major axis, '
                             'the axis where the lower magnification is '
                             'detected.')
-        group.addParam('useEst', params.BooleanParam, default=True,
-                       label='Use previous estimation?',
-                       condition='doMagCor',
-                       help='Use previously calculated parameters of '
-                            'magnification anisotropy (from magnification '
-                            'distortion estimation protocol).')
-        group.addParam('inputEst', params.PointerParam,
-                       pointerClass='ProtMagDistEst',
-                       condition='useEst and doMagCor',
-                       label='Input protocol',
-                       help='Select previously executed estimation protocol.')
         group.addParam('scaleMaj', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Major scale factor',
                        help='Major scale factor.')
         group.addParam('scaleMin', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Minor scale factor',
                        help='Minor scale factor.')
         group.addParam('angDist', params.FloatParam, default=0.0,
-                       condition='not useEst and doMagCor',
+                       condition='doMagCor',
                        label='Distortion angle (deg)',
                        help='Distortion angle, in degrees.')
 
@@ -296,7 +282,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # --------------------------- STEPS functions -----------------------------
     def _processMovie(self, movie):
-        inputMovies = self.inputMovies.get()
+        inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
         outputMicFn = self._getRelPath(self._getOutputMicName(movie),
                                        movieFolder)
@@ -358,17 +344,9 @@ class ProtMotionCorr(ProtAlignMovies):
             argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
-            if self.useEst:
-                inputEst = self.inputEst.get().getOutputLog()
-                input_params = parseMagEstOutput(inputEst)
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
-                    input_params[1],
-                    input_params[2],
-                    input_params[0])
-            else:
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
-                                                          self.scaleMin,
-                                                          self.angDist)
+            argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
+                                                      self.scaleMin,
+                                                      self.angDist)
 
         ext = pwutils.getExt(movie.getFileName()).lower()
 
@@ -380,7 +358,7 @@ class ProtMotionCorr(ProtAlignMovies):
             raise Exception("Unsupported format: %s" % ext)
 
         args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.iteritems()])
+                          for k, v in argsDict.items()])
 
         if inputMovies.getGain():
             args += ' -Gain "%s" ' % inputMovies.getGain()
@@ -396,7 +374,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         try:
             self.runJob(program, args, cwd=movieFolder,
-                        env=motioncorr.Plugin.getEnviron())
+                        env=Plugin.getEnviron())
             self._fixMovie(movie)
 
             # Compute PSDs
@@ -407,18 +385,15 @@ class ProtMotionCorr(ProtAlignMovies):
 
             def _extraWork():
                 if self.doComputePSD:
+                    movieFn = movie.getFileName()
                     # Compute uncorrected avg mic
-                    roi = [self.cropOffsetX.get(), self.cropOffsetY.get(),
-                           self.cropDimX.get(), self.cropDimY.get()]
-                    fakeShiftsFn = self.writeZeroShifts(movie)
-                    # FIXME: implement gain flip/rotation
-                    self.averageMovie(movie, fakeShiftsFn, aveMicFn,
+                    self.averageMovie(movie, movieFn, aveMicFn,
                                       binFactor=self.binFactor.get(),
-                                      roi=roi, dark=inputMovies.getDark(),
+                                      dark=inputMovies.getDark(),
                                       gain=inputMovies.getGain())
 
-                    self.computePSDs(movie, aveMicFn, outMicFn,
-                                     outputFnCorrected=self._getPsdJpeg(movie))
+                    self.computePSDImages(movie, aveMicFn, outMicFn,
+                                          outputFnCorrected=self._getPsdJpeg(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
@@ -439,16 +414,17 @@ class ProtMotionCorr(ProtAlignMovies):
             print("ERROR: Movie %s failed\n" % movie.getName())
 
     def _insertFinalSteps(self, deps):
-        stepId = self._insertFunctionStep('waitForThreadStep',
-                                          prerequisites=deps)
-        return [stepId]
+        stepsId = []
+        if self._useWorkerThread():
+            stepsId.append(self._insertFunctionStep('waitForThreadStep',
+                                                    prerequisites=deps))
+        return stepsId
 
     def waitForThreadStep(self):
         # Quick and dirty (maybe desperate) way to wait
         # if the PSD and thumbnail were computed with a thread
         # If running in streaming this will not be necessary
-        if self._useWorkerThread():
-            time.sleep(60)  # wait 1 min to give some time the thread to finish
+        time.sleep(60)  # wait 1 min to give some time the thread to finish
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -491,10 +467,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # --------------------------- UTILS functions -----------------------------
     def _getVersion(self):
-        return motioncorr.Plugin.getActiveVersion()
+        return Plugin.getActiveVersion()
 
     def _getProgram(self):
-        return motioncorr.Plugin.getProgram()
+        return Plugin.getProgram()
 
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
@@ -521,6 +497,9 @@ class ProtMotionCorr(ProtAlignMovies):
     def _getPsdJpeg(self, movie):
         return self._getNameExt(movie, '_psd', 'jpeg', extra=True)
 
+    def getInputMovies(self):
+        return self.inputMovies.get()
+
     def _preprocessOutputMicrograph(self, mic, movie):
         self._setPlotInfo(movie, mic)
 
@@ -534,13 +513,17 @@ class ProtMotionCorr(ProtAlignMovies):
         return xShifts, yShifts
 
     def _setPlotInfo(self, movie, mic):
-        mic.plotGlobal = em.Image(location=self._getPlotGlobal(movie))
+        mic.plotGlobal = pwem.objects.Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
-            mic.psdCorr = em.Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = em.Image(location=self._getPsdJpeg(movie))
+            mic.psdCorr = pwem.objects.Image(location=self._getPsdCorr(movie))
+            mic.psdJpeg = pwem.objects.Image(location=self._getPsdJpeg(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = em.Image(
+            mic.thumbnail = pwem.objects.Image(
                 location=self._getOutputMicThumbnail(movie))
+        total, early, late = self.calcFrameMotion(movie)
+        mic._rlnAccumMotionTotal = pwem.objects.Float(total)
+        mic._rlnAccumMotionEarly = pwem.objects.Float(early)
+        mic._rlnAccumMotionLate = pwem.objects.Float(late)
 
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
@@ -561,21 +544,6 @@ class ProtMotionCorr(ProtAlignMovies):
         if not self.doSaveUnweightedMic:
             fnToDelete = self._getExtraPath(self._getOutputMicName(movie))
             pwutils.cleanPath(fnToDelete)
-
-    def writeZeroShifts(self, movie):
-        # TODO: find another way to do this
-        shiftsMd = self._getTmpPath('zero_shifts.xmd')
-        pwutils.cleanPath(shiftsMd)
-        xshifts = [0] * movie.getNumberOfFrames()
-        yshifts = xshifts
-        alignment = MovieAlignment(first=1, last=movie.getNumberOfFrames(),
-                                   xshifts=xshifts, yshifts=yshifts)
-        roiList = [0, 0, 0, 0]
-        alignment.setRoi(roiList)
-        movie.setAlignment(alignment)
-        writeShiftsMovieAlignment(movie, shiftsMd,
-                                  1, movie.getNumberOfFrames())
-        return shiftsMd
 
     def _getRange(self, movie, prefix):
 
@@ -613,10 +581,10 @@ class ProtMotionCorr(ProtAlignMovies):
                 (not createWeighted or self.doSaveUnweightedMic))
 
     def _createOutputWeightedMicrographs(self):
-        return (self.doSaveAveMic and self.doApplyDoseFilter)
+        return self.doSaveAveMic and self.doApplyDoseFilter
 
     def _doComputeMicThumbnail(self):
-        return (self.doSaveAveMic and self.doComputeMicThumbnail)
+        return self.doSaveAveMic and self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
         return '--use_worker_thread' in self.extraProtocolParams.get()
@@ -624,15 +592,40 @@ class ProtMotionCorr(ProtAlignMovies):
     def _doMovieFolderCleanUp(self):
         return False
 
+    def getSamplingRate(self):
+        return self.getInputMovies().getSamplingRate()
+
+    def calcFrameMotion(self, movie):
+        # based on relion 3.1 motioncorr_runner.cpp
+        shiftsX, shiftsY = self._getMovieShifts(movie)
+        a0, aN = self._getRange(movie, "align")
+        nframes = aN - a0 + 1
+        preExp, dose = self._getCorrectedDose(self.getInputMovies())
+        cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
+        total, early, late = 0., 0., 0.
+        x, y, xOld, yOld = 0., 0., 0., 0.
+        pix = self.getSamplingRate()
+        for frame in range(2, nframes + 1):  # start from the 2nd frame
+            x, y = shiftsX[frame-1], shiftsY[frame-1]
+            d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
+            total += d
+            if frame <= cutoff:
+                early += d
+            else:
+                late += d
+            xOld = x
+            yOld = y
+        return list(map(lambda x: pix*x, [total, early, late]))
+
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     """ Create a plotter with the shift per frame. """
     sumMeanX = []
     sumMeanY = []
 
-    def px_to_ang(ax_px):
-        y1, y2 = ax_px.get_ylim()
-        x1, x2 = ax_px.get_xlim()
+    def px_to_ang(px):
+        y1, y2 = px.get_ylim()
+        x1, x2 = px.get_xlim()
         ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
         ax_ang.set_xlim(x1*pixSize, x2*pixSize)
         ax_ang.figure.canvas.draw()
@@ -658,7 +651,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
-    for x, y in izip(meanX, meanY):
+    for x, y in zip(meanX, meanY):
         sumMeanX.append(x)
         sumMeanY.append(y)
         if labelTick == 1:
@@ -675,7 +668,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    #ax_ang2.set_title('Full-frame alignment')
+    ax_px.set_title('Global frame alignment')
 
     plotter.tightLayout()
 

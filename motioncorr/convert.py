@@ -24,96 +24,29 @@
 # *
 # **************************************************************************
 
-import os
-import re
-from itertools import izip
-
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
 
 def parseMovieAlignment2(logFile):
     """ Get global frame shifts relative to the first frame
     (for the plots)
     """
-    f = open(logFile, 'a+')
     first = None
     xshifts = []
     yshifts = []
+    with open(logFile, 'r') as f:
+        for line in f:
+            l = line.strip()
+            if '#' not in l and len(l) > 0:
+                parts = l.split()
+                if first is None:  # read the first frame number
+                    first = int(parts[0])  # take the id from first column
+                # take the shifts from the last two columns of the line
+                xshifts.append(float(parts[1]))
+                yshifts.append(float(parts[2]))
 
-    for line in f:
-        l = line.strip()
-        if '#' not in l and len(l) > 0:
-            parts = l.split()
-            if first is None:  # read the first frame number
-                first = int(parts[0])  # take the id from first column
-            # take the shifts from the last two columns of the line
-            xshifts.append(float(parts[1]))
-            yshifts.append(float(parts[2]))
-    f.close()
     return xshifts, yshifts
-
-
-def parseMagEstOutput(filename):
-    """
-    Note: This function is copied from grigoriefflab.convert to avoid
-    dependencies to that package
-    """
-    result = []
-    ansi_escape = re.compile(r'\x1b[^m]*m')
-    if os.path.exists(filename):
-        f = open(filename)
-        parsing = False
-        for line in f:
-            l = ansi_escape.sub('', line)
-            line = re.sub('[%]', '', l).strip()
-            if line.startswith("The following distortion parameters were found"):
-                parsing = True
-            if parsing:
-                if 'Distortion Angle' in line:
-                    result.append(float(line.split()[3]))
-                if 'Major Scale' in line:
-                    result.append(float(line.split()[3]))
-                if 'Minor Scale' in line:
-                    result.append(float(line.split()[3]))
-            if line.startswith("Stretch only parameters would be as follows"):
-                parsing = False
-            if 'Corrected Pixel Size' in line:
-                result.append(float(line.split()[4]))
-            if 'The Total Distortion =' in line:
-                result.append(float(line.split()[4]))
-        f.close()
-
-    return result
-
-
-def parseMagCorrInput(filename):
-    """
-    Note: This function is copied from grigoriefflab.convert to avoid
-    dependencies to that package
-    """
-    result = []
-    ansi_escape = re.compile(r'\x1b[^m]*m')
-    if os.path.exists(filename):
-        f = open(filename)
-        parsing = False
-        for line in f:
-            l = ansi_escape.sub('', line)
-            line = re.sub('[%]', '', l).strip()
-            if line.startswith("Stretch only parameters would be as follows"):
-                parsing = True
-            if parsing:
-                if 'Distortion Angle' in line:
-                    result.append(float(line.split()[3]))
-                if 'Major Scale' in line:
-                    result.append(float(line.split()[3]))
-                if 'Minor Scale' in line:
-                    result.append(float(line.split()[3]))
-            if 'Corrected Pixel Size' in line:
-                result.append(float(line.split()[4]))
-        f.close()
-
-    return result
 
 
 def getMovieFileName(movie):
@@ -148,7 +81,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
             globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
             globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
 
-    for shiftX, shiftY in izip(shiftListX, shiftListY):
+    for shiftX, shiftY in zip(shiftListX, shiftListY):
         if s0 <= alFrame <= sN:
             objId = globalShiftsMD.addObject()
 

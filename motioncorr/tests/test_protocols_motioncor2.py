@@ -28,10 +28,11 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import ProtImportMovies
+from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import *
+from pyworkflow.utils import magentaStr
 
-from motioncorr.protocols import ProtMotionCorr
+from ..protocols import ProtMotionCorr
 
 
 class TestMotioncor2AlignMovies(BaseTest):
@@ -68,6 +69,7 @@ class TestMotioncor2AlignMovies(BaseTest):
     def setUpClass(cls):
         setupTestProject(cls)
         cls.setData()
+        print(magentaStr("\n==> Importing data - movies:"))
         cls.protImport1 = cls.runImportMovies(cls.ds.getFile('qbeta/qbeta.mrc'),
                                               magnification=50000)
         cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
@@ -79,13 +81,13 @@ class TestMotioncor2AlignMovies(BaseTest):
 
     def _checkAlignment(self, movie, goldRange, goldRoi):
         alignment = movie.getAlignment()
-        range = alignment.getRange()
-        aliFrames = range[1] - range[0] + 1
+        rangeFrames = alignment.getRange()
+        aliFrames = rangeFrames[1] - rangeFrames[0] + 1
         msgRange = "Alignment range must be %s (%s) and it is %s (%s)"
-        self.assertEqual(goldRange, range, msgRange % (goldRange,
+        self.assertEqual(goldRange, rangeFrames, msgRange % (goldRange,
                                                        type(goldRange),
-                                                       range,
-                                                       type(range)))
+                                                       rangeFrames,
+                                                       type(rangeFrames)))
         roi = alignment.getRoi()
         shifts = alignment.getShifts()
         zeroShifts = (aliFrames * [0], aliFrames * [0])
@@ -99,6 +101,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                                               " number of aligned frames.")
 
     def test_cct_motioncor2_patch(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='cct - motioncor2 test1 (patch-based)',
                                 patchX=2, patchY=2)
@@ -110,6 +113,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_motioncor2_patch(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based with grouping:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='qbeta - motioncor2 test2 (patch-based)',
                                 patchX=2, patchY=2,
@@ -122,6 +126,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_motioncor2_sel(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based with frame range:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='qbeta - motioncor2 test3 (frame range)',
                                 patchX=2, patchY=2,
