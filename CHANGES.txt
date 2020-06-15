@@ -1,3 +1,4 @@
+3.0.9 - fix failing protocol when no dose found
 3.0.8 - changed version to reflect Scipion 3 support
 1.0.8:
     - remove unused code
