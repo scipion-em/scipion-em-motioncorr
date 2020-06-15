@@ -136,24 +136,23 @@ class ProtMotioncorrViewer(EmProtocolViewer):
             setattr(item, "_appendItem", False)
 
     def _plotMotion(self, param=None):
-        if getattr(self.protocol, 'outputMicrographs', None) is not None:
-            output = self.protocol.outputMicrographs
-        else:
+        if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
             output = self.protocol.outputMicrographsDoseWeighted
-
-        columns = '_rlnAccumMotionTotal _rlnAccumMotionEarly _rlnAccumMotionLate'
-        xplotter = EmPlotter.createFromFile(output.getFileName(), '',
-                                            plotType='Plot',
-                                            columnsStr=columns,
-                                            colorsStr='r g b',
-                                            linesStr='- - -',
-                                            markersStr='. . .',
-                                            xcolumn='id',
-                                            ylabel='Motion per frame (A)',
-                                            xlabel='Micrograph',
-                                            title='Accumulated motion per frame',
-                                            bins=False,
-                                            orderColumn='id',
-                                            orderDirection='ASC')
-
-        return [xplotter]
+            columns = '_rlnAccumMotionTotal _rlnAccumMotionEarly _rlnAccumMotionLate'
+            xplotter = EmPlotter.createFromFile(output.getFileName(), '',
+                                                plotType='Plot',
+                                                columnsStr=columns,
+                                                colorsStr='r g b',
+                                                linesStr='- - -',
+                                                markersStr='. . .',
+                                                xcolumn='id',
+                                                ylabel='Motion per frame (A)',
+                                                xlabel='Micrograph',
+                                                title='Accumulated motion per frame',
+                                                bins=False,
+                                                orderColumn='id',
+                                                orderDirection='ASC')
+            return [xplotter]
+        else:
+            return [self.errorMessage('Plot is available only when dose weighting is ON',
+                                      title="Visualization error")]

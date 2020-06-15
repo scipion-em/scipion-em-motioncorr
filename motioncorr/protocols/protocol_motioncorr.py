@@ -520,10 +520,11 @@ class ProtMotionCorr(ProtAlignMovies):
         if self._doComputeMicThumbnail():
             mic.thumbnail = pwem.objects.Image(
                 location=self._getOutputMicThumbnail(movie))
-        total, early, late = self.calcFrameMotion(movie)
-        mic._rlnAccumMotionTotal = pwem.objects.Float(total)
-        mic._rlnAccumMotionEarly = pwem.objects.Float(early)
-        mic._rlnAccumMotionLate = pwem.objects.Float(late)
+        if self.doApplyDoseFilter:
+            total, early, late = self.calcFrameMotion(movie)
+            mic._rlnAccumMotionTotal = pwem.objects.Float(total)
+            mic._rlnAccumMotionEarly = pwem.objects.Float(early)
+            mic._rlnAccumMotionLate = pwem.objects.Float(late)
 
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
