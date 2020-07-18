@@ -43,8 +43,6 @@ class TestMotioncor2AlignMovies(BaseTest):
     @classmethod
     def runImportMovies(cls, pattern, **kwargs):
         """ Run an Import micrograph protocol. """
-        # We have two options: passe the SamplingRate
-        # or the ScannedPixelSize + microscope magnification
         params = {'samplingRate': 1.14,
                   'voltage': 300,
                   'sphericalAberration': 2.7,
@@ -85,9 +83,9 @@ class TestMotioncor2AlignMovies(BaseTest):
         aliFrames = rangeFrames[1] - rangeFrames[0] + 1
         msgRange = "Alignment range must be %s (%s) and it is %s (%s)"
         self.assertEqual(goldRange, rangeFrames, msgRange % (goldRange,
-                                                       type(goldRange),
-                                                       rangeFrames,
-                                                       type(rangeFrames)))
+                                                             type(goldRange),
+                                                             rangeFrames,
+                                                             type(rangeFrames)))
         roi = alignment.getRoi()
         shifts = alignment.getShifts()
         zeroShifts = (aliFrames * [0], aliFrames * [0])
