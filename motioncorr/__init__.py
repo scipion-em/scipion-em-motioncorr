@@ -44,6 +44,7 @@ class Plugin(pwem.Plugin):
     def _defineVariables(cls):
         cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.3.2')
         cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.3.2-Cuda101')
+        cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getProgram(cls):
@@ -54,7 +55,7 @@ class Plugin(pwem.Plugin):
     def getEnviron(cls):
         """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = environ.get(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
+        cudaLib = cls.getVar(MOTIONCOR2_CUDA_LIB)
         environ.addLibrary(cudaLib)
 
         return environ
