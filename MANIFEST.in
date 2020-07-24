@@ -1,6 +1,3 @@
-# Include the README
 include *.rst
-
-# Include the license file
 include LICENSE
-
+include CHANGES.txt

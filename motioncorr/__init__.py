@@ -38,12 +38,13 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.2.3', '1.2.6', '1.3.0', '1.3.1']
+    _supportedVersions = ['1.2.3', '1.2.6', '1.3.0', '1.3.1', '1.3.2']
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.3.1')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_v1.3.1-Cuda92')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.3.2')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.3.2-Cuda101')
+        cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getProgram(cls):
@@ -54,7 +55,7 @@ class Plugin(pwem.Plugin):
     def getEnviron(cls):
         """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = environ.get(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
+        cudaLib = cls.getVar(MOTIONCOR2_CUDA_LIB)
         environ.addLibrary(cudaLib)
 
         return environ
@@ -71,5 +72,8 @@ class Plugin(pwem.Plugin):
                        tar='motioncor2-1.3.0.tgz')
 
         env.addPackage('motioncor2', version='1.3.1',
-                       tar='motioncor2-1.3.1.tgz',
+                       tar='motioncor2-1.3.1.tgz')
+
+        env.addPackage('motioncor2', version='1.3.2',
+                       tar='motioncor2-1.3.2.tgz',
                        default=True)

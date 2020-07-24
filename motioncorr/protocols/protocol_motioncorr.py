@@ -128,8 +128,7 @@ class ProtMotionCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED)
 
         form.addParam('doSaveMovie', params.BooleanParam, default=False,
-                      label="Save movie",
-                      help="Save Aligned movie")
+                      label="Save aligned movie?")
 
         form.addParam('doComputePSD', params.BooleanParam, default=False,
                       label="Compute PSD (before/after)?",
@@ -195,26 +194,12 @@ class ProtMotionCorr(ProtAlignMovies):
                       help="Yes by default, if you have selected to apply a "
                            "dose-dependent filter to the frames")
 
-        group = form.addGroup('Magnification correction')
-        group.addParam('doMagCor', params.BooleanParam, default=False,
-                       label='Correct anisotropic magnification?',
-                       help='Correct anisotropic magnification by '
-                            'stretching image along the major axis, '
-                            'the axis where the lower magnification is '
-                            'detected.')
-        group.addParam('scaleMaj', params.FloatParam, default=1.0,
-                       condition='doMagCor',
-                       label='Major scale factor',
-                       help='Major scale factor.')
-        group.addParam('scaleMin', params.FloatParam, default=1.0,
-                       condition='doMagCor',
-                       label='Minor scale factor',
-                       help='Minor scale factor.')
-        group.addParam('angDist', params.FloatParam, default=0.0,
-                       condition='doMagCor',
-                       label='Distortion angle (deg)',
-                       help='Distortion angle, in degrees.')
+        form.addParam('extraParams2', params.StringParam, default='',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      label='Additional parameters',
+                      help="Extra command line parameters. See MotionCor2 help.")
 
+        form.addSection(label="Gain and defects")
         form.addParam('gainRot', params.EnumParam,
                       choices=['no rotation', '90 degrees',
                                '180 degrees', '270 degrees'],
@@ -224,7 +209,6 @@ class ProtMotionCorr(ProtAlignMovies):
                       help="Rotate gain reference counter-clockwise.")
 
         form.addParam('gainFlip', params.EnumParam,
-                      expertLevel=cons.LEVEL_ADVANCED,
                       choices=['no flip', 'upside down', 'left right'],
                       label="Flip gain reference:", default=NO_FLIP,
                       display=params.EnumParam.DISPLAY_COMBO,
@@ -250,33 +234,22 @@ class ProtMotionCorr(ProtAlignMovies):
                            'can be provided as either MRC or TIFF file that has '
                            'MRC mode of 0 or 5 (unsigned 8 bit).')
 
-        form.addParam('extraParams2', params.StringParam, default='',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label='Additional parameters',
-                      help="""*Extra parameters:*\n
-        -Align\t\t1\t\tGenerate aligned sum (1) or simple sum (0).\n              
-        -Bft\t\t500 100\t\tBFactor for alignment, in px^2.\n
-        \t\t\t\tFirst one is used in global-motion measurement and the
-        \t\t\t\tsecond one is for local-motion. (default *500 150*)\n
-        -GpuMemUsage\t\t0.5\t\tSpecify how much GPU memory is used to buffer movie frames.
-        \t\t\t\tIt is recommended when running side by side processes in
-        \t\t\t\tthe same card. By default is 50% (i.e. *0.5*).\n
-        -InFmMotion\t\t1\t\tTakes into account of motion-induced blurring of
-        \t\t\t\teach frame. It has shown resolution improvement
-        \t\t\t\tin some test cases. By default this option is off.\n
-        -Iter\t\t5\t\tMaximum iterations for iterative alignment.\n
-        -MaskCent\t\t0 0\t\tCenter of subarea that will be used for alignment,
-        \t\t\t\tdefault *0 0* corresponding to the frame center.\n
-        -MaskSize\t\t1.0 1.0\t\tThe size of subarea that will be used for alignment,
-        \t\t\t\tdefault *1.0 1.0* corresponding full size.\n
-        -FmRef\t\t-1\t\tSpecify which frame to be the reference to which
-        \t\t\t\tall other frames are aligned, by default (*-1*) the
-        \t\t\t\tthe central frame is chosen. The central frame is
-        \t\t\t\tat N/2 based upon zero indexing where N is the
-        \t\t\t\tnumber of frames that will be summed, i.e., not
-        \t\t\t\tincluding the frames thrown away.\n
-        -Tilt\t\t0 0\t\tTilt angle range for a dose fractionated tomographic
-        \t\t\t\ttilt series, e.g. *-60 60*\n""")
+        form.addSection(label="Mag. correction")
+        form.addParam('doMagCor', params.BooleanParam, default=False,
+                      label='Correct anisotropic magnification?',
+                      help='Correct anisotropic magnification by '
+                           'stretching image along the major axis, '
+                           'the axis where the lower magnification is '
+                           'detected.')
+        form.addParam('scaleMaj', params.FloatParam, default=1.0,
+                      condition='doMagCor',
+                      label='Major scale factor')
+        form.addParam('scaleMin', params.FloatParam, default=1.0,
+                      condition='doMagCor',
+                      label='Minor scale factor')
+        form.addParam('angDist', params.FloatParam, default=0.0,
+                      condition='doMagCor',
+                      label='Distortion angle (deg)')
 
         form.addParallelSection(threads=1, mpi=1)
 
