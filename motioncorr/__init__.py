@@ -33,6 +33,7 @@ from .constants import *
 
 
 _references = ['Zheng2017']
+_url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
 
 class Plugin(pwem.Plugin):
