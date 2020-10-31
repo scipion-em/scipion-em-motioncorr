@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.0.10'
+__version__ = '3.0.11'
 _references = ['Zheng2017']
 
 
