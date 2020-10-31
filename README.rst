@@ -6,6 +6,27 @@ This plugin allows to use motioncor2 program within the Scipion framework.
 
 Motioncor2 is a GPU-accelerated program for correction of electron beam-induced sample motion. It is developed by `Shawn Zheng <https://emcore.ucsf.edu/ucsf-motioncor2>`_.
 
+.. image:: https://img.shields.io/pypi/v/scipion-em-motioncorr.svg
+        :target: https://pypi.python.org/pypi/scipion-em-motioncorr
+        :alt: PyPI release
+
+.. image:: https://img.shields.io/pypi/l/scipion-em-motioncorr.svg
+        :target: https://pypi.python.org/pypi/scipion-em-motioncorr
+        :alt: License
+
+.. image:: https://img.shields.io/pypi/pyversions/scipion-em-motioncorr.svg
+        :target: https://pypi.python.org/pypi/scipion-em-motioncorr
+        :alt: Supported Python versions
+
+.. image:: https://img.shields.io/sonar/quality_gate/scipion-em_scipion-em-motioncorr?server=https%3A%2F%2Fsonarcloud.io
+        :target: https://sonarcloud.io/dashboard?id=scipion-em_scipion-em-motioncorr
+        :alt: SonarCloud quality gate
+
+.. image:: https://img.shields.io/pypi/dm/scipion-em-motioncorr
+        :target: https://pypi.python.org/pypi/scipion-em-motioncorr
+        :alt: Downloads
+
+
 +--------------+----------------+--------------------+
 | prod: |prod| | devel: |devel| | support: |support| |
 +--------------+----------------+--------------------+
