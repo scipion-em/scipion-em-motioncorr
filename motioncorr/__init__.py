@@ -32,14 +32,15 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
+__version__ = '3.0.10'
 _references = ['Zheng2017']
-_url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
     _supportedVersions = ['1.2.3', '1.2.6', '1.3.0', '1.3.1', '1.3.2']
+    _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
@@ -56,7 +57,8 @@ class Plugin(pwem.Plugin):
     def getEnviron(cls):
         """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = cls.getVar(MOTIONCOR2_CUDA_LIB)
+        # Get motioncor2 CUDA library path if defined
+        cudaLib = environ.get(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
 
         return environ
