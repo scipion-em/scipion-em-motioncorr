@@ -35,7 +35,9 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
 .. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_devel.svg
 .. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_support.svg
 
-.. important:: If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`bug details <https://github.com/I2PC/xmippCore/issues/39>`_)
+**IMPORTANT!**
+
+    If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`bug details <https://github.com/I2PC/xmippCore/issues/39>`_)
 
 Installation
 ------------
