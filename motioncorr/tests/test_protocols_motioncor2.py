@@ -29,7 +29,7 @@
 # **************************************************************************
 
 from pwem.protocols import ProtImportMovies
-from pyworkflow.tests import *
+from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
 from ..protocols import ProtMotionCorr
@@ -74,7 +74,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                                               magnification=61000)
 
     def _checkMicrographs(self, protocol):
-        self.assertIsNotNone(getattr(protocol, 'outputMicrographs', None),
+        self.assertIsNotNone(getattr(protocol, 'outputMicrographsDoseWeighted'),
                              "Output SetOfMicrographs were not created.")
 
     def _checkAlignment(self, movie, goldRange, goldRoi):

@@ -28,10 +28,10 @@
 
 from pyworkflow.utils import cleanPath
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import MicrographsView, EmProtocolViewer, EmPlotter
-from pwem.objects import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
+from pwem.viewers import MicrographsView, EmProtocolViewer, EmPlotter
 import pwem.viewers.showj as showj
+from pwem.objects import SetOfMovies
 
 from .protocols import ProtMotionCorr
 
