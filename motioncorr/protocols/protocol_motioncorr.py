@@ -581,17 +581,21 @@ class ProtMotionCorr(ProtAlignMovies):
         total, early, late = 0., 0., 0.
         x, y, xOld, yOld = 0., 0., 0., 0.
         pix = self.getSamplingRate()
-        for frame in range(2, nframes + 1):  # start from the 2nd frame
-            x, y = shiftsX[frame-1], shiftsY[frame-1]
-            d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
-            total += d
-            if frame <= cutoff:
-                early += d
-            else:
-                late += d
-            xOld = x
-            yOld = y
-        return list(map(lambda x: pix*x, [total, early, late]))
+        try:
+            for frame in range(2, nframes + 1):  # start from the 2nd frame
+                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
+                total += d
+                if frame <= cutoff:
+                    early += d
+                else:
+                    late += d
+                xOld = x
+                yOld = y
+            return list(map(lambda x: pix*x, [total, early, late]))
+        except IndexError:
+            self.error("Expected %d frames, found less. Check movie %s !" % (
+                nframes, movie.getFileName()))
 
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
