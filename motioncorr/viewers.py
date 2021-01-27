@@ -140,7 +140,7 @@ class ProtMotioncorrViewer(EmProtocolViewer):
             setattr(item, "_appendItem", False)
 
     def _plotMotion(self, param=None):
-        if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
+        if self.hasDWMics():
             output = self.protocol.outputMicrographsDoseWeighted
             columns = '_rlnAccumMotionTotal _rlnAccumMotionEarly _rlnAccumMotionLate'
             xplotter = EmPlotter.createFromFile(output.getFileName(), '',
