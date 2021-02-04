@@ -148,10 +148,12 @@ class ProtMotionCorr(ProtAlignMovies):
                            "protocol, not the underlying motioncor2 program."
                            "You can provide many options separated by space. "
                            "\n\n*Options:* \n\n"
-                           "--use_worker_thread \n"
-                           " Use an extra thread to compute"
-                           " PSD and thumbnail. This will allow a more effective"
-                           " use of the GPU card, but requires an extra CPU. ")
+                           "--dont_use_worker_thread \n"
+                           " Now by default we use a separate thread to compute"
+                           " PSD and thumbnail (if is required). This allows "
+                           " more effective use of the GPU card, but requires "
+                           " an extra CPU. Use this option (NOT RECOMMENDED) if "
+                           " you want to prevent this behaviour")
 
         form.addSection(label="Motioncor2 params")
         form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
@@ -285,20 +287,25 @@ class ProtMotionCorr(ProtAlignMovies):
             self.runJob(program, args, cwd=movieFolder,
                         env=Plugin.getEnviron())
 
+            self._moveOutput(movie)
+
             def _extraWork():
                 # we need to move shifts log to extra dir before parsing
-                logFn = pwutils.join(movieFolder, self._getMovieLogFile(movie))
-                pwutils.moveFile(logFn, self._getExtraPath(self._getMovieLogFile(movie)))
-                self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
+                try:
+                    self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
-                outMicFn = pwutils.join(movieFolder, self._getMicFn(movie))
+                    outMicFn = self._getExtraPath(self._getMicFn(movie))
 
-                if self.doComputePSD:
-                    self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
+                    if self.doComputePSD:
+                        self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
 
-                if self._doComputeMicThumbnail():
-                    self.computeThumbnail(outMicFn,
-                                          outputFn=self._getOutputMicThumbnail(movie))
+                    if self._doComputeMicThumbnail():
+                        self.computeThumbnail(
+                            outMicFn, outputFn=self._getOutputMicThumbnail(movie))
+                except:
+                    self.error("ERROR: Extra work "
+                               "(i.e plots, PSD, thumbnail has failed for %s\n"
+                               % movie.getFileName())
 
             if self._useWorkerThread():
                 thread = Thread(target=_extraWork)
@@ -306,7 +313,6 @@ class ProtMotionCorr(ProtAlignMovies):
             else:
                 _extraWork()
 
-            self._moveOutput(movie)
         except:
             self.error("ERROR: Motioncor2 has failed for %s\n" % movie.getFileName())
 
@@ -512,12 +518,16 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _moveOutput(self, movie):
         """ Move output from tmp to extra folder. """
-        pwutils.moveFile(self._getCwdPath(movie, self._getMicFn(movie)),
-                         self._getExtraPath(self._getMicFn(movie)))
+        def _moveToExtra(fn):
+            """ Move file from movies tmp folder to extra """
+            pwutils.moveFile(self._getCwdPath(movie, fn),
+                             self._getExtraPath(fn))
+
+        _moveToExtra(self._getMovieLogFile(movie))
+        _moveToExtra(self._getMicFn(movie))
 
         if self.doSaveUnweightedMic:
-            pwutils.moveFile(self._getCwdPath(movie, self._getOutputMicName(movie)),
-                             self._getExtraPath(self._getOutputMicName(movie)))
+            _moveToExtra(self._getOutputMicName(movie))
 
         if self.doSaveMovie:
             outputMicFn = self._getCwdPath(movie, self._getOutputMicName(movie))
@@ -566,7 +576,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
-        return '--use_worker_thread' in self.extraProtocolParams.get()
+        return not '--dont_use_worker_thread' in self.extraProtocolParams.get()
 
     def getSamplingRate(self):
         return self.getInputMovies().getSamplingRate()
