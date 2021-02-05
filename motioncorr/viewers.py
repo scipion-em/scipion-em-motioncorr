@@ -28,10 +28,10 @@
 
 from pyworkflow.utils import cleanPath
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import MicrographsView, EmProtocolViewer, EmPlotter
-from pwem.objects import SetOfMovies
 from pyworkflow.protocol.params import LabelParam
+from pwem.viewers import MicrographsView, EmProtocolViewer, EmPlotter
 import pwem.viewers.showj as showj
+from pwem.objects import SetOfMovies
 
 from .protocols import ProtMotionCorr
 
@@ -45,14 +45,16 @@ class ProtMotioncorrViewer(EmProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        form.addParam('doShowMics', LabelParam,
-                      label="Show aligned micrographs?", default=True,
-                      help="Show the output aligned micrographs.")
-        form.addParam('doShowMicsDW', LabelParam,
-                      label="Show aligned DOSE-WEIGHTED micrographs?",
-                      default=True,
-                      help="Show the output aligned dose-weighted "
-                           "micrographs.")
+        if self.hasMics():
+            form.addParam('doShowMics', LabelParam,
+                          label="Show aligned micrographs?", default=True,
+                          help="Show the output aligned micrographs.")
+        if self.hasDWMics():
+            form.addParam('doShowMicsDW', LabelParam,
+                          label="Show aligned DOSE-WEIGHTED micrographs?",
+                          default=True,
+                          help="Show the output aligned dose-weighted "
+                               "micrographs.")
         form.addParam('doShowMovies', LabelParam,
                       label="Show output movies?", default=True,
                       help="Show the output movies with alignment "
@@ -68,13 +70,23 @@ class ProtMotioncorrViewer(EmProtocolViewer):
 
     def _getVisualizeDict(self):
         self._errors = []
-        visualizeDict = {'doShowMics': self._viewParam,
-                         'doShowMicsDW': self._viewParam,
-                         'doShowMovies': self._viewParam,
+        visualizeDict = {'doShowMovies': self._viewParam,
                          'doShowFailedMovies': self._viewParam,
                          'doShowMotion': self._plotMotion,
                          }
+        if self.hasMics():
+            visualizeDict.update({'doShowMics': self._viewParam})
+
+        if self.hasDWMics():
+            visualizeDict.update({'doShowMicsDW': self._viewParam})
+
         return visualizeDict
+
+    def hasMics(self):
+        return hasattr(self.protocol, 'outputMicrographs')
+
+    def hasDWMics(self):
+        return hasattr(self.protocol, 'outputMicrographsDoseWeighted')
 
     def _viewParam(self, param=None):
         labelsDef = 'enabled id _filename _samplingRate '
@@ -85,20 +97,12 @@ class ProtMotioncorrViewer(EmProtocolViewer):
                          showj.RENDER: None
                          }
         if param == 'doShowMics':
-            if getattr(self.protocol, 'outputMicrographs', None) is not None:
-                return [MicrographsView(self.getProject(),
-                                        self.protocol.outputMicrographs)]
-            else:
-                return [self.errorMessage('No output micrographs found!',
-                                          title="Visualization error")]
+            return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographs)]
 
         elif param == 'doShowMicsDW':
-            if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
-                return [MicrographsView(self.getProject(),
-                                        self.protocol.outputMicrographsDoseWeighted)]
-            else:
-                return [self.errorMessage('No output dose-weighted micrographs found!',
-                                          title="Visualization error")]
+            return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographsDoseWeighted)]
 
         elif param == 'doShowMovies':
             if getattr(self.protocol, 'outputMovies', None) is not None:
@@ -136,7 +140,7 @@ class ProtMotioncorrViewer(EmProtocolViewer):
             setattr(item, "_appendItem", False)
 
     def _plotMotion(self, param=None):
-        if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
+        if self.hasDWMics():
             output = self.protocol.outputMicrographsDoseWeighted
             columns = '_rlnAccumMotionTotal _rlnAccumMotionEarly _rlnAccumMotionLate'
             xplotter = EmPlotter.createFromFile(output.getFileName(), '',

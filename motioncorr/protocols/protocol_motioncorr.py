@@ -30,22 +30,21 @@
 # *
 # ******************************************************************************
 
-import os
 import time
 from math import ceil, sqrt
 from threading import Thread
 
-import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
+import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-import pwem
-from pyworkflow.protocol import STEPS_PARALLEL
+from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
+from pyworkflow.protocol import STEPS_PARALLEL
 
 from .. import Plugin
-from ..convert import *
 from ..constants import *
+from ..convert import *
 
 
 class ProtMotionCorr(ProtAlignMovies):
@@ -131,18 +130,16 @@ class ProtMotionCorr(ProtAlignMovies):
                       label="Save aligned movie?")
 
         form.addParam('doComputePSD', params.BooleanParam, default=False,
-                      label="Compute PSD (before/after)?",
-                      help="If Yes, the protocol will compute for each movie "
-                           "the average PSD before and after alignment, "
-                           "for comparison")
+                      label="Compute PSD?",
+                      help="If Yes, the protocol will compute for each "
+                           "aligned micrograph the PSD using EMAN2.")
 
         form.addParam('doComputeMicThumbnail', params.BooleanParam,
                       default=False,
                       label='Compute micrograph thumbnail?',
                       help='When using this option, we will compute a '
-                           'micrograph thumbnail and keep it with the '
-                           'micrograph object for visualization purposes.\n\n'
-                           '*IMPORTANT: this requires EMAN2 plugin and binaries.*')
+                           'micrograph thumbnail with EMAN2 and keep it with the '
+                           'micrograph object for visualization purposes. ')
 
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -151,10 +148,12 @@ class ProtMotionCorr(ProtAlignMovies):
                            "protocol, not the underlying motioncor2 program."
                            "You can provide many options separated by space. "
                            "\n\n*Options:* \n\n"
-                           "--use_worker_thread \n"
-                           " Use an extra thread to compute"
-                           " PSD and thumbnail. This will allow a more effective"
-                           " use of the GPU card, but requires an extra CPU. ")
+                           "--dont_use_worker_thread \n"
+                           " Now by default we use a separate thread to compute"
+                           " PSD and thumbnail (if is required). This allows "
+                           " more effective use of the GPU card, but requires "
+                           " an extra CPU. Use this option (NOT RECOMMENDED) if "
+                           " you want to prevent this behaviour")
 
         form.addSection(label="Motioncor2 params")
         form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
@@ -189,11 +188,12 @@ class ProtMotionCorr(ProtAlignMovies):
                       label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.5px*.')
 
-        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
-                      condition='doSaveAveMic and doApplyDoseFilter',
+        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
+                      condition='doApplyDoseFilter',
                       label="Save unweighted micrographs?",
-                      help="Yes by default, if you have selected to apply a "
-                           "dose-dependent filter to the frames")
+                      help="Aligned but non-dose weighted images are sometimes "
+                           "useful in CTF estimation, although there is no "
+                           "difference in most cases.")
 
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -258,72 +258,20 @@ class ProtMotionCorr(ProtAlignMovies):
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
-        outputMicFn = self._getRelPath(self._getOutputMicName(movie),
-                                       movieFolder)
-        outputMovieFn = self._getRelPath(self._getOutputMovieName(movie),
-                                         movieFolder)
-        movieBaseName = pwutils.removeExt(movie.getFileName())
-        aveMicFn = movieBaseName + '_uncorrected_avg.mrc'
-        logFile = self._getRelPath(self._getMovieLogFile(movie),
-                                   movieFolder)
-
+        outputMicFn = self._getOutputMicName(movie)
         a0, aN = self._getRange(movie, 'align')
         program = self._getProgram()
-
-        logFileBase = (logFile.replace('0-Full.log', '').replace(
-            '0-Patch-Full.log', ''))
-        # default values for motioncor2 are (1, 1)
-        cropDimX = self.cropDimX.get() or 1
-        cropDimY = self.cropDimY.get() or 1
-
+        logFileBase = self._getMovieRoot(movie) + "_"
         numbOfFrames = self._getNumberOfFrames(movie)
 
-        if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-        else:
-            preExp, dose = 0.0, 0.0
-
-        # reset values = 1 to 0 (motioncor2 does it automatically,
-        # but we need to keep this for consistency)
-        if self.patchX.get() == 1:
-            self.patchX.set(0)
-        if self.patchY.get() == 1:
-            self.patchY.set(0)
-
-        argsDict = {'-OutMrc': '"%s"' % outputMicFn,
-                    '-Patch': '%d %d' % (self.patchX, self.patchY),
-                    '-MaskCent': '%d %d' % (self.cropOffsetX,
-                                            self.cropOffsetY),
-                    '-MaskSize': '%d %d' % (cropDimX, cropDimY),
-                    '-FtBin': self.binFactor.get(),
-                    '-Tol': self.tol.get(),
-                    '-Group': self.group.get(),
-                    '-FmDose': dose,
-                    '-Throw': '%d' % a0,
-                    '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
-                    '-PixSize': inputMovies.getSamplingRate(),
-                    '-kV': inputMovies.getAcquisition().getVoltage(),
-                    '-LogFile': logFileBase,
-                    }
-        argsDict['-InitDose'] = preExp
-        argsDict['-OutStack'] = 1 if self.doSaveMovie else 0
-
-        if self.defectFile.get():
-            argsDict['-DefectFile'] = self.defectFile.get()
-        if self.defectMap.get():
-            argsDict['-DefectMap'] = self.defectMap.get()
-
-        patchOverlap = self.getAttributeValue('patchOverlap', None)
-        if patchOverlap:  # 0 or None is False
-            argsDict['-Patch'] += " %d" % patchOverlap
-
-        if self.doMagCor:
-            argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
-                                                      self.scaleMin,
-                                                      self.angDist)
+        argsDict = self._getArgs()
+        argsDict.update({'-OutMrc': '"%s"' % outputMicFn,
+                         '-Throw': '%d' % a0,
+                         '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
+                         '-LogFile': logFileBase,
+                         })
 
         ext = pwutils.getExt(movie.getFileName()).lower()
-
         if ext in ['.mrc', '.mrcs']:
             args = ' -InMrc "%s" ' % movie.getBaseName()
         elif ext in ['.tif', '.tiff']:
@@ -333,59 +281,40 @@ class ProtMotionCorr(ProtAlignMovies):
 
         args += ' '.join(['%s %s' % (k, v)
                           for k, v in argsDict.items()])
-
-        if inputMovies.getGain():
-            args += ' -Gain "%s" ' % inputMovies.getGain()
-            args += ' -RotGain %d' % self.gainRot.get()
-            args += ' -FlipGain %d' % self.gainFlip.get()
-
-        if inputMovies.getDark():
-            args += ' -Dark "%s"' % inputMovies.getDark()
-
-        args += ' -Gpu %(GPU)s'
-        args += ' -SumRange 0.0 0.0'  # switch off writing out DWS
         args += ' ' + self.extraParams2.get()
 
         try:
             self.runJob(program, args, cwd=movieFolder,
                         env=Plugin.getEnviron())
-            self._fixMovie(movie)
 
-            # Compute PSDs
-            outMicFn = self._getExtraPath(self._getOutputMicName(movie))
-            if not os.path.exists(outMicFn):
-                # if only DW mic is saved
-                outMicFn = self._getExtraPath(self._getOutputMicWtName(movie))
+            self._moveOutput(movie)
 
             def _extraWork():
-                if self.doComputePSD:
-                    movieFn = movie.getFileName()
-                    # Compute uncorrected avg mic
-                    self.averageMovie(movie, movieFn, aveMicFn,
-                                      binFactor=self.binFactor.get(),
-                                      dark=inputMovies.getDark(),
-                                      gain=inputMovies.getGain())
+                # we need to move shifts log to extra dir before parsing
+                try:
+                    self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
-                    self.computePSDImages(movie, aveMicFn, outMicFn,
-                                          outputFnCorrected=self._getPsdJpeg(movie))
+                    outMicFn = self._getExtraPath(self._getMicFn(movie))
 
-                self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
+                    if self.doComputePSD:
+                        self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
 
-                if self._doComputeMicThumbnail():
-                    self.computeThumbnail(outMicFn,
-                                          outputFn=self._getOutputMicThumbnail(
-                                              movie))
-                # This protocols cleans up the temporary movie folder
-                # which is required mainly when using a thread for this extra work
-                self._cleanMovieFolder(movieFolder)
+                    if self._doComputeMicThumbnail():
+                        self.computeThumbnail(
+                            outMicFn, outputFn=self._getOutputMicThumbnail(movie))
+                except:
+                    self.error("ERROR: Extra work "
+                               "(i.e plots, PSD, thumbnail has failed for %s\n"
+                               % movie.getFileName())
 
             if self._useWorkerThread():
                 thread = Thread(target=_extraWork)
                 thread.start()
             else:
                 _extraWork()
+
         except:
-            print("ERROR: Movie %s failed\n" % movie.getName())
+            self.error("ERROR: Motioncor2 has failed for %s\n" % movie.getFileName())
 
     def _insertFinalSteps(self, deps):
         stepsId = []
@@ -396,9 +325,9 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def waitForThreadStep(self):
         # Quick and dirty (maybe desperate) way to wait
-        # if the PSD and thumbnail were computed with a thread
+        # if the PSD and thumbnail were computed in a thread
         # If running in streaming this will not be necessary
-        time.sleep(60)  # wait 1 min to give some time the thread to finish
+        time.sleep(10)  # wait 10 sec for the thread to finish
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -437,26 +366,90 @@ class ProtMotionCorr(ProtAlignMovies):
                 errors.append('Dose per frame for input movies is 0 or not '
                               'set. You cannot apply dose filter.')
 
+        if self.doComputeMicThumbnail or self.doComputePSD:
+            try:
+                from pwem import Domain
+                eman2 = Domain.importFromPlugin('eman2', doRaise=True)
+            except:
+                errors.append("EMAN2 plugin not found!\nComputing thumbnails "
+                              "or PSD requires EMAN2 plugin and binaries installed.")
+
         return errors
 
     # --------------------------- UTILS functions -----------------------------
+    def _getArgs(self):
+        """ Prepare most arguments for mc2 run. """
+        inputMovies = self.getInputMovies()
+        # default values for motioncor2 are (1, 1)
+        cropDimX = self.cropDimX.get() or 1
+        cropDimY = self.cropDimY.get() or 1
+
+        if self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies)
+        else:
+            preExp, dose = 0.0, 0.0
+
+        # reset values = 1 to 0 (motioncor2 does it automatically,
+        # but we need to keep this for consistency)
+        if self.patchX.get() == 1:
+            self.patchX.set(0)
+        if self.patchY.get() == 1:
+            self.patchY.set(0)
+
+        argsDict = {'-Patch': '%d %d' % (self.patchX, self.patchY),
+                    '-MaskCent': '%d %d' % (self.cropOffsetX,
+                                            self.cropOffsetY),
+                    '-MaskSize': '%d %d' % (cropDimX, cropDimY),
+                    '-FtBin': self.binFactor.get(),
+                    '-Tol': self.tol.get(),
+                    '-Group': self.group.get(),
+                    '-FmDose': dose,
+                    '-PixSize': inputMovies.getSamplingRate(),
+                    '-kV': inputMovies.getAcquisition().getVoltage(),
+                    '-InitDose': preExp,
+                    '-OutStack': 1 if self.doSaveMovie else 0,
+                    '-Gpu': '%(GPU)s',
+                    '-SumRange': "0.0 0.0",  # switch off writing out DWS
+                    }
+
+        if self.defectFile.get():
+            argsDict['-DefectFile'] = "%s" % self.defectFile.get()
+        if self.defectMap.get():
+            argsDict['-DefectMap'] = "%s" % self.defectMap.get()
+
+        patchOverlap = self.getAttributeValue('patchOverlap')
+        if patchOverlap:  # 0 or None is False
+            argsDict['-Patch'] += " %d" % patchOverlap
+
+        if self.doMagCor:
+            argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
+                                                      self.scaleMin,
+                                                      self.angDist)
+
+        if inputMovies.getGain():
+            argsDict.update({'-Gain': "%s" % inputMovies.getGain(),
+                             '-RotGain': self.gainRot.get(),
+                             '-FlipGain': self.gainFlip.get()})
+
+        if inputMovies.getDark():
+            argsDict['-Dark'] = "%s" % inputMovies.getDark()
+
+        return argsDict
+
     def _getVersion(self):
         return Plugin.getActiveVersion()
 
     def _getProgram(self):
         return Plugin.getProgram()
 
+    def _getCwdPath(self, movie, path):
+        return pwutils.join(self._getOutputMovieFolder(movie), path)
+
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
-            return 'micrograph_%06d_0-Full.log' % movie.getObjId()
+            return '%s_0-Full.log' % self._getMovieRoot(movie)
         else:
-            return 'micrograph_%06d_0-Patch-Full.log' % movie.getObjId()
-
-    def _getAbsPath(self, baseName):
-        return os.path.abspath(self._getExtraPath(baseName))
-
-    def _getRelPath(self, baseName, refPath):
-        return os.path.relpath(self._getExtraPath(baseName), refPath)
+            return '%s_0-Patch-Full.log' % self._getMovieRoot(movie)
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
@@ -466,16 +459,33 @@ class ProtMotionCorr(ProtAlignMovies):
         return self._getNameExt(movie, '_global_shifts', 'png', extra=True)
 
     def _getPsdCorr(self, movie):
-        return self._getNameExt(movie, '_psd_comparison', 'psd', extra=True)
-
-    def _getPsdJpeg(self, movie):
-        return self._getNameExt(movie, '_psd', 'jpeg', extra=True)
+        return self._getNameExt(movie, '_psd', 'png', extra=True)
 
     def getInputMovies(self):
         return self.inputMovies.get()
 
+    def _computePSD(self, inputFn, outputFn, scaleFactor=6):
+        """ Generate a thumbnail of the PSD with EMAN2"""
+        args = "%s %s " % (inputFn, outputFn)
+        args += "--process=math.realtofft --meanshrink %s " % scaleFactor
+        args += "--fixintscaling=sane"
+
+        from pwem import Domain
+        eman2 = Domain.importFromPlugin('eman2')
+        from pyworkflow.utils.process import runJob
+        runJob(self._log, eman2.Plugin.getProgram('e2proc2d.py'), args,
+               env=eman2.Plugin.getEnviron())
+
+        return outputFn
+
     def _preprocessOutputMicrograph(self, mic, movie):
         self._setPlotInfo(movie, mic)
+
+    def _getMicFn(self, movie):
+        if self.doApplyDoseFilter:
+            return self._getOutputMicWtName(movie)
+        else:
+            return self._getOutputMicName(movie)
 
     def _getMovieShifts(self, movie):
         """ Returns the x and y shifts for the alignment of this movie.
@@ -487,18 +497,16 @@ class ProtMotionCorr(ProtAlignMovies):
         return xShifts, yShifts
 
     def _setPlotInfo(self, movie, mic):
-        mic.plotGlobal = pwem.objects.Image(location=self._getPlotGlobal(movie))
+        mic.plotGlobal = Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
-            mic.psdCorr = pwem.objects.Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = pwem.objects.Image(location=self._getPsdJpeg(movie))
+            mic.psdCorr = Image(location=self._getPsdCorr(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = pwem.objects.Image(
-                location=self._getOutputMicThumbnail(movie))
+            mic.thumbnail = Image(location=self._getOutputMicThumbnail(movie))
         if self.doApplyDoseFilter:
             total, early, late = self.calcFrameMotion(movie)
-            mic._rlnAccumMotionTotal = pwem.objects.Float(total)
-            mic._rlnAccumMotionEarly = pwem.objects.Float(early)
-            mic._rlnAccumMotionLate = pwem.objects.Float(late)
+            mic._rlnAccumMotionTotal = Float(total)
+            mic._rlnAccumMotionEarly = Float(early)
+            mic._rlnAccumMotionLate = Float(late)
 
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
@@ -508,20 +516,27 @@ class ProtMotionCorr(ProtAlignMovies):
         plotter.savefig(self._getPlotGlobal(movie))
         plotter.close()
 
-    def _fixMovie(self, movie):
+    def _moveOutput(self, movie):
+        """ Move output from tmp to extra folder. """
+        def _moveToExtra(fn):
+            """ Move file from movies tmp folder to extra """
+            pwutils.moveFile(self._getCwdPath(movie, fn),
+                             self._getExtraPath(fn))
+
+        _moveToExtra(self._getMovieLogFile(movie))
+        _moveToExtra(self._getMicFn(movie))
+
+        if self.doSaveUnweightedMic:
+            _moveToExtra(self._getOutputMicName(movie))
+
         if self.doSaveMovie:
-            outputMicFn = self._getExtraPath(self._getOutputMicName(movie))
+            outputMicFn = self._getCwdPath(movie, self._getOutputMicName(movie))
             outputMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
             movieFn = outputMicFn.replace('_aligned_mic.mrc',
                                           '_aligned_mic_Stk.mrc')
             pwutils.moveFile(movieFn, outputMovieFn)
 
-        if not self.doSaveUnweightedMic:
-            fnToDelete = self._getExtraPath(self._getOutputMicName(movie))
-            pwutils.cleanPath(fnToDelete)
-
     def _getRange(self, movie, prefix):
-
         n = self._getNumberOfFrames(movie)
         iniFrame, _, indxFrame = movie.getFramesRange()
         first, last = self._getFrameRange(n, prefix)
@@ -552,20 +567,16 @@ class ProtMotionCorr(ProtAlignMovies):
         # To create the unweighted average micrographs
         # we only consider the 'doSaveUnweightedMic' flag if the
         # weighted ones should be created.
-        return (self.doSaveAveMic and
-                (not createWeighted or self.doSaveUnweightedMic))
+        return not createWeighted or self.doSaveUnweightedMic
 
     def _createOutputWeightedMicrographs(self):
-        return self.doSaveAveMic and self.doApplyDoseFilter
+        return self.doApplyDoseFilter
 
     def _doComputeMicThumbnail(self):
-        return self.doSaveAveMic and self.doComputeMicThumbnail
+        return self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
-        return '--use_worker_thread' in self.extraProtocolParams.get()
-
-    def _doMovieFolderCleanUp(self):
-        return False
+        return not '--dont_use_worker_thread' in self.extraProtocolParams.get()
 
     def getSamplingRate(self):
         return self.getInputMovies().getSamplingRate()
@@ -580,17 +591,21 @@ class ProtMotionCorr(ProtAlignMovies):
         total, early, late = 0., 0., 0.
         x, y, xOld, yOld = 0., 0., 0., 0.
         pix = self.getSamplingRate()
-        for frame in range(2, nframes + 1):  # start from the 2nd frame
-            x, y = shiftsX[frame-1], shiftsY[frame-1]
-            d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
-            total += d
-            if frame <= cutoff:
-                early += d
-            else:
-                late += d
-            xOld = x
-            yOld = y
-        return list(map(lambda x: pix*x, [total, early, late]))
+        try:
+            for frame in range(2, nframes + 1):  # start from the 2nd frame
+                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
+                total += d
+                if frame <= cutoff:
+                    early += d
+                else:
+                    late += d
+                xOld = x
+                yOld = y
+            return list(map(lambda x: pix*x, [total, early, late]))
+        except IndexError:
+            self.error("Expected %d frames, found less. Check movie %s !" % (
+                nframes, movie.getFileName()))
 
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
