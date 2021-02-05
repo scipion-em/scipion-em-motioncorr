@@ -30,6 +30,7 @@
 # *
 # ******************************************************************************
 
+import os
 import time
 from math import ceil, sqrt
 from threading import Thread
@@ -443,7 +444,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return Plugin.getProgram()
 
     def _getCwdPath(self, movie, path):
-        return pwutils.join(self._getOutputMovieFolder(movie), path)
+        return os.path.join(self._getOutputMovieFolder(movie), path)
 
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
