@@ -32,15 +32,12 @@
 
 import os
 import time
-from math import ceil, sqrt, cos, sin , pi
+from math import ceil, sqrt
 from threading import Thread
-import numpy as np
-import os.path
 
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from pwem import emlib
 from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.gui.plotter import Plotter
@@ -259,17 +256,6 @@ class ProtMotionCorr(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
-    def _convertInputStep(self):
-      movs = self.inputMovies.get()
-      super()._convertInputStep()
-
-      ext = pwutils.getExt(movs.getFirstItem().getFileName()).lower()
-      if ext in ['.tif', '.tiff']:
-        # Managing tif movie Y flipping by motioncorr2 by flipping also the gain
-        self.flipY = True
-        print('Flipping gain to match tiff movies')
-        self.flippedGainFn = self.flipYGain(movs.getGain())
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
@@ -392,13 +378,6 @@ class ProtMotionCorr(ProtAlignMovies):
         return errors
 
     # --------------------------- UTILS functions -----------------------------
-    def determineGainFn(self, inputMovies):
-      if hasattr(self, "flippedGainFn"):
-        gainFn = self.flippedGainFn
-      else:
-        gainFn = inputMovies.getGain()
-      return gainFn
-
     def _getArgs(self):
         """ Prepare most arguments for mc2 run. """
         inputMovies = self.getInputMovies()
@@ -449,8 +428,7 @@ class ProtMotionCorr(ProtAlignMovies):
                                                       self.angDist)
 
         if inputMovies.getGain():
-            gainFn = self.determineGainFn(inputMovies)
-            argsDict.update({'-Gain': "%s" % gainFn,
+            argsDict.update({'-Gain': "%s" % inputMovies.getGain(),
                              '-RotGain': self.gainRot.get(),
                              '-FlipGain': self.gainFlip.get()})
 
@@ -630,30 +608,6 @@ class ProtMotionCorr(ProtAlignMovies):
             self.error("Expected %d frames, found less. Check movie %s !" % (
                 nframes, movie.getFileName()))
 
-    def readImage(self, fn):
-        img = emlib.Image()
-        img.read(fn)
-        return img
-
-    def writeImageFromArray(self, array, fn):
-        img = emlib.Image()
-        img.setData(array)
-        img.write(fn)
-
-    def flipYGain(self, gainFn, outFn=None):
-      if outFn == None:
-        ext = pwutils.getExt(gainFn)
-        baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
-        outFn = os.path.abspath(self._getExtraPath(baseName))
-      gainImg = self.readImage(gainFn)
-      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
-
-      #Flipped Y matrix
-      M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
-      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
-      self.writeImageFromArray(flipped_array, outFn)
-      return outFn
-
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     """ Create a plotter with the shift per frame. """
@@ -710,27 +664,3 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     plotter.tightLayout()
 
     return plotter
-
-
-def rotation(imag, angle, shape, P):
-  '''Rotate a np.array and return also the transformation matrix
-  #imag: np.array
-  #angle: angle in degrees
-  #shape: output shape
-  #P: transform matrix (further transformation in addition to the rotation)'''
-  (hsrc, wsrc) = imag.shape
-  angle *= pi / 180
-  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
-  R = np.asarray([[cos(angle), sin(angle), 0], [-sin(angle), cos(angle), 0], [0, 0, 1]])
-  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-
-  transformed = applyTransform(imag, M, shape)
-  return transformed, M
-
-def applyTransform(imag_array, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
-    imag = emlib.Image()
-    imag.setData(imag_array)
-    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
-    return imag.getData()
