@@ -267,14 +267,12 @@ class ProtMotionCorr(ProtAlignMovies):
             # write FmIntFile
             inputMovies = self.getInputMovies()
             _, numbOfFrames, _ = inputMovies.getFramesRange()
-            numbOfFrames //= self.eerGroup.get()
             if self.doApplyDoseFilter:
                 _, dose = self._getCorrectedDose(inputMovies)
-                dose *= self.eerGroup.get()
             else:
                 dose = 0.0
-            with open(self._getExtraPath("FmIntFile.txt")) as f:
-                f.write("%d 1 %f" % (numbOfFrames, dose))
+            with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
+                f.write("%d %d %f" % (numbOfFrames, self.eerGroup.get(), dose))
 
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
@@ -285,12 +283,12 @@ class ProtMotionCorr(ProtAlignMovies):
         frame0, frameN = self._getFrameRange()
         _, numbOfFrames, _ = inputMovies.getFramesRange()
         if self.isEER:
-           numbOfFrames //= self.eerGroup.get()
+            numbOfFrames //= self.eerGroup.get()
 
         argsDict = self._getArgs()
         argsDict.update({'-OutMrc': '"%s"' % outputMicFn,
-                         '-Throw': '%d' % frame0,
-                         '-Trunc': '%d' % (abs(frameN - numbOfFrames + 1)),
+                         '-Throw': '%d' % (frame0 - 1),
+                         '-Trunc': '%d' % (numbOfFrames - frameN),
                          '-LogFile': logFileBase,
                          })
 
@@ -300,7 +298,7 @@ class ProtMotionCorr(ProtAlignMovies):
         elif ext in ['.tif', '.tiff']:
             args = ' -InTiff "%s" ' % movie.getBaseName()
         elif ext in ['.eer']:
-            args = ' -InEer "%s"' % movie.getBaseName()
+            args = ' -InEer "%s" ' % movie.getBaseName()
         else:
             raise Exception("Unsupported format: %s" % ext)
 
@@ -426,6 +424,22 @@ class ProtMotionCorr(ProtAlignMovies):
                 errors.append("EMAN2 plugin not found!\nComputing thumbnails "
                               "or PSD requires EMAN2 plugin and binaries installed.")
 
+        # check gain dimensions and extension
+        if inputMovies.getGain():
+            from pwem.emlib.image import ImageHandler
+            gain = inputMovies.getGain()
+            gainx, gainy, _, _ = ImageHandler().getDimensions(gain)
+            movie = firstMovie.getFileName()
+            imgx, imgy, _, _ = ImageHandler().getDimensions(movie)
+
+            if not (gainx == imgx and gainy == imgy):
+                errors.append("Gain image dimensions (%d x %d) "
+                              "do not match the movies (%d x %d)!" %
+                              (gainx, gainy, imgx, imgy))
+
+            if not gain.endswith(".mrc"):
+                errors.append("Motioncor2 supports gain in MRC format only!")
+
         return errors
 
     # --------------------------- UTILS functions -----------------------------
@@ -468,7 +482,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self.isEER:
             argsDict['-EerSampling'] = self.eerSampling.get() + 1
-            argsDict['-FmIntFile'] = "../../FmIntFile.txt"
+            argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
         else:
             argsDict['-FmDose'] = dose
 
