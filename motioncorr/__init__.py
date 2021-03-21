@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.1.0'
+__version__ = '3.1.1'
 _references = ['Zheng2017']
 
 
@@ -65,18 +65,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('motioncor2', version='1.2.6',
-                       tar='motioncor2-1.2.6.tgz')
-
-        env.addPackage('motioncor2', version='1.3.0',
-                       tar='motioncor2-1.3.0.tgz')
-
-        env.addPackage('motioncor2', version='1.3.1',
-                       tar='motioncor2-1.3.1.tgz')
-
-        env.addPackage('motioncor2', version='1.3.2',
-                       tar='motioncor2-1.3.2.tgz')
-
-        env.addPackage('motioncor2', version='1.4.0',
-                       tar='motioncor2-1.4.0.tgz',
-                       default=True)
+        for v in cls._supportedVersions:
+            env.addPackage('motioncor2', version=v,
+                           tar='motioncor2-%s.tgz' % v,
+                           default=v == '1.4.0')
