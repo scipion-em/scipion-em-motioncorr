@@ -314,8 +314,10 @@ class ProtMotionCorr(ProtAlignMovies):
             else:
                 _extraWork()
 
-        except:
-            self.error("ERROR: Motioncor2 has failed for %s\n" % movie.getFileName())
+        except Exception as e:
+            self.error("ERROR: Motioncor2 has failed for %s. --> %s\n" % (movie.getFileName(), str(e)))
+            import traceback
+            traceback.print_exc()
 
     def _insertFinalSteps(self, deps):
         stepsId = []
@@ -527,7 +529,7 @@ class ProtMotionCorr(ProtAlignMovies):
         _moveToExtra(self._getMovieLogFile(movie))
         _moveToExtra(self._getMicFn(movie))
 
-        if self.doSaveUnweightedMic:
+        if self._doSaveUnweightedMic():
             _moveToExtra(self._getOutputMicName(movie))
 
         if self.doSaveMovie:
@@ -569,6 +571,10 @@ class ProtMotionCorr(ProtAlignMovies):
         # we only consider the 'doSaveUnweightedMic' flag if the
         # weighted ones should be created.
         return not createWeighted or self.doSaveUnweightedMic
+
+    def _doSaveUnweightedMic(self):
+        """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
+        return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
 
     def _createOutputWeightedMicrographs(self):
         return self.doApplyDoseFilter
