@@ -6,7 +6,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -26,24 +26,27 @@
 
 import os
 
-import pyworkflow.em as pwem
+import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import *
 
 
+__version__ = '3.1.0'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.1.0', '1.2.1', '1.2.3', '1.2.6']
+    _supportedVersions = ['1.2.6', '1.3.0', '1.3.1', '1.3.2', '1.4.0']
+    _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.2.6')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.2.6-Cuda80')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.4.0')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.4.0_Cuda101')
+        cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getProgram(cls):
@@ -54,25 +57,26 @@ class Plugin(pwem.Plugin):
     def getEnviron(cls):
         """ Return the environment to run motioncor2. """
         environ = pwutils.Environ(os.environ)
-        cudaLib = environ.getFirst((MOTIONCOR2_CUDA_LIB, CUDA_LIB))
+        # Get motioncor2 CUDA library path if defined
+        cudaLib = cls.getVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
 
         return environ
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('motioncor2', version='1.1.0',
-                       tar='motioncor2-1.1.0.tgz')
-
-        env.addPackage('motioncor2', version='1.2.1',
-                       tar='motioncor2-1.2.1.tgz')
-
-        env.addPackage('motioncor2', version='1.2.3',
-                       tar='motioncor2-1.2.3.tgz')
-
         env.addPackage('motioncor2', version='1.2.6',
-                       tar='motioncor2-1.2.6.tgz',
+                       tar='motioncor2-1.2.6.tgz')
+
+        env.addPackage('motioncor2', version='1.3.0',
+                       tar='motioncor2-1.3.0.tgz')
+
+        env.addPackage('motioncor2', version='1.3.1',
+                       tar='motioncor2-1.3.1.tgz')
+
+        env.addPackage('motioncor2', version='1.3.2',
+                       tar='motioncor2-1.3.2.tgz')
+
+        env.addPackage('motioncor2', version='1.4.0',
+                       tar='motioncor2-1.4.0.tgz',
                        default=True)
-
-
-pwem.Domain.registerPlugin(__name__)

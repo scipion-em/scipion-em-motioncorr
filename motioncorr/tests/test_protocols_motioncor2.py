@@ -1,14 +1,16 @@
 # **************************************************************************
 # *
-# * Authors:    Laura del Cano (ldelcano@cnb.csic.es)
-# *             Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *             Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
+# * Authors:    Laura del Cano (ldelcano@cnb.csic.es) [1]
+# *             Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca) [2]
+# *             Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [3]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [2] Department of Anatomy and Cell Biology, McGill University
+# * [3] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -26,10 +28,11 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import ProtImportMovies
-from pyworkflow.tests import *
+from pwem.protocols import ProtImportMovies
+from pyworkflow.tests import BaseTest, DataSet, setupTestProject
+from pyworkflow.utils import magentaStr
 
-from motioncorr.protocols import ProtMotionCorr
+from ..protocols import ProtMotionCorr
 
 
 class TestMotioncor2AlignMovies(BaseTest):
@@ -40,8 +43,6 @@ class TestMotioncor2AlignMovies(BaseTest):
     @classmethod
     def runImportMovies(cls, pattern, **kwargs):
         """ Run an Import micrograph protocol. """
-        # We have two options: passe the SamplingRate
-        # or the ScannedPixelSize + microscope magnification
         params = {'samplingRate': 1.14,
                   'voltage': 300,
                   'sphericalAberration': 2.7,
@@ -61,29 +62,30 @@ class TestMotioncor2AlignMovies(BaseTest):
         protImport = cls.newProtocol(ProtImportMovies, **params)
         cls.launchProtocol(protImport)
         return protImport
-    
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         cls.setData()
+        print(magentaStr("\n==> Importing data - movies:"))
         cls.protImport1 = cls.runImportMovies(cls.ds.getFile('qbeta/qbeta.mrc'),
                                               magnification=50000)
         cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
                                               magnification=61000)
 
     def _checkMicrographs(self, protocol):
-        self.assertIsNotNone(getattr(protocol, 'outputMicrographs', None),
+        self.assertIsNotNone(getattr(protocol, 'outputMicrographsDoseWeighted'),
                              "Output SetOfMicrographs were not created.")
 
     def _checkAlignment(self, movie, goldRange, goldRoi):
         alignment = movie.getAlignment()
-        range = alignment.getRange()
-        aliFrames = range[1] - range[0] + 1
+        rangeFrames = alignment.getRange()
+        aliFrames = rangeFrames[1] - rangeFrames[0] + 1
         msgRange = "Alignment range must be %s (%s) and it is %s (%s)"
-        self.assertEqual(goldRange, range, msgRange % (goldRange,
-                                                       type(goldRange),
-                                                       range,
-                                                       type(range)))
+        self.assertEqual(goldRange, rangeFrames, msgRange % (goldRange,
+                                                             type(goldRange),
+                                                             rangeFrames,
+                                                             type(rangeFrames)))
         roi = alignment.getRoi()
         shifts = alignment.getShifts()
         zeroShifts = (aliFrames * [0], aliFrames * [0])
@@ -97,6 +99,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                                               " number of aligned frames.")
 
     def test_cct_motioncor2_patch(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='cct - motioncor2 test1 (patch-based)',
                                 patchX=2, patchY=2)
@@ -108,6 +111,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_motioncor2_patch(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based with grouping:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='qbeta - motioncor2 test2 (patch-based)',
                                 patchX=2, patchY=2,
@@ -120,6 +124,7 @@ class TestMotioncor2AlignMovies(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_motioncor2_sel(self):
+        print(magentaStr("\n==> Testing motioncor2 - patch-based with frame range:"))
         prot = self.newProtocol(ProtMotionCorr,
                                 objLabel='qbeta - motioncor2 test3 (frame range)',
                                 patchX=2, patchY=2,

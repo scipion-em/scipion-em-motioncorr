@@ -29,8 +29,7 @@ import os
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
-from pyworkflow.em.data import MovieAlignment
-
+import pwem.objects as emobj
 from tomo.protocols import ProtTsCorrectMotion
 
 import motioncorr
@@ -362,7 +361,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         pwutils.cleanPath(shiftsMd)
         xshifts = [0] * movie.getNumberOfFrames()
         yshifts = xshifts
-        alignment = MovieAlignment(first=1, last=movie.getNumberOfFrames(),
+        alignment = emobj.MovieAlignment(first=1, last=movie.getNumberOfFrames(),
                                    xshifts=xshifts, yshifts=yshifts)
         roiList = [0, 0, 0, 0]
         alignment.setRoi(roiList)
