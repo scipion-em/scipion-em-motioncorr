@@ -29,6 +29,8 @@ import os
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
+from pyworkflow import BETA
+
 import pwem.objects as emobj
 from tomo.protocols import ProtTsCorrectMotion
 
@@ -46,6 +48,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
     """
 
     _label = 'tiltseries motioncor'
+    _devStatus = BETA
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -275,7 +278,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             raise Exception("Unsupported format: %s" % ext)
 
         args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.iteritems()])
+                          for k, v in argsDict.items()])
 
         if gain:
             args += ' -Gain "%s" ' % gain
