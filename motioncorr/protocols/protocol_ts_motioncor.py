@@ -45,7 +45,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         (written by Shawn Zheng @ David Agard lab)
     """
 
-    _label = 'tiltseries motioncor'
+    _label = 'align tiltseries movies'
     _devStatus = BETA
 
     # -------------------------- DEFINE param functions -----------------------
