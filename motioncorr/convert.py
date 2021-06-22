@@ -24,16 +24,6 @@
 # *
 # **************************************************************************
 
-import os
-import re
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
-
-from pwem.emlib.image import ImageHandler
-import pwem.emlib.metadata as md
-
 
 def parseMovieAlignment2(logFile):
     """ Get global frame shifts relative to the first frame
@@ -56,68 +46,6 @@ def parseMovieAlignment2(logFile):
     return xshifts, yshifts
 
 
-def parseMagEstOutput(filename):
-    """
-    Note: This function is copied from grigoriefflab.convert to avoid
-    dependencies to that package
-    """
-    result = []
-    ansi_escape = re.compile(r'\x1b[^m]*m')
-    if os.path.exists(filename):
-        f = open(filename)
-        parsing = False
-        for line in f:
-            l = ansi_escape.sub('', line)
-            line = re.sub('[%]', '', l).strip()
-            if line.startswith("The following distortion parameters were found"):
-                parsing = True
-            if parsing:
-                if 'Distortion Angle' in line:
-                    result.append(float(line.split()[3]))
-                if 'Major Scale' in line:
-                    result.append(float(line.split()[3]))
-                if 'Minor Scale' in line:
-                    result.append(float(line.split()[3]))
-            if line.startswith("Stretch only parameters would be as follows"):
-                parsing = False
-            if 'Corrected Pixel Size' in line:
-                result.append(float(line.split()[4]))
-            if 'The Total Distortion =' in line:
-                result.append(float(line.split()[4]))
-        f.close()
-
-    return result
-
-
-def parseMagCorrInput(filename):
-    """
-    Note: This function is copied from grigoriefflab.convert to avoid
-    dependencies to that package
-    """
-    result = []
-    ansi_escape = re.compile(r'\x1b[^m]*m')
-    if os.path.exists(filename):
-        f = open(filename)
-        parsing = False
-        for line in f:
-            l = ansi_escape.sub('', line)
-            line = re.sub('[%]', '', l).strip()
-            if line.startswith("Stretch only parameters would be as follows"):
-                parsing = True
-            if parsing:
-                if 'Distortion Angle' in line:
-                    result.append(float(line.split()[3]))
-                if 'Major Scale' in line:
-                    result.append(float(line.split()[3]))
-                if 'Minor Scale' in line:
-                    result.append(float(line.split()[3]))
-            if 'Corrected Pixel Size' in line:
-                result.append(float(line.split()[4]))
-        f.close()
-
-    return result
-
-
 def getMovieFileName(movie):
     """ Add the :mrcs or :ems extensions to movie files to be
     recognized by Xmipp as proper stack files.
@@ -130,42 +58,3 @@ def getMovieFileName(movie):
         fn += ':ems'
 
     return fn
-
-
-def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
-    """Note: Function copied from xmipp3.convert to avoid dependency.
-    """
-    movieAlignment = movie.getAlignment()
-    shiftListX, shiftListY = movieAlignment.getShifts()
-    # Generating metadata for global shifts
-    a0, aN = movieAlignment.getRange()
-    globalShiftsMD = md.MetaData()
-    alFrame = a0
-
-    if s0 < a0:
-        for i in range(s0, a0):
-            objId = globalShiftsMD.addObject()
-            imgFn = ImageHandler.locationToXmipp((i, getMovieFileName(movie)))
-            globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
-
-    for shiftX, shiftY in izip(shiftListX, shiftListY):
-        if s0 <= alFrame <= sN:
-            objId = globalShiftsMD.addObject()
-
-            imgFn = ImageHandler.locationToXmipp((alFrame, getMovieFileName(movie)))
-            globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_X, shiftX, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_Y, shiftY, objId)
-        alFrame += 1
-
-    if sN > aN:
-        for j in range(aN, sN):
-            objId = globalShiftsMD.addObject()
-            imgFn = ImageHandler.locationToXmipp((j+1, getMovieFileName(movie)))
-            globalShiftsMD.setValue(md.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(md.MDL_SHIFT_Y, 0.0, objId)
-
-    globalShiftsMD.write(xmdFn)

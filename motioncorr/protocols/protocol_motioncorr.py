@@ -521,6 +521,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _moveOutput(self, movie):
         """ Move output from tmp to extra folder. """
+
         def _moveToExtra(fn):
             """ Move file from movies tmp folder to extra """
             pwutils.moveFile(self._getCwdPath(movie, fn),
@@ -583,7 +584,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
-        return not '--dont_use_worker_thread' in self.extraProtocolParams.get()
+        return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
 
     def getSamplingRate(self):
         return self.getInputMovies().getSamplingRate()
@@ -600,7 +601,7 @@ class ProtMotionCorr(ProtAlignMovies):
         pix = self.getSamplingRate()
         try:
             for frame in range(2, nframes + 1):  # start from the 2nd frame
-                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                x, y = shiftsX[frame - 1], shiftsY[frame - 1]
                 d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
                 total += d
                 if frame <= cutoff:
@@ -609,7 +610,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     late += d
                 xOld = x
                 yOld = y
-            return list(map(lambda x: pix*x, [total, early, late]))
+            return list(map(lambda x: pix * x, [total, early, late]))
         except IndexError:
             self.error("Expected %d frames, found less. Check movie %s !" % (
                 nframes, movie.getFileName()))
@@ -623,8 +624,8 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     def px_to_ang(px):
         y1, y2 = px.get_ylim()
         x1, x2 = px.get_xlim()
-        ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
-        ax_ang.set_xlim(x1*pixSize, x2*pixSize)
+        ax_ang2.set_ylim(y1 * pixSize, y2 * pixSize)
+        ax_ang.set_xlim(x1 * pixSize, x2 * pixSize)
         ax_ang.figure.canvas.draw()
         ax_ang2.figure.canvas.draw()
 
@@ -645,7 +646,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     # The output and log files list the shifts relative to the first frame.
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
-    skipLabels = ceil(len(meanX)/10.0)
+    skipLabels = ceil(len(meanX) / 10.0)
     labelTick = 1
 
     for x, y in zip(meanX, meanY):

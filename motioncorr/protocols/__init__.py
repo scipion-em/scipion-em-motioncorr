@@ -29,5 +29,5 @@ from .protocol_motioncorr import ProtMotionCorr
 try:
     from .protocol_ts_motioncor import ProtTsMotionCorr
 except ImportError as e:
-    if not "'tomo'" in str(e):
+    if "'tomo'" not in str(e):
         raise e

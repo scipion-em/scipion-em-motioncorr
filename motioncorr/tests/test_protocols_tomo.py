@@ -25,17 +25,14 @@
 # *
 # **************************************************************************
 
-import os
-
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.utils import magentaStr, greenStr
+from pyworkflow.utils import magentaStr
 
 from tomo.protocols import ProtImportTsMovies
 from ..protocols import ProtTsMotionCorr
 
 
 class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
-
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -45,25 +42,22 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
 
     def _runImportTiltSeriesM(self, filesPattern='{TS}_{TO}_{TA}.mrc'):
         protImport = self.newProtocol(ProtImportTsMovies,
-            filesPath=self.getFileM,
-            filesPattern=filesPattern,
-            voltage=300,
-            magnification=105000,
-            sphericalAberration=2.7,
-            amplitudeContrast=0.1,
-            samplingRate=1.35,
-            doseInitial=0,
-            dosePerFrame=0.3)
+                                      filesPath=self.getFileM,
+                                      filesPattern=filesPattern,
+                                      voltage=300,
+                                      magnification=105000,
+                                      sphericalAberration=2.7,
+                                      amplitudeContrast=0.1,
+                                      samplingRate=1.35,
+                                      doseInitial=0,
+                                      dosePerFrame=0.3)
         self.launchProtocol(protImport)
         return protImport
 
     def test_tiltseries_motioncor2(self):
-        print(magentaStr("\n==> Testing TiltSeries motioncor2"))
-        # Importing a set of TiltSeries
-        print(greenStr("\n Importing a set of TiltSeries..."))
+        print(magentaStr("\n==> Importing data - TiltSeries:"))
         protImport = self._runImportTiltSeriesM()
-        # --------- Motion correction for Tilt-series ------
-        print(greenStr("\n Applying motioncorr2..."))
+        print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
         protMc = self.newProtocol(ProtTsMotionCorr)
         protMc.inputTiltSeriesM.set(protImport.outputTiltSeriesM)
         self.launchProtocol(protMc)
@@ -91,5 +85,4 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
                                  "Tilt image id is incorrect")
                 self.assertEqual(ti.getSamplingRate(), ts.getSamplingRate(),
                                  'Tilt image sampling rate must be equal to '
-                                 'tilt serie' )
-
+                                 'tilt serie')

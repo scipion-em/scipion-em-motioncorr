@@ -31,12 +31,11 @@ import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
 from pyworkflow import BETA
 
-import pwem.objects as emobj
 from tomo.protocols import ProtTsCorrectMotion
 
-import motioncorr
-from motioncorr.convert import *
-from motioncorr.constants import *
+from .. import Plugin
+from ..constants import *
+from ..convert import *
 
 
 class ProtTsMotionCorr(ProtTsCorrectMotion):
@@ -54,8 +53,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
     def _defineParams(self, form):
         ProtTsCorrectMotion._defineParams(self, form)
 
-        form.addSection(label="Motioncor2 params")
-
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -65,6 +62,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                             " Motioncor2 can use multiple GPUs - in that case"
                             " set to i.e. *0 1 2*.")
 
+        form.addSection(label="Motioncor2 params")
         form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
                       label='Apply dose filter',
                       help='Apply a dose-dependent filter to frames before '
@@ -80,8 +78,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
         form.addParam('patchOverlap', params.IntParam, default=0,
                       label='Patches overlap (%)',
-                      help='In versions > 1.0.1 it is possible to specify'
-                           'the overlapping between patches. '
+                      help='Specify the overlapping between patches. '
                            '\nFor example, overlap=20 means that '
                            'each patch will have a 20% overlapping \n'
                            'with its neighboring patches in each dimension.')
@@ -98,43 +95,19 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                       label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.5px*.')
 
-        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
+        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
                       condition='doApplyDoseFilter',
                       label="Save unweighted micrographs?",
-                      help="Yes by default, if you have selected to apply a "
-                           "dose-dependent filter to the frames")
+                      help="Aligned but non-dose weighted images are sometimes "
+                           "useful in CTF estimation, although there is no "
+                           "difference in most cases.")
 
-        group = form.addGroup('Magnification correction')
-        group.addParam('doMagCor', params.BooleanParam, default=False,
-                       label='Correct anisotropic magnification?',
-                       help='Correct anisotropic magnification by '
-                            'stretching image along the major axis, '
-                            'the axis where the lower magnification is '
-                            'detected.')
-        group.addParam('useEst', params.BooleanParam, default=True,
-                       label='Use previous estimation?',
-                       condition='doMagCor',
-                       help='Use previously calculated parameters of '
-                            'magnification anisotropy (from magnification '
-                            'distortion estimation protocol).')
-        group.addParam('inputEst', params.PointerParam,
-                       pointerClass='ProtMagDistEst',
-                       condition='useEst and doMagCor',
-                       label='Input protocol',
-                       help='Select previously executed estimation protocol.')
-        group.addParam('scaleMaj', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
-                       label='Major scale factor',
-                       help='Major scale factor.')
-        group.addParam('scaleMin', params.FloatParam, default=1.0,
-                       condition='not useEst and doMagCor',
-                       label='Minor scale factor',
-                       help='Minor scale factor.')
-        group.addParam('angDist', params.FloatParam, default=0.0,
-                       condition='not useEst and doMagCor',
-                       label='Distortion angle (deg)',
-                       help='Distortion angle, in degrees.')
+        form.addParam('extraParams2', params.StringParam, default='',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      label='Additional parameters',
+                      help="Extra command line parameters. See MotionCor2 help.")
 
+        form.addSection(label="Gain and defects")
         form.addParam('gainRot', params.EnumParam,
                       choices=['no rotation', '90 degrees',
                                '180 degrees', '270 degrees'],
@@ -144,7 +117,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                       help="Rotate gain reference counter-clockwise.")
 
         form.addParam('gainFlip', params.EnumParam,
-                      expertLevel=cons.LEVEL_ADVANCED,
                       choices=['no flip', 'upside down', 'left right'],
                       label="Flip gain reference:", default=NO_FLIP,
                       display=params.EnumParam.DISPLAY_COMBO,
@@ -159,36 +131,33 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                            '4 integers x, y, w, h representing the x, y '
                            'coordinates, width, and height, respectively.')
 
-        form.addParam('extraParams2', params.StringParam, default='',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label='Additional parameters',
-                      help="""*Extra parameters:*\n
-        -Bft\t\t100\t\tBFactor for alignment, in px^2.\n
-        -Iter\t\t5\t\tMaximum iterations for iterative alignment.\n
-        -MaskCent\t\t0 0\t\tCenter of subarea that will be used for alignment,
-        \t\t\t\tdefault *0 0* corresponding to the frame center.\n
-        -MaskSize\t\t1.0 1.0\t\tThe size of subarea that will be used for alignment,
-        \t\t\t\tdefault *1.0 1.0* corresponding full size.\n
-        -Align\t\t1\t\tGenerate aligned sum (1) or simple sum (0).\n
-        -FmRef\t\t-1\t\tSpecify which frame to be the reference to which
-        \t\t\t\tall other frames are aligned, by default (-1) the
-        \t\t\t\tthe central frame is chosen. The central frame is
-        \t\t\t\tat N/2 based upon zero indexing where N is the
-        \t\t\t\tnumber of frames that will be summed, i.e., not
-        \t\t\t\tincluding the frames thrown away.\n
-        -Tilt\t\t0 0\t\tTilt angle range for a dose fractionated tomographic
-        \t\t\t\ttilt series, e.g. *-60 60*\n
+        form.addParam('defectMap', params.FileParam, allowsNull=True,
+                      label='Camera defects map',
+                      help='1. Defect map is a binary (0 or 1) map where defective '
+                           ' pixels are assigned value of 1 and good pixels have '
+                           'value of 0.\n2. The defective pixels are corrected '
+                           'with a random pick of good pixels in its neighborhood. '
+                           '\n3. This is map must have the same dimension and '
+                           'orientation as the input movie frame.\n4. This map '
+                           'can be provided as either MRC or TIFF file that has '
+                           'MRC mode of 0 or 5 (unsigned 8 bit).')
 
-    Since version *1.1.0*:\n
-        -GpuMemUsage\t\t0.5\t\tSpecify how much GPU memory is used to buffer movie frames.
-        \t\t\t\tIt is recommended when running side by side processes in
-        \t\t\t\tthe same card. By default is 50% (i. e 0.5).\n
-        -InFmMotion\t\t1\t\tTakes into account of motion-induced blurring of
-        \t\t\t\teach frame. It has shown resolution improvement
-        \t\t\t\tin some test cases. By default this option is off.\n
-        -Bft\t\t500 150\t\tSince version 1.1.0 this option can take two arguments.
-        \t\t\t\tFirst one is used in global-motion measurement and the
-        \t\t\t\tsecond one is for local-motion. (default 500 150).""")
+        form.addSection(label="Mag. correction")
+        form.addParam('doMagCor', params.BooleanParam, default=False,
+                      label='Correct anisotropic magnification?',
+                      help='Correct anisotropic magnification by '
+                           'stretching image along the major axis, '
+                           'the axis where the lower magnification is '
+                           'detected.')
+        form.addParam('scaleMaj', params.FloatParam, default=1.0,
+                      condition='doMagCor',
+                      label='Major scale factor')
+        form.addParam('scaleMin', params.FloatParam, default=1.0,
+                      condition='doMagCor',
+                      label='Minor scale factor')
+        form.addParam('angDist', params.FloatParam, default=0.0,
+                      condition='doMagCor',
+                      label='Distortion angle (deg)')
 
         form.addParallelSection(threads=1, mpi=1)
 
@@ -243,24 +212,18 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         }
 
         if self.defectFile.get():
-            argsDict['-DefectFile'] = self.defectFile.get()
+            argsDict['-DefectFile'] = "%s" % self.defectFile.get()
+        if self.defectMap.get():
+            argsDict['-DefectMap'] = "%s" % self.defectMap.get()
 
-        patchOverlap = self.getAttributeValue('patchOverlap', None)
+        patchOverlap = self.getAttributeValue('patchOverlap')
         if patchOverlap:  # 0 or None is False
             argsDict['-Patch'] += " %d" % patchOverlap
 
         if self.doMagCor:
-            if self.useEst:
-                inputEst = self.inputEst.get().getOutputLog()
-                input_params = parseMagEstOutput(inputEst)
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (
-                    input_params[1],
-                    input_params[2],
-                    input_params[0])
-            else:
-                argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
-                                                          self.scaleMin,
-                                                          self.angDist)
+            argsDict['-Mag'] = '%0.3f %0.3f %0.3f' % (self.scaleMaj,
+                                                      self.scaleMin,
+                                                      self.angDist)
 
         tiFn = tiltImageM.getFileName()
         inputFn = os.path.abspath(tiFn)
@@ -291,9 +254,9 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         args += ' -Gpu %(GPU)s'
         args += ' ' + self.extraParams2.get()
 
-        self.runJob(motioncorr.Plugin.getProgram(), args,
+        self.runJob(Plugin.getProgram(), args,
                     cwd=workingFolder,
-                    env=motioncorr.Plugin.getEnviron())
+                    env=Plugin.getEnviron())
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -357,19 +320,3 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         xShifts, yShifts = parseMovieAlignment2(logPath)
 
         return xShifts, yShifts
-
-    def writeZeroShifts(self, movie):
-        # TODO: find another way to do this
-        shiftsMd = self._getTmpPath('zero_shifts.xmd')
-        pwutils.cleanPath(shiftsMd)
-        xshifts = [0] * movie.getNumberOfFrames()
-        yshifts = xshifts
-        alignment = emobj.MovieAlignment(first=1, last=movie.getNumberOfFrames(),
-                                   xshifts=xshifts, yshifts=yshifts)
-        roiList = [0, 0, 0, 0]
-        alignment.setRoi(roiList)
-        movie.setAlignment(alignment)
-        writeShiftsMovieAlignment(movie, shiftsMd,
-                                  1, movie.getNumberOfFrames())
-        return shiftsMd
-
