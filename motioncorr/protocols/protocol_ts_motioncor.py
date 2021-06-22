@@ -28,6 +28,7 @@ import os
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
+from pyworkflow.protocol import STEPS_PARALLEL
 import pyworkflow.utils as pwutils
 from pyworkflow import BETA
 
@@ -47,6 +48,10 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
     _label = 'align tiltseries movies'
     _devStatus = BETA
+
+    def __init__(self, **args):
+        ProtTsCorrectMotion.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
