@@ -39,8 +39,7 @@ from ..convert import *
 
 
 class ProtTsMotionCorr(ProtTsCorrectMotion):
-    """
-    This protocol wraps motioncor2 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
 
     Motioncor2 performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
@@ -175,10 +174,9 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         self.info("outputFn (rel): %s" % _getPath(outputFn))
 
         logFile = self._getPath(self._getMovieLogFile(tiltImageM))
-
         a0, aN = self._getRange(tiltImageM, 'align')
+        logFileBase = logFile.replace('0-Full.log', '').replace('0-Patch-Full.log', '')
 
-        logFileBase = (logFile.replace('0-Full.log', '').replace('0-Patch-Full.log', ''))
         # default values for motioncor2 are (1, 1)
         cropDimX = self.cropDimX.get() or 1
         cropDimY = self.cropDimY.get() or 1
@@ -208,7 +206,8 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             '-kV': tiltImageM.getAcquisition().getVoltage(),
             '-LogFile': logFileBase,
             '-InitDose': initialDose + order * dosePerFrame,
-            '-OutStack': 0
+            '-OutStack': 0,
+            '-SumRange': "0.0 0.0",  # switch off writing out DWS
         }
 
         if self.defectFile.get():
@@ -263,6 +262,18 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         summary = []
         return summary
 
+    def _methods(self):
+        methods = []
+
+        if self.doApplyDoseFilter:
+            methods.append(' - Applied dose filtering')
+        if self.patchX > 1 and self.patchY > 1:
+            methods.append(' - Used patch-based alignment')
+        if self.group > 1:
+            methods.append(' - Grouped %d frames' % self.group)
+
+        return methods
+
     def _validate(self):
         # Check base validation before the specific ones
         errors = ProtTsCorrectMotion._validate(self)
@@ -285,7 +296,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                                     '-Patch' if usePatches else '')
 
     def _getRange(self, movie, prefix):
-
         n = self._getNumberOfFrames(movie)
         iniFrame, _, indxFrame = movie.getFramesRange()
         first, last = self._getFrameRange(n, prefix)
