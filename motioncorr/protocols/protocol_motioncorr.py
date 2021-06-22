@@ -365,7 +365,7 @@ class ProtMotionCorr(ProtAlignMovies):
             inputMovies = self.inputMovies.get()
             doseFrame = inputMovies.getAcquisition().getDosePerFrame()
 
-            if doseFrame == 0.0 or doseFrame is None:
+            if doseFrame < 0.00001 or doseFrame is None:
                 errors.append('Dose per frame for input movies is 0 or not '
                               'set. You cannot apply dose filter.')
 

@@ -265,6 +265,13 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
+
+        if hasattr(self, 'outputTiltSeries'):
+            summary.append('Aligned %d tiltseries movies using motioncor2.'
+                           % self.inputTiltSeriesM.get().getSize())
+        else:
+            summary.append('Output is not ready')
+
         return summary
 
     def _methods(self):
@@ -283,12 +290,11 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         # Check base validation before the specific ones
         errors = ProtTsCorrectMotion._validate(self)
 
-        inputTs = self.inputTiltSeriesM.get()
-
-        if self.doApplyDoseFilter:
+        if self.doApplyDoseFilter and self.inputTiltSeriesM.get():
+            inputTs = self.inputTiltSeriesM.get()
             doseFrame = inputTs.getAcquisition().getDosePerFrame()
 
-            if doseFrame == 0.0 or doseFrame is None:
+            if doseFrame < 0.00001 or doseFrame is None:
                 errors.append('Dose per frame for input movies is 0 or not '
                               'set. You cannot apply dose filter.')
 
