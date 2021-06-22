@@ -332,7 +332,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         else:
             return movie.getNumberOfFrames()
 
-    # ############## TO-REVIEW ##########################
     def _getMovieShifts(self, movie):
         """ Returns the x and y shifts for the alignment of this movie.
         The shifts are in pixels irrespective of any binning.
