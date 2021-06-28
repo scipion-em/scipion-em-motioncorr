@@ -46,7 +46,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         (written by Shawn Zheng @ David Agard lab)
     """
 
-    _label = 'align tiltseries movies'
+    _label = 'align tilt-series movies'
     _devStatus = BETA
 
     def __init__(self, **args):
