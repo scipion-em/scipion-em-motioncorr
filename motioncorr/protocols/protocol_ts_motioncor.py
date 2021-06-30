@@ -67,7 +67,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                             " set to i.e. *0 1 2*.")
 
         form.addSection(label="Motioncor2 params")
-        form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
+        form.addParam('doApplyDoseFilter', params.BooleanParam, default=False,
                       label='Apply dose filter',
                       help='Apply a dose-dependent filter to frames before '
                            'summing them. Pre-exposure and dose per frame '
