@@ -204,16 +204,18 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             '-FtBin': self.binFactor.get(),
             '-Tol': self.tol.get(),
             '-Group': self.group.get(),
-            '-FmDose': dosePerFrame,
             '-Throw': '%d' % a0,
             '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
             '-PixSize': tiltImageM.getSamplingRate(),
             '-kV': tiltImageM.getAcquisition().getVoltage(),
             '-LogFile': logFileBase,
-            '-InitDose': initialDose + order * dosePerFrame,
             '-OutStack': 0,
             '-SumRange': "0.0 0.0",  # switch off writing out DWS
         }
+
+        if self.doApplyDoseFilter:
+            argsDict.update({'-FmDose': dosePerFrame,
+                             '-InitDose': initialDose + order * dosePerFrame})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()

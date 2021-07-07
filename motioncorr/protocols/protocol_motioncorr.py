@@ -387,11 +387,6 @@ class ProtMotionCorr(ProtAlignMovies):
         cropDimX = self.cropDimX.get() or 1
         cropDimY = self.cropDimY.get() or 1
 
-        if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-        else:
-            preExp, dose = 0.0, 0.0
-
         # reset values = 1 to 0 (motioncor2 does it automatically,
         # but we need to keep this for consistency)
         if self.patchX.get() == 1:
@@ -406,14 +401,17 @@ class ProtMotionCorr(ProtAlignMovies):
                     '-FtBin': self.binFactor.get(),
                     '-Tol': self.tol.get(),
                     '-Group': self.group.get(),
-                    '-FmDose': dose,
                     '-PixSize': inputMovies.getSamplingRate(),
                     '-kV': inputMovies.getAcquisition().getVoltage(),
-                    '-InitDose': preExp,
                     '-OutStack': 1 if self.doSaveMovie else 0,
                     '-Gpu': '%(GPU)s',
                     '-SumRange': "0.0 0.0",  # switch off writing out DWS
                     }
+
+        if self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies)
+            argsDict.update({'-FmDose': dose,
+                             '-InitDose': preExp})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
