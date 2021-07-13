@@ -30,6 +30,7 @@
 # *
 # ******************************************************************************
 
+import os
 import time
 from math import ceil, sqrt
 from threading import Thread
@@ -313,8 +314,10 @@ class ProtMotionCorr(ProtAlignMovies):
             else:
                 _extraWork()
 
-        except:
-            self.error("ERROR: Motioncor2 has failed for %s\n" % movie.getFileName())
+        except Exception as e:
+            self.error("ERROR: Motioncor2 has failed for %s. --> %s\n" % (movie.getFileName(), str(e)))
+            import traceback
+            traceback.print_exc()
 
     def _insertFinalSteps(self, deps):
         stepsId = []
@@ -362,7 +365,7 @@ class ProtMotionCorr(ProtAlignMovies):
             inputMovies = self.inputMovies.get()
             doseFrame = inputMovies.getAcquisition().getDosePerFrame()
 
-            if doseFrame == 0.0 or doseFrame is None:
+            if doseFrame < 0.00001 or doseFrame is None:
                 errors.append('Dose per frame for input movies is 0 or not '
                               'set. You cannot apply dose filter.')
 
@@ -384,11 +387,6 @@ class ProtMotionCorr(ProtAlignMovies):
         cropDimX = self.cropDimX.get() or 1
         cropDimY = self.cropDimY.get() or 1
 
-        if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-        else:
-            preExp, dose = 0.0, 0.0
-
         # reset values = 1 to 0 (motioncor2 does it automatically,
         # but we need to keep this for consistency)
         if self.patchX.get() == 1:
@@ -403,14 +401,17 @@ class ProtMotionCorr(ProtAlignMovies):
                     '-FtBin': self.binFactor.get(),
                     '-Tol': self.tol.get(),
                     '-Group': self.group.get(),
-                    '-FmDose': dose,
                     '-PixSize': inputMovies.getSamplingRate(),
                     '-kV': inputMovies.getAcquisition().getVoltage(),
-                    '-InitDose': preExp,
                     '-OutStack': 1 if self.doSaveMovie else 0,
                     '-Gpu': '%(GPU)s',
                     '-SumRange': "0.0 0.0",  # switch off writing out DWS
                     }
+
+        if self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies)
+            argsDict.update({'-FmDose': dose,
+                             '-InitDose': preExp})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
@@ -443,7 +444,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return Plugin.getProgram()
 
     def _getCwdPath(self, movie, path):
-        return pwutils.join(self._getOutputMovieFolder(movie), path)
+        return os.path.join(self._getOutputMovieFolder(movie), path)
 
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
@@ -518,6 +519,7 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _moveOutput(self, movie):
         """ Move output from tmp to extra folder. """
+
         def _moveToExtra(fn):
             """ Move file from movies tmp folder to extra """
             pwutils.moveFile(self._getCwdPath(movie, fn),
@@ -526,7 +528,7 @@ class ProtMotionCorr(ProtAlignMovies):
         _moveToExtra(self._getMovieLogFile(movie))
         _moveToExtra(self._getMicFn(movie))
 
-        if self.doSaveUnweightedMic:
+        if self._doSaveUnweightedMic():
             _moveToExtra(self._getOutputMicName(movie))
 
         if self.doSaveMovie:
@@ -569,6 +571,10 @@ class ProtMotionCorr(ProtAlignMovies):
         # weighted ones should be created.
         return not createWeighted or self.doSaveUnweightedMic
 
+    def _doSaveUnweightedMic(self):
+        """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
+        return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
+
     def _createOutputWeightedMicrographs(self):
         return self.doApplyDoseFilter
 
@@ -576,7 +582,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
-        return not '--dont_use_worker_thread' in self.extraProtocolParams.get()
+        return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
 
     def getSamplingRate(self):
         return self.getInputMovies().getSamplingRate()
@@ -593,7 +599,7 @@ class ProtMotionCorr(ProtAlignMovies):
         pix = self.getSamplingRate()
         try:
             for frame in range(2, nframes + 1):  # start from the 2nd frame
-                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                x, y = shiftsX[frame - 1], shiftsY[frame - 1]
                 d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
                 total += d
                 if frame <= cutoff:
@@ -602,7 +608,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     late += d
                 xOld = x
                 yOld = y
-            return list(map(lambda x: pix*x, [total, early, late]))
+            return list(map(lambda x: pix * x, [total, early, late]))
         except IndexError:
             self.error("Expected %d frames, found less. Check movie %s !" % (
                 nframes, movie.getFileName()))
@@ -616,8 +622,8 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     def px_to_ang(px):
         y1, y2 = px.get_ylim()
         x1, x2 = px.get_xlim()
-        ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
-        ax_ang.set_xlim(x1*pixSize, x2*pixSize)
+        ax_ang2.set_ylim(y1 * pixSize, y2 * pixSize)
+        ax_ang.set_xlim(x1 * pixSize, x2 * pixSize)
         ax_ang.figure.canvas.draw()
         ax_ang2.figure.canvas.draw()
 
@@ -638,7 +644,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     # The output and log files list the shifts relative to the first frame.
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
-    skipLabels = ceil(len(meanX)/10.0)
+    skipLabels = ceil(len(meanX) / 10.0)
     labelTick = 1
 
     for x, y in zip(meanX, meanY):
