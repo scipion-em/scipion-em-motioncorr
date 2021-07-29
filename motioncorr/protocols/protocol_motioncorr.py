@@ -63,6 +63,19 @@ class ProtMotionCorr(ProtAlignMovies):
         self.stepsExecutionMode = STEPS_PARALLEL
         self.isEER = False
 
+    def versionGE(self, version):
+        """ Return True if current version of motioncor2 is greater
+         or equal than the input argument.
+         Params:
+            version: string version (semantic version, e.g 1.0.1)
+        """
+        v1 = int(self._getVersion().replace('.', ''))
+        v2 = int(version.replace('.', ''))
+
+        if v1 < v2:
+            return False
+        return True
+
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
@@ -335,8 +348,10 @@ class ProtMotionCorr(ProtAlignMovies):
             else:
                 _extraWork()
 
-        except:
-            self.error("ERROR: Motioncor2 has failed for %s\n" % movie.getFileName())
+        except Exception as e:
+            self.error("ERROR: Motioncor2 has failed for %s. --> %s\n" % (movie.getFileName(), str(e)))
+            import traceback
+            traceback.print_exc()
 
     def _insertFinalSteps(self, deps):
         stepsId = []
@@ -393,8 +408,8 @@ class ProtMotionCorr(ProtAlignMovies):
         self.isEER = pwutils.getExt(firstMovie.getFileName()) == ".eer"
         if self.isEER:
             lastFrame //= self.eerGroup.get()
-            if self._getVersion() != '1.4.0':
-                errors.append("EER is only supported from motioncor2 v1.4.0")
+            if not self.versionGE('1.4.0'):
+                errors.append("EER is only supported for motioncor2 v1.4.0 and newer.")
 
         msg = "Frames range must be within %d - %d" % (1, lastFrame)
         if self.alignFrameN.get() == 0:
@@ -432,7 +447,7 @@ class ProtMotionCorr(ProtAlignMovies):
             movie = firstMovie.getFileName()
             imgx, imgy, _, _ = ImageHandler().getDimensions(movie)
 
-            if not (gainx == imgx and gainy == imgy):
+            if not sorted([gainx, gainy]) == sorted([imgx, imgy]):
                 errors.append("Gain image dimensions (%d x %d) "
                               "do not match the movies (%d x %d)!" %
                               (gainx, gainy, imgx, imgy))
@@ -450,14 +465,6 @@ class ProtMotionCorr(ProtAlignMovies):
         cropDimX = self.cropDimX.get() or 1
         cropDimY = self.cropDimY.get() or 1
 
-        if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-            # when using EER, the hardware frames are grouped
-            if self.isEER:
-                dose *= self.eerGroup.get()
-        else:
-            preExp, dose = 0.0, 0.0
-
         # reset values = 1 to 0 (motioncor2 does it automatically,
         # but we need to keep this for consistency)
         if self.patchX.get() == 1:
@@ -474,7 +481,6 @@ class ProtMotionCorr(ProtAlignMovies):
                     '-Group': self.group.get(),
                     '-PixSize': inputMovies.getSamplingRate(),
                     '-kV': inputMovies.getAcquisition().getVoltage(),
-                    '-InitDose': preExp,
                     '-OutStack': 1 if self.doSaveMovie else 0,
                     '-Gpu': '%(GPU)s',
                     '-SumRange': "0.0 0.0",  # switch off writing out DWS
@@ -483,8 +489,14 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.isEER:
             argsDict['-EerSampling'] = self.eerSampling.get() + 1
             argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-        else:
-            argsDict['-FmDose'] = dose
+        #FIXME
+        elif self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies)
+            # when using EER, the hardware frames are grouped
+            if self.isEER:
+                dose *= self.eerGroup.get()
+            argsDict.update({'-FmDose': dose,
+                             '-InitDose': preExp})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
@@ -606,7 +618,7 @@ class ProtMotionCorr(ProtAlignMovies):
         _moveToExtra(self._getMovieLogFile(movie))
         _moveToExtra(self._getMicFn(movie))
 
-        if self.doSaveUnweightedMic:
+        if self._doSaveUnweightedMic():
             _moveToExtra(self._getOutputMicName(movie))
 
         if self.doSaveMovie:
@@ -637,6 +649,10 @@ class ProtMotionCorr(ProtAlignMovies):
         # weighted ones should be created.
         return not createWeighted or self.doSaveUnweightedMic
 
+    def _doSaveUnweightedMic(self):
+        """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
+        return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
+
     def _createOutputWeightedMicrographs(self):
         return self.doApplyDoseFilter
 
@@ -644,7 +660,7 @@ class ProtMotionCorr(ProtAlignMovies):
         return self.doComputeMicThumbnail
 
     def _useWorkerThread(self):
-        return not '--dont_use_worker_thread' in self.extraProtocolParams.get()
+        return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
 
     def getSamplingRate(self):
         return self.getInputMovies().getSamplingRate()
@@ -664,7 +680,7 @@ class ProtMotionCorr(ProtAlignMovies):
         pix = self.getSamplingRate()
         try:
             for frame in range(2, nframes + 1):  # start from the 2nd frame
-                x, y = shiftsX[frame-1], shiftsY[frame-1]
+                x, y = shiftsX[frame - 1], shiftsY[frame - 1]
                 d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
                 total += d
                 if frame <= cutoff:
@@ -673,7 +689,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     late += d
                 xOld = x
                 yOld = y
-            return list(map(lambda x: pix*x, [total, early, late]))
+            return list(map(lambda x: pix * x, [total, early, late]))
         except IndexError:
             self.error("Expected %d frames, found less. Check movie %s !" % (
                 nframes, movie.getFileName()))
@@ -691,8 +707,8 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     def px_to_ang(px):
         y1, y2 = px.get_ylim()
         x1, x2 = px.get_xlim()
-        ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
-        ax_ang.set_xlim(x1*pixSize, x2*pixSize)
+        ax_ang2.set_ylim(y1 * pixSize, y2 * pixSize)
+        ax_ang.set_xlim(x1 * pixSize, x2 * pixSize)
         ax_ang.figure.canvas.draw()
         ax_ang2.figure.canvas.draw()
 
@@ -713,7 +729,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     # The output and log files list the shifts relative to the first frame.
     # ROB unit seems to be pixels since sampling rate is only asked
     # by the program if dose filtering is required
-    skipLabels = ceil(len(meanX)/10.0)
+    skipLabels = ceil(len(meanX) / 10.0)
     labelTick = 1
 
     for x, y in zip(meanX, meanY):

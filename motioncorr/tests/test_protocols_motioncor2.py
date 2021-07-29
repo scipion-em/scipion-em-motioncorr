@@ -62,7 +62,7 @@ class TestMotioncor2AlignMovies(BaseTest):
         protImport = cls.newProtocol(ProtImportMovies, **params)
         cls.launchProtocol(protImport)
         return protImport
-    
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
