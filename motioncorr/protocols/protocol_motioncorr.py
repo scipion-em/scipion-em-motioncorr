@@ -79,7 +79,7 @@ class ProtMotionCorr(ProtAlignMovies):
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
-        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer', '.gain'] else 'mrc'
+        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer'] else 'mrc'
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
@@ -452,9 +452,6 @@ class ProtMotionCorr(ProtAlignMovies):
                               "do not match the movies (%d x %d)!" %
                               (gainx, gainy, imgx, imgy))
 
-            if not gain.endswith(".mrc"):
-                errors.append("Motioncor2 supports gain in MRC format only!")
-
         return errors
 
     # --------------------------- UTILS functions -----------------------------
@@ -627,16 +624,17 @@ class ProtMotionCorr(ProtAlignMovies):
     def _updateOutputSet(self, outputName, outputSet,
                          state=pwobj.Set.STREAM_OPEN):
         """ Redefine this method to set EER attrs. """
-        if getattr(self, '__firstTime', True):
-            if self.isEER and outputName == 'outputMovies':
-                setattr(outputSet, "_eerGrouping",
-                        pwobj.Integer(self.eerGroup.get()))
-                setattr(outputSet, "_eerSampling",
-                        pwobj.Integer(self.eerSampling.get() + 1))
-            self.__firstTime = False
+        first = getattr(self, '_firstUpdate', True)
+
+        if first and self.isEER and outputName == 'outputMovies':
+            setattr(outputSet, "_eerGrouping",
+                    pwobj.Integer(self.eerGroup.get()))
+            setattr(outputSet, "_eerSampling",
+                    pwobj.Integer(self.eerSampling.get() + 1))
 
         ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
                                          state=state)
+        self._firstUpdate = False
 
     def _createOutputMicrographs(self):
         createWeighted = self._createOutputWeightedMicrographs()
