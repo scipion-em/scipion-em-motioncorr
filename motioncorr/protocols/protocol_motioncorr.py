@@ -310,7 +310,7 @@ class ProtMotionCorr(ProtAlignMovies):
             args = ' -InMrc "%s" ' % movie.getBaseName()
         elif ext in ['.tif', '.tiff']:
             args = ' -InTiff "%s" ' % movie.getBaseName()
-        elif ext in ['.eer']:
+        elif ext == '.eer':
             args = ' -InEer "%s" ' % movie.getBaseName()
         else:
             raise Exception("Unsupported format: %s" % ext)
@@ -447,7 +447,7 @@ class ProtMotionCorr(ProtAlignMovies):
             movie = firstMovie.getFileName()
             imgx, imgy, _, _ = ImageHandler().getDimensions(movie)
 
-            if not sorted([gainx, gainy]) == sorted([imgx, imgy]):
+            if sorted([gainx, gainy]) != sorted([imgx, imgy]):
                 errors.append("Gain image dimensions (%d x %d) "
                               "do not match the movies (%d x %d)!" %
                               (gainx, gainy, imgx, imgy))
@@ -489,12 +489,8 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.isEER:
             argsDict['-EerSampling'] = self.eerSampling.get() + 1
             argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-        #FIXME
         elif self.doApplyDoseFilter:
             preExp, dose = self._getCorrectedDose(inputMovies)
-            # when using EER, the hardware frames are grouped
-            if self.isEER:
-                dose *= self.eerGroup.get()
             argsDict.update({'-FmDose': dose,
                              '-InitDose': preExp})
 
