@@ -627,10 +627,10 @@ class ProtMotionCorr(ProtAlignMovies):
         first = getattr(self, '_firstUpdate', True)
 
         if first and self.isEER and outputName == 'outputMovies':
-            setattr(outputSet, "_eerGrouping",
-                    pwobj.Integer(self.eerGroup.get()))
-            setattr(outputSet, "_eerSampling",
-                    pwobj.Integer(self.eerSampling.get() + 1))
+            og = OpticsGroups.fromImages(outputSet)
+            og.updateAll(rlnEERGrouping=self.eerGroup.get(),
+                         rlnEERUpsampling=self.eerSampling.get() + 1)
+            og.toImages(outputSet)
 
         ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
                                          state=state)
