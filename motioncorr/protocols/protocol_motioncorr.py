@@ -409,7 +409,7 @@ class ProtMotionCorr(ProtAlignMovies):
         if self.isEER:
             lastFrame //= self.eerGroup.get()
             if not self.versionGE('1.4.0'):
-                errors.append("EER is only supported for motioncor2 v1.4.0 and newer.")
+                errors.append("EER is only supported for motioncor2 v1.4.0 or newer.")
 
         msg = "Frames range must be within %d - %d" % (1, lastFrame)
         if self.alignFrameN.get() == 0:
