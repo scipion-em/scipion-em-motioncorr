@@ -275,10 +275,19 @@ class ProtMotionCorr(ProtAlignMovies):
 
     # --------------------------- STEPS functions -----------------------------
     def _convertInputStep(self):
+        inputMovies = self.getInputMovies()
+        # parse EER gain file before its conversion to mrc
+        if self.isEER and inputMovies.getGain():
+            print("Parsing defects from EER gain file..")
+            defects = parseEERDefects(inputMovies.getGain())
+            if defects:
+                with open(self._getExtraPath("defects_eer.txt"), "w") as f:
+                    for d in defects:
+                        f.write(" ".join(str(i) for i in d) + "\n")
+
         ProtAlignMovies._convertInputStep(self)
         if self.isEER:
             # write FmIntFile
-            inputMovies = self.getInputMovies()
             _, numbOfFrames, _ = inputMovies.getFramesRange()
             if self.doApplyDoseFilter:
                 _, dose = self._getCorrectedDose(inputMovies)
@@ -493,8 +502,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
-        if self.defectMap.get():
+        elif self.defectMap.get():
             argsDict['-DefectMap'] = "%s" % self.defectMap.get()
+        elif os.path.exists(self._getExtraPath("defects_eer.txt")):
+            argsDict['-DefectFile'] = "../../extra/defects_eer.txt"
 
         patchOverlap = self.getAttributeValue('patchOverlap')
         if patchOverlap:  # 0 or None is False
