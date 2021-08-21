@@ -26,18 +26,11 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
         :target: https://pypi.python.org/pypi/scipion-em-motioncorr
         :alt: Downloads
 
-
-+--------------+----------------+--------------------+
-| prod: |prod| | devel: |devel| | support: |support| |
-+--------------+----------------+--------------------+
-
-.. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_prod.svg
-.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_devel.svg
-.. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_support.svg
-
 **IMPORTANT!**
 
-    If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`bug details <https://github.com/I2PC/xmippCore/issues/39>`_)
+    1. If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`see details <https://github.com/I2PC/xmippCore/issues/39>`_)
+    2. When importing EER movies, you should specify dose per single EER frame during import step.
+    3. If you are processing EER movies and providing *.gain reference file camera defects will be automatically extracted from the gain file header and converted to Motioncor2 format. This step is omitted if you provide a defects file yourself.
 
 Installation
 ------------
