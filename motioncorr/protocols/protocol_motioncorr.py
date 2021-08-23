@@ -41,6 +41,7 @@ import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol import STEPS_PARALLEL
+from pwem.emlib.image import ImageHandler
 from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
 
@@ -450,11 +451,11 @@ class ProtMotionCorr(ProtAlignMovies):
 
         # check gain dimensions and extension
         if inputMovies.getGain():
-            from pwem.emlib.image import ImageHandler
+            ih = ImageHandler()
             gain = inputMovies.getGain()
-            gainx, gainy, _, _ = ImageHandler().getDimensions(gain)
+            gainx, gainy, _, _ = ih.getDimensions(gain)
             movie = firstMovie.getFileName()
-            imgx, imgy, _, _ = ImageHandler().getDimensions(movie)
+            imgx, imgy, _, _ = ih.getDimensions(movie)
 
             if sorted([gainx, gainy]) != sorted([imgx, imgy]):
                 errors.append("Gain image dimensions (%d x %d) "
