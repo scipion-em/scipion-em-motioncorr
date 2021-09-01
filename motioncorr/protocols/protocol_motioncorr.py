@@ -279,7 +279,6 @@ class ProtMotionCorr(ProtAlignMovies):
         inputMovies = self.getInputMovies()
         # parse EER gain file before its conversion to mrc
         if self.isEER and inputMovies.getGain():
-            print("Parsing defects from EER gain file..")
             defects = parseEERDefects(inputMovies.getGain())
             if defects:
                 with open(self._getExtraPath("defects_eer.txt"), "w") as f:

@@ -248,6 +248,8 @@ def parseEERDefects(fn):
     if not fn.endswith(".gain"):
         return defects
 
+    print("Parsing defects from EER gain file..")
+
     with TiffFile(fn) as tif:
         for page in tif.pages:
             for tag in page.tags:
