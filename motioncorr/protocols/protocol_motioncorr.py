@@ -105,8 +105,7 @@ class ProtMotionCorr(ProtAlignMovies):
                                   'first frame is 1. If you set 0 in the final '
                                   'frame to align, it means that you will '
                                   'align until the last frame of the movie. '
-                                  'When using EER, the frames are not hardware '
-                                  'frames, but fractions.')
+                                  'When using EER, this option is IGNORED!')
         line.addParam('alignFrame0', params.IntParam, default=1,
                       label='from')
         line.addParam('alignFrameN', params.IntParam, default=0,
@@ -242,6 +241,8 @@ class ProtMotionCorr(ProtAlignMovies):
                            'MRC mode of 0 or 5 (unsigned 8 bit).')
 
         form.addSection("EER")
+        form.addParam('EERtext', params.LabelParam,
+                      label="These options are ignored for non-EER movies.")
         form.addParam('eerGroup', params.IntParam, default=32,
                       label='EER fractionation',
                       help="The number of hardware frames to group into one "
@@ -250,7 +251,6 @@ class ProtMotionCorr(ProtAlignMovies):
                            "248 frames/s.\nFractionate such that each fraction "
                            "has about 0.5 to 1.25 e/A2.")
         form.addParam('eerSampling', params.EnumParam, default=0,
-                      expertLevel=cons.LEVEL_ADVANCED,
                       choices=['1x', '2x', '4x'],
                       display=params.EnumParam.DISPLAY_HLIST,
                       label='EER upsampling',
@@ -305,13 +305,11 @@ class ProtMotionCorr(ProtAlignMovies):
         logFileBase = self._getMovieRoot(movie) + "_"
         frame0, frameN = self._getFrameRange()
         _, numbOfFrames, _ = inputMovies.getFramesRange()
-        if self.isEER:
-            numbOfFrames //= self.eerGroup.get()
 
         argsDict = self._getArgs()
         argsDict.update({'-OutMrc': '"%s"' % outputMicFn,
-                         '-Throw': '%d' % (frame0 - 1),
-                         '-Trunc': '%d' % (numbOfFrames - frameN),
+                         '-Throw': '%d' % 0 if self.isEER else (frame0 - 1),
+                         '-Trunc': '%d' % 0 if self.isEER else (numbOfFrames - frameN),
                          '-LogFile': logFileBase,
                          })
 
@@ -417,9 +415,10 @@ class ProtMotionCorr(ProtAlignMovies):
         _, lastFrame, _ = inputMovies.getFramesRange()
         self.isEER = pwutils.getExt(firstMovie.getFileName()) == ".eer"
         if self.isEER:
-            lastFrame //= self.eerGroup.get()
             if not self.versionGE('1.4.0'):
                 errors.append("EER is only supported for motioncor2 v1.4.0 or newer.")
+            if self.alignFrame0.get() != 1 or self.alignFrameN.get() not in [0, lastFrame]:
+                errors.append("For EER data please set frame range from 1 to 0 (or 1 to %d)." % lastFrame)
 
         msg = "Frames range must be within %d - %d" % (1, lastFrame)
         if self.alignFrameN.get() == 0:
@@ -490,7 +489,8 @@ class ProtMotionCorr(ProtAlignMovies):
                     '-kV': inputMovies.getAcquisition().getVoltage(),
                     '-OutStack': 1 if self.doSaveMovie else 0,
                     '-Gpu': '%(GPU)s',
-                    '-SumRange': "0.0 0.0",  # switch off writing out DWS
+                    '-SumRange': "0.0 0.0",  # switch off writing out DWS,
+                    #'-FmRef': 0
                     }
 
         if self.isEER:
@@ -608,7 +608,7 @@ class ProtMotionCorr(ProtAlignMovies):
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
         shiftsX, shiftsY = self._getMovieShifts(movie)
-        first, _ = self._getFrameRange(movie.getNumberOfFrames(), 'align')
+        first, _ = self._getFrameRange()
         plotter = createGlobalAlignmentPlot(shiftsX, shiftsY, first, pixSize)
         plotter.savefig(self._getPlotGlobal(movie))
         plotter.close()
@@ -702,7 +702,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _getFrameRange(self, n=None, prefix=None):
         # Reimplement this method
-        return self.alignFrame0.get(), self.alignFrameN.get()
+        if self.isEER:
+            return self.alignFrame0.get(), self.alignFrameN.get() // self.eerGroup.get()
+        else:
+            return self.alignFrame0.get(), self.alignFrameN.get()
 
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
