@@ -48,9 +48,10 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
                                       magnification=105000,
                                       sphericalAberration=2.7,
                                       amplitudeContrast=0.1,
-                                      samplingRate=1.35,
+                                      samplingRate=0.675,
                                       doseInitial=0,
-                                      dosePerFrame=0.3)
+                                      dosePerFrame=0.375,
+                                      tiltAxisAngle=84.1)
         self.launchProtocol(protImport)
         return protImport
 
