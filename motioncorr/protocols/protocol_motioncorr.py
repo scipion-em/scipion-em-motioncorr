@@ -638,7 +638,7 @@ class ProtMotionCorr(ProtAlignMovies):
         """ Redefine this method to set EER attrs. """
         first = getattr(self, '_firstUpdate', True)
 
-        if first and self.isEER and outputName == 'outputMovies':
+        if first and outputName == 'outputMovies':
             og = OpticsGroups.fromImages(outputSet)
             if self.isEER:
                 og.updateAll(rlnEERGrouping=self.eerGroup.get(),
