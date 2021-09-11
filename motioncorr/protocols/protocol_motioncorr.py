@@ -640,8 +640,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if first and self.isEER and outputName == 'outputMovies':
             og = OpticsGroups.fromImages(outputSet)
-            og.updateAll(rlnEERGrouping=self.eerGroup.get(),
-                         rlnEERUpsampling=self.eerSampling.get() + 1)
+            if self.isEER:
+                og.updateAll(rlnEERGrouping=self.eerGroup.get(),
+                             rlnEERUpsampling=self.eerSampling.get() + 1)
+            og.updateAll(rlnMicrographStartFrame=self.alignFrame0.get())
             og.toImages(outputSet)
 
         ProtAlignMovies._updateOutputSet(self, outputName, outputSet,

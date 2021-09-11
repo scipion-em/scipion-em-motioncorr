@@ -29,9 +29,7 @@ import xml.etree.ElementTree as ET
 
 
 def parseMovieAlignment2(logFile):
-    """ Get global frame shifts relative to the first frame
-    (for the plots)
-    """
+    """ Get global frame shifts relative to the first frame. """
     first = None
     xshifts = []
     yshifts = []
@@ -45,6 +43,10 @@ def parseMovieAlignment2(logFile):
                 # take the shifts from the last two columns of the line
                 xshifts.append(float(parts[1]))
                 yshifts.append(float(parts[2]))
+
+    xoff, yoff = -xshifts[0], -yshifts[0]
+    xshifts = [x + xoff for x in xshifts]
+    yshifts = [y + yoff for y in yshifts]
 
     return xshifts, yshifts
 
