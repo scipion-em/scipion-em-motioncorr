@@ -1,5 +1,11 @@
 3.2:
-    - EER support added
+    - EER support added:
+        - eer gain file header is parsed to locate defects and prepare defects_eer.txt for mc2
+        - eer gain file is converted to mrc as required by mc2
+        - optics groups are imported from relion plugin
+        - rlnEERGrouping and rlnEERUpsampling are saved in the opticsGroupInfo for output movie set (required for polishing)
+        - rlnMicrographFirstFrame is saved in the opticsGroupInfo
+        - save global frame shifts relative to the first frame
 3.1.1:
     - added tiltseries motioncorr protocol
     - update mc2 to 1.4.2
