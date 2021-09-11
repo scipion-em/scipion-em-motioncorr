@@ -48,6 +48,7 @@ from pwem.protocols import ProtAlignMovies
 from .. import Plugin
 from ..constants import *
 from ..convert import *
+from relion.convert.convert31 import OpticsGroups
 
 
 class ProtMotionCorr(ProtAlignMovies):
