@@ -6,6 +6,7 @@
         - rlnEERGrouping and rlnEERUpsampling are saved in the opticsGroupInfo for output movie set (required for polishing)
         - rlnMicrographFirstFrame is saved in the opticsGroupInfo
         - save global frame shifts relative to the first frame
+        - update mc2 to 1.4.4
 3.1.1:
     - added tiltseries motioncorr protocol
     - update mc2 to 1.4.2
