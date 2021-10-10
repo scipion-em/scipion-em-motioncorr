@@ -24,11 +24,12 @@
 # *
 # **************************************************************************
 
+from tifffile import TiffFile
+import xml.etree.ElementTree as ET
+
 
 def parseMovieAlignment2(logFile):
-    """ Get global frame shifts relative to the first frame
-    (for the plots)
-    """
+    """ Get global frame shifts relative to the first frame. """
     first = None
     xshifts = []
     yshifts = []
@@ -42,6 +43,10 @@ def parseMovieAlignment2(logFile):
                 # take the shifts from the last two columns of the line
                 xshifts.append(float(parts[1]))
                 yshifts.append(float(parts[2]))
+
+    xoff, yoff = -xshifts[0], -yshifts[0]
+    xshifts = [x + xoff for x in xshifts]
+    yshifts = [y + yoff for y in yshifts]
 
     return xshifts, yshifts
 
@@ -58,3 +63,44 @@ def getMovieFileName(movie):
         fn += ':ems'
 
     return fn
+
+
+def parseEERDefects(fn):
+    """ Extract defects coords from XML metadata inside EER *.gain file. """
+    defects = []  # x y w h
+
+    if not fn.endswith(".gain"):
+        return defects
+
+    print("Parsing defects from EER gain file..")
+
+    with TiffFile(fn) as tif:
+        for page in tif.pages:
+            for tag in page.tags:
+                if tag.code == 65100:  # TFS EER gain Metadata
+                    gainStr = tag.value
+                    break
+            break
+
+    for item in ET.fromstring(gainStr.decode('utf-8')):
+        if item.tag == "point":
+            point = item.text.split(",")
+            defects.append((point[0], point[1], 1, 1))
+        elif item.tag == "area":
+            area = item.text.split(",")
+            defects.append((area[0],
+                            area[1],
+                            int(area[2])-int(area[0])+1,
+                            int(area[3])-int(area[1])+1))
+        elif item.tag == "col":
+            area = item.text.split("-")
+            defects.append((area[0],
+                            0,
+                            int(area[1])-int(area[0])+1,
+                            4096))
+        elif item.tag == "row":
+            area = item.text.split("-")
+            defects.append((0, area[0], 0, 4096,
+                            int(area[1])-int(area[0])+1))
+
+    return defects

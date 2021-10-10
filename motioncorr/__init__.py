@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.1.1'
+__version__ = '3.2'
 _references = ['Zheng2017']
 
 
@@ -40,13 +40,13 @@ class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
     _supportedVersions = ['1.2.6', '1.3.0', '1.3.1',
-                          '1.3.2', '1.4.0', '1.4.2']
+                          '1.3.2', '1.4.0', '1.4.2', '1.4.4']
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.4.2')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.4.2_Cuda101-02-15-2020')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.4.4')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.4.4_Cuda101-08-11-2021')
         cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
@@ -66,21 +66,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('motioncor2', version='1.2.6',
-                       tar='motioncor2-1.2.6.tgz')
-
-        env.addPackage('motioncor2', version='1.3.0',
-                       tar='motioncor2-1.3.0.tgz')
-
-        env.addPackage('motioncor2', version='1.3.1',
-                       tar='motioncor2-1.3.1.tgz')
-
-        env.addPackage('motioncor2', version='1.3.2',
-                       tar='motioncor2-1.3.2.tgz')
-
-        env.addPackage('motioncor2', version='1.4.0',
-                       tar='motioncor2-1.4.0.tgz')
-
-        env.addPackage('motioncor2', version='1.4.2',
-                       tar='motioncor2-1.4.2.tgz',
-                       default=True)
+        for v in cls._supportedVersions:
+            env.addPackage('motioncor2', version=v,
+                           tar='motioncor2-%s.tgz' % v,
+                           default=v == '1.4.4')

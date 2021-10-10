@@ -26,18 +26,11 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
         :target: https://pypi.python.org/pypi/scipion-em-motioncorr
         :alt: Downloads
 
-
-+--------------+----------------+--------------------+
-| prod: |prod| | devel: |devel| | support: |support| |
-+--------------+----------------+--------------------+
-
-.. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_prod.svg
-.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_devel.svg
-.. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/motioncorr_support.svg
-
 **IMPORTANT!**
 
-    If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`bug details <https://github.com/I2PC/xmippCore/issues/39>`_)
+    1. If you have imported movies with a gain file in **DM4** format, you need to **flip the gain reference upside-down** in the motioncor2 protocol! (`see details <https://github.com/I2PC/xmippCore/issues/39>`_)
+    2. When importing EER movies, you should specify dose per single EER frame during import step.
+    3. If you are processing EER movies and providing *.gain reference file camera defects will be automatically extracted from the gain file header and converted to Motioncor2 format. This step is omitted if you provide a defects file yourself.
 
 Installation
 ------------
@@ -65,8 +58,8 @@ b) Developer's version
       scipion installp -p path_to_scipion-em-motioncorr --devel
 
 Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/motioncor2-1.4.2``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
-the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.4.2_Cuda101-02-15-2020``
+Default installation path assumed is ``software/em/motioncor2-1.4.4``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
+the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.4.4_Cuda101-08-11-2021``
 to a different one by explicitly setting *MOTIONCOR2_BIN* variable. If you need to use CUDA different from the one used during Scipion installation
 (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
@@ -74,10 +67,18 @@ To check the installation, simply run the following Scipion test:
 
 ``scipion test motioncorr.tests.test_protocols_motioncor2.TestMotioncor2AlignMovies``
 
+Licensing
+---------
+
+Motioncor2 is free for academic use only. For commercial use, please contact David Agard or Yifan Cheng for licensing:
+
+    * agard@msg.ucsf.edu
+    * Yifan.Cheng@ucsf.edu
+
 Supported versions
 ------------------
 
-1.2.6, 1.3.0, 1.3.1, 1.3.2, 1.4.0, 1.4.2
+1.2.6, 1.3.0, 1.3.1, 1.3.2, 1.4.0, 1.4.2, 1.4.4
 
 Protocols
 ---------
