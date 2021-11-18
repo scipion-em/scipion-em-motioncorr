@@ -78,7 +78,7 @@ Motioncor2 is free for academic use only. For commercial use, please contact Dav
 Supported versions
 ------------------
 
-1.2.6, 1.3.0, 1.3.1, 1.3.2, 1.4.0, 1.4.2, 1.4.4, 1.4.5
+1.4.0, 1.4.2, 1.4.4, 1.4.5
 
 Protocols
 ---------
