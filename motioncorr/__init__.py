@@ -39,8 +39,7 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.2.6', '1.3.0', '1.3.1',
-                          '1.3.2', '1.4.0', '1.4.2', '1.4.4', '1.4.5']
+    _supportedVersions = ['1.4.2', '1.4.4', '1.4.5']
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
