@@ -1,3 +1,4 @@
+3.3: update mc2 to 1.4.5
 3.2:
     - EER support added:
         - eer gain file header is parsed to locate defects and prepare defects_eer.txt for mc2
