@@ -32,20 +32,20 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.3'
+__version__ = '3.4'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_HOME]
-    _supportedVersions = ['1.4.0', '1.4.2', '1.4.4', '1.4.5']
+    _supportedVersions = ['1.4.0', '1.4.2', '1.4.4', '1.4.5', '1.4.7']
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.4.5')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.4.5_Cuda101-10-22-2021')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.4.7')
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.4.7_Cuda102_12-09-2021')
         cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
@@ -68,4 +68,4 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             env.addPackage('motioncor2', version=v,
                            tar='motioncor2-%s.tgz' % v,
-                           default=v == '1.4.5')
+                           default=v == '1.4.7')
