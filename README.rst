@@ -35,7 +35,7 @@ Motioncor2 is a GPU-accelerated program for correction of electron beam-induced 
 Installation
 ------------
 
-You will need to use `3.0 <https://github.com/I2PC/scipion/releases/tag/V3.0.0>`_ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
+You will need to use 3.0+ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
 
 a) Stable version
 
@@ -58,8 +58,8 @@ b) Developer's version
       scipion installp -p path_to_scipion-em-motioncorr --devel
 
 Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/motioncor2-1.4.5``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
-the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.4.5_Cuda101-10-22-2021``
+Default installation path assumed is ``software/em/motioncor2-1.4.7``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
+the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.4.7_Cuda102_12-09-2021``
 to a different one by explicitly setting *MOTIONCOR2_BIN* variable. If you need to use CUDA different from the one used during Scipion installation
 (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
@@ -78,7 +78,7 @@ Motioncor2 is free for academic use only. For commercial use, please contact Dav
 Supported versions
 ------------------
 
-1.4.0, 1.4.2, 1.4.4, 1.4.5
+1.4.0, 1.4.2, 1.4.4, 1.4.5, 1.4.7
 
 Protocols
 ---------

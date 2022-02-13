@@ -302,16 +302,20 @@ class ProtMotionCorr(ProtAlignMovies):
         movieFolder = self._getOutputMovieFolder(movie)
         outputMicFn = self._getOutputMicName(movie)
         program = self._getProgram()
-        logFileBase = self._getMovieRoot(movie) + "_"
         frame0, frameN = self._getFrameRange()
         _, numbOfFrames, _ = inputMovies.getFramesRange()
 
         argsDict = self._getArgs()
         argsDict.update({'-OutMrc': '"%s"' % outputMicFn,
                          '-Throw': '%d' % 0 if self.isEER else (frame0 - 1),
-                         '-Trunc': '%d' % 0 if self.isEER else (numbOfFrames - frameN),
-                         '-LogFile': logFileBase,
+                         '-Trunc': '%d' % 0 if self.isEER else (numbOfFrames - frameN)
                          })
+
+        if self.versionGE('1.4.7'):
+            argsDict.update({'-LogDir': './'})
+        else:
+            logFileBase = self._getMovieRoot(movie) + "_"
+            argsDict.update({'-LogFile': logFileBase})
 
         ext = pwutils.getExt(movie.getFileName()).lower()
         if ext in ['.mrc', '.mrcs']:
@@ -490,7 +494,7 @@ class ProtMotionCorr(ProtAlignMovies):
                     '-OutStack': 1 if self.doSaveMovie else 0,
                     '-Gpu': '%(GPU)s',
                     '-SumRange': "0.0 0.0",  # switch off writing out DWS,
-                    #'-FmRef': 0
+                    # '-FmRef': 0
                     }
 
         if self.isEER:
@@ -544,9 +548,14 @@ class ProtMotionCorr(ProtAlignMovies):
 
     def _getMovieLogFile(self, movie):
         if self.patchX == 0 and self.patchY == 0:
-            return '%s_0-Full.log' % self._getMovieRoot(movie)
+            return '%s%s-Full.log' % (self._getMovieRoot(movie),
+                                      self._getLogSuffix())
         else:
-            return '%s_0-Patch-Full.log' % self._getMovieRoot(movie)
+            return '%s%s-Patch-Full.log' % (self._getMovieRoot(movie),
+                                            self._getLogSuffix())
+
+    def _getLogSuffix(self):
+        return '_aligned_mic' if self.versionGE('1.4.7') else '_0'
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
