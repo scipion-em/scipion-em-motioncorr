@@ -1,7 +1,6 @@
+from pyworkflow.utils import weakImport
+
 from .test_protocols_motioncor2 import TestMotioncor2AlignMovies
 
-try:
+with weakImport('tomo'):
     from .test_protocols_tomo import TestMotioncor2TiltSeriesAlignMovies
-except Exception as e:
-    if "'tomo'" not in str(e):
-        raise e

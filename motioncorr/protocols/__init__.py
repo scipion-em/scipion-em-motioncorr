@@ -24,5 +24,9 @@
 # *
 # **************************************************************************
 
+from pyworkflow.utils import weakImport
+
 from .protocol_motioncorr import ProtMotionCorr
-from .protocol_ts_motioncor import ProtTsMotionCorr
+
+with weakImport('tomo'):
+    from .protocol_ts_motioncor import ProtTsMotionCorr
