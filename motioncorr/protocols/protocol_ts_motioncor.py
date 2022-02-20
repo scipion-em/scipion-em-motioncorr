@@ -214,8 +214,8 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         }
 
         if self.doApplyDoseFilter:
-            argsDict.update({'-FmDose': dosePerFrame,
-                             '-InitDose': initialDose + order * dosePerFrame})
+            argsDict.update({'-FmDose': dosePerFrame/numbOfFrames,
+                             '-InitDose': initialDose + (order - 1) * dosePerFrame})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
