@@ -48,6 +48,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
     _label = 'align tilt-series movies'
     _devStatus = BETA
+    evenOddCapable = True
 
     def __init__(self, **args):
         ProtTsCorrectMotion.__init__(self, **args)
@@ -99,7 +100,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                       label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.5px*.')
 
-        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
+        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
                       condition='doApplyDoseFilter',
                       label="Save unweighted micrographs?",
                       help="Aligned but non-dose weighted images are sometimes "
@@ -178,9 +179,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         self.info("outputFn: %s" % outputFn)
         self.info("outputFn (rel): %s" % _getPath(outputFn))
 
-        logFile = self._getPath(self._getMovieLogFile(tiltImageM))
         a0, aN = self._getRange(tiltImageM, 'align')
-        logFileBase = logFile.replace('0-Full.log', '').replace('0-Patch-Full.log', '')
 
         # default values for motioncor2 are (1, 1)
         cropDimX = self.cropDimX.get() or 1
@@ -208,14 +207,16 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
             '-PixSize': tiltImageM.getSamplingRate(),
             '-kV': tiltImageM.getAcquisition().getVoltage(),
-            '-LogFile': logFileBase,
             '-OutStack': 0,
             '-SumRange': "0.0 0.0",  # switch off writing out DWS
         }
 
+        if self.splitEvenOdd:
+            argsDict['-SplitSum'] = 1
+
         if self.doApplyDoseFilter:
-            argsDict.update({'-FmDose': dosePerFrame,
-                             '-InitDose': initialDose + order * dosePerFrame})
+            argsDict.update({'-FmDose': dosePerFrame/numbOfFrames,
+                             '-InitDose': initialDose + (order - 1) * dosePerFrame})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
@@ -236,6 +237,12 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
         self.info("inputFn: %s" % tiFn)
         self.info("inputFn (rel): %s" % _getPath(inputFn))
+
+        if Plugin.versionGE('1.4.7'):
+            argsDict.update({'-LogDir': './'})
+        else:
+            logFileBase = pwutils.removeBaseExt(outputFn) + "_"
+            argsDict.update({'-LogFile': logFileBase})
 
         ext = pwutils.getExt(inputFn).lower()
 
@@ -264,12 +271,45 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
                     cwd=workingFolder,
                     env=Plugin.getEnviron())
 
+        # Move output log to extra dir
+        logFn = os.path.join(workingFolder, self._getMovieLogFile(tiltImageM))
+        logFnExtra = self._getExtraPath(self._getMovieLogFile(tiltImageM))
+        pwutils.moveFile(logFn, logFnExtra)
+
+        if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
+            pwutils.cleanPath(outputFn)
+
+    def processTiltImageStep(self, tsId, tiltImageId, *args):
+        tiltImageM = self._tsDict.getTi(tsId, tiltImageId)
+        workingFolder = self._getTmpPath(self._getTiltImageMRoot(tiltImageM))
+        pwutils.makePath(workingFolder)
+        self._processTiltImageM(workingFolder, tiltImageM, *args)
+
+        if self._doSplitEvenOdd():
+            baseName = self._getTiltImageMRoot(tiltImageM)
+            evenName = os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc'))
+            oddName = os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc'))
+
+            # Store the corresponding tsImM to use its data later in the even/odd TS
+            self.tsMList.append(tiltImageM)
+
+            # Update even and odd average lists
+            self.evenAvgFrameList.append(evenName)
+            self.oddAvgFrameList.append(oddName)
+
+        tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
+        if not os.path.exists(tiFn):
+            raise Exception("Expected output file '%s' not produced!" % tiFn)
+
+        if not pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
+            pwutils.cleanPath(workingFolder)
+
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
 
         if hasattr(self, 'outputTiltSeries'):
-            summary.append('Aligned %d tiltseries movies using motioncor2.'
+            summary.append('Aligned %d tilt series movies using motioncor2.'
                            % self.inputTiltSeriesM.get().getSize())
         else:
             summary.append('Output is not ready')
@@ -297,7 +337,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             doseFrame = inputTs.getAcquisition().getDosePerFrame()
 
             if doseFrame < 0.00001 or doseFrame is None:
-                errors.append('Dose per frame for input movies is 0 or not '
+                errors.append('Dose per tilt for input TS movies is 0 or not '
                               'set. You cannot apply dose filter.')
 
         return errors
@@ -305,8 +345,12 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
     # --------------------------- UTILS functions -----------------------------
     def _getMovieLogFile(self, tiltImageM):
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s_0%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
+        return '%s%s%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
+                                    self._getLogSuffix(),
                                     '-Patch' if usePatches else '')
+
+    def _getLogSuffix(self):
+        return '' if Plugin.versionGE('1.4.7') else '_0'
 
     def _getRange(self, movie, prefix):
         n = self._getNumberOfFrames(movie)

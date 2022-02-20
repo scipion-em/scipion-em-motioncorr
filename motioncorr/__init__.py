@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.4'
+__version__ = '3.5'
 _references = ['Zheng2017']
 
 
@@ -52,6 +52,20 @@ class Plugin(pwem.Plugin):
     def getProgram(cls):
         return os.path.join(cls.getHome('bin'),
                             os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
+
+    @classmethod
+    def versionGE(cls, version):
+        """ Return True if current version of motioncor2 is greater
+         or equal than the input argument.
+         Params:
+            version: string version (semantic version, e.g 1.0.1)
+        """
+        v1 = int(Plugin.getActiveVersion().replace('.', ''))
+        v2 = int(version.replace('.', ''))
+
+        if v1 < v2:
+            return False
+        return True
 
     @classmethod
     def getEnviron(cls):

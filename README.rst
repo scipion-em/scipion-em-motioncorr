@@ -55,7 +55,7 @@ b) Developer's version
    
    .. code-block::
 
-      scipion installp -p path_to_scipion-em-motioncorr --devel
+      scipion installp -p /path/to/scipion-em-motioncorr --devel
 
 Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation. 
 Default installation path assumed is ``software/em/motioncor2-1.4.7``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
