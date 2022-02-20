@@ -65,8 +65,6 @@ class ProtMotionCorr(ProtAlignMovies):
         self.stepsExecutionMode = STEPS_PARALLEL
         self.isEER = False
 
-
-
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
