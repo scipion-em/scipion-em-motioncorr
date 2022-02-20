@@ -178,9 +178,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         self.info("outputFn: %s" % outputFn)
         self.info("outputFn (rel): %s" % _getPath(outputFn))
 
-        logFile = self._getPath(self._getMovieLogFile(tiltImageM))
         a0, aN = self._getRange(tiltImageM, 'align')
-        logFileBase = logFile.replace('0-Full.log', '').replace('0-Patch-Full.log', '')
 
         # default values for motioncor2 are (1, 1)
         cropDimX = self.cropDimX.get() or 1
@@ -208,7 +206,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             '-Trunc': '%d' % (abs(aN - numbOfFrames + 1)),
             '-PixSize': tiltImageM.getSamplingRate(),
             '-kV': tiltImageM.getAcquisition().getVoltage(),
-            '-LogFile': logFileBase,
             '-OutStack': 0,
             '-SumRange': "0.0 0.0",  # switch off writing out DWS
         }
@@ -236,6 +233,12 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
         self.info("inputFn: %s" % tiFn)
         self.info("inputFn (rel): %s" % _getPath(inputFn))
+
+        if Plugin.versionGE('1.4.7'):
+            argsDict.update({'-LogDir': './'})
+        else:
+            logFileBase = pwutils.removeBaseExt(tiFn) + "_"
+            argsDict.update({'-LogFile': logFileBase})
 
         ext = pwutils.getExt(inputFn).lower()
 

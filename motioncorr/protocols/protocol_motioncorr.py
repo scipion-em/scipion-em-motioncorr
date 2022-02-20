@@ -65,18 +65,7 @@ class ProtMotionCorr(ProtAlignMovies):
         self.stepsExecutionMode = STEPS_PARALLEL
         self.isEER = False
 
-    def versionGE(self, version):
-        """ Return True if current version of motioncor2 is greater
-         or equal than the input argument.
-         Params:
-            version: string version (semantic version, e.g 1.0.1)
-        """
-        v1 = int(self._getVersion().replace('.', ''))
-        v2 = int(version.replace('.', ''))
 
-        if v1 < v2:
-            return False
-        return True
 
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
@@ -301,7 +290,7 @@ class ProtMotionCorr(ProtAlignMovies):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
         outputMicFn = self._getOutputMicName(movie)
-        program = self._getProgram()
+        program = Plugin.getProgram()
         frame0, frameN = self._getFrameRange()
         _, numbOfFrames, _ = inputMovies.getFramesRange()
 
@@ -311,7 +300,7 @@ class ProtMotionCorr(ProtAlignMovies):
                          '-Trunc': '%d' % 0 if self.isEER else (numbOfFrames - frameN)
                          })
 
-        if self.versionGE('1.4.7'):
+        if Plugin.versionGE('1.4.7'):
             argsDict.update({'-LogDir': './'})
         else:
             logFileBase = self._getMovieRoot(movie) + "_"
@@ -419,7 +408,7 @@ class ProtMotionCorr(ProtAlignMovies):
         _, lastFrame, _ = inputMovies.getFramesRange()
         self.isEER = pwutils.getExt(firstMovie.getFileName()) == ".eer"
         if self.isEER:
-            if not self.versionGE('1.4.0'):
+            if not Plugin.versionGE('1.4.0'):
                 errors.append("EER is only supported for motioncor2 v1.4.0 or newer.")
             if self.alignFrame0.get() != 1 or self.alignFrameN.get() not in [0, lastFrame]:
                 errors.append("For EER data please set frame range from 1 to 0 (or 1 to %d)." % lastFrame)
@@ -537,25 +526,17 @@ class ProtMotionCorr(ProtAlignMovies):
         else:
             return self.binFactor.get() / (self.eerSampling.get() + 1)
 
-    def _getVersion(self):
-        return Plugin.getActiveVersion()
-
-    def _getProgram(self):
-        return Plugin.getProgram()
-
     def _getCwdPath(self, movie, path):
         return os.path.join(self._getOutputMovieFolder(movie), path)
 
     def _getMovieLogFile(self, movie):
-        if self.patchX == 0 and self.patchY == 0:
-            return '%s%s-Full.log' % (self._getMovieRoot(movie),
-                                      self._getLogSuffix())
-        else:
-            return '%s%s-Patch-Full.log' % (self._getMovieRoot(movie),
-                                            self._getLogSuffix())
+        usePatches = self.patchX != 0 or self.patchY != 0
+        return '%s%s%s-Full.log' % (self._getMovieRoot(movie),
+                                    self._getLogSuffix(),
+                                    '-Patch' if usePatches else '')
 
     def _getLogSuffix(self):
-        return '_aligned_mic' if self.versionGE('1.4.7') else '_0'
+        return '_aligned_mic' if Plugin.versionGE('1.4.7') else '_0'
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
