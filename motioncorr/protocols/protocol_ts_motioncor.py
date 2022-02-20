@@ -48,7 +48,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
     _label = 'align tilt-series movies'
     _devStatus = BETA
-    evenOddCapable = False
+    evenOddCapable = True
 
     def __init__(self, **args):
         ProtTsCorrectMotion.__init__(self, **args)
@@ -278,6 +278,31 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
         if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
             pwutils.cleanPath(outputFn)
+
+    def processTiltImageStep(self, tsId, tiltImageId, *args):
+        tiltImageM = self._tsDict.getTi(tsId, tiltImageId)
+        workingFolder = self._getTmpPath(self._getTiltImageMRoot(tiltImageM))
+        pwutils.makePath(workingFolder)
+        self._processTiltImageM(workingFolder, tiltImageM, *args)
+
+        if self._doSplitEvenOdd():
+            baseName = self._getTiltImageMRoot(tiltImageM)
+            evenName = os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc'))
+            oddName = os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc'))
+
+            # Store the corresponding tsImM to use its data later in the even/odd TS
+            self.tsMList.append(tiltImageM)
+
+            # Update even and odd average lists
+            self.evenAvgFrameList.append(evenName)
+            self.oddAvgFrameList.append(oddName)
+
+        tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
+        if not os.path.exists(tiFn):
+            raise Exception("Expected output file '%s' not produced!" % tiFn)
+
+        if not pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
+            pwutils.cleanPath(workingFolder)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
