@@ -241,7 +241,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         if Plugin.versionGE('1.4.7'):
             argsDict.update({'-LogDir': './'})
         else:
-            logFileBase = pwutils.removeBaseExt(tiFn) + "_"
+            logFileBase = pwutils.removeBaseExt(outputFn) + "_"
             argsDict.update({'-LogFile': logFileBase})
 
         ext = pwutils.getExt(inputFn).lower()

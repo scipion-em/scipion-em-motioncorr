@@ -2,6 +2,7 @@
     - use weakImport for tomo
     - fix DW for TS (not ready)
     - fix output log filenames
+    - implement odd/even sums for tomo
 3.4: update mc2 to 1.4.7
 3.3: update mc2 to 1.4.5
 3.2:
