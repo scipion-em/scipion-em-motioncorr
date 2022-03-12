@@ -509,7 +509,7 @@ class ProtMotionCorr(ProtAlignMovies):
                                                       self.angDist)
 
         if inputMovies.getGain():
-            argsDict.update({'-Gain': "%s" % inputMovies.getGain(),
+            argsDict.update({'-Gain': '"%s"' % inputMovies.getGain(),
                              '-RotGain': self.gainRot.get(),
                              '-FlipGain': self.gainFlip.get()})
 
