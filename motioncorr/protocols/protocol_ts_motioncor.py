@@ -312,6 +312,8 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         if hasattr(self, 'outputTiltSeries'):
             summary.append('Aligned %d tilt series movies using motioncor2.'
                            % self.inputTiltSeriesM.get().getSize())
+            if self.splitEvenOdd and self._createOutputWeightedTS():
+                summary.append('Even/odd outputs are dose-weighted!')
         else:
             summary.append('Output is not ready')
 
