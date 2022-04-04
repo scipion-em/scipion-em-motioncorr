@@ -1,3 +1,4 @@
+3.6 - implement odd/even sums for SPA
 3.5:
     - use weakImport for tomo
     - fix DW for TS (not ready)
