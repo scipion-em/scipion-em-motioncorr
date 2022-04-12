@@ -215,8 +215,9 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             argsDict['-SplitSum'] = 1
 
         if self.doApplyDoseFilter:
+            initDose = initialDose + (order - 1) * dosePerFrame
             argsDict.update({'-FmDose': dosePerFrame/numbOfFrames,
-                             '-InitDose': initialDose + (order - 1) * dosePerFrame})
+                             '-InitDose': initDose if initDose > 0.001 else 0})
 
         if self.defectFile.get():
             argsDict['-DefectFile'] = "%s" % self.defectFile.get()
@@ -311,6 +312,8 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         if hasattr(self, 'outputTiltSeries'):
             summary.append('Aligned %d tilt series movies using motioncor2.'
                            % self.inputTiltSeriesM.get().getSize())
+            if self.splitEvenOdd and self._createOutputWeightedTS():
+                summary.append('Even/odd outputs are dose-weighted!')
         else:
             summary.append('Output is not ready')
 
@@ -386,3 +389,6 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
         xShifts, yShifts = parseMovieAlignment2(logPath)
 
         return xShifts, yShifts
+
+    def _createOutputWeightedTS(self):
+        return self.doApplyDoseFilter

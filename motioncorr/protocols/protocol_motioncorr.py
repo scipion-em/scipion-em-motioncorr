@@ -59,6 +59,7 @@ class ProtMotionCorr(ProtAlignMovies):
     """
 
     _label = 'movie alignment'
+    evenOddCapable = True
 
     def __init__(self, **kwargs):
         ProtAlignMovies.__init__(self, **kwargs)
@@ -117,6 +118,14 @@ class ProtMotionCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED)
         line.addParam('cropDimY', params.IntParam, default=0, label='Y',
                       expertLevel=cons.LEVEL_ADVANCED)
+
+        if self.evenOddCapable:
+            form.addParam('splitEvenOdd', params.BooleanParam,
+                          default=False,
+                          label='Split & sum odd/even frames?',
+                          expertLevel=params.LEVEL_ADVANCED,
+                          help='Generate odd and even sums using odd and even frames '
+                               'respectively when this option is enabled.')
 
         form.addParam('doSaveMovie', params.BooleanParam, default=False,
                       label="Save aligned movie?")
@@ -304,6 +313,9 @@ class ProtMotionCorr(ProtAlignMovies):
             logFileBase = self._getMovieRoot(movie) + "_"
             argsDict.update({'-LogFile': logFileBase})
 
+        if self.splitEvenOdd:
+            argsDict['-SplitSum'] = 1
+
         ext = pwutils.getExt(movie.getFileName()).lower()
         if ext in ['.mrc', '.mrcs']:
             args = ' -InMrc "%s" ' % movie.getBaseName()
@@ -373,6 +385,8 @@ class ProtMotionCorr(ProtAlignMovies):
                 hasattr(self, 'outputMicrographsDoseWeighted'):
             summary.append('Aligned %d movies using motioncor2.'
                            % self.inputMovies.get().getSize())
+            if self.splitEvenOdd and self._createOutputWeightedMicrographs():
+                summary.append('Even/odd outputs are dose-weighted!')
         else:
             summary.append('Output is not ready')
 
@@ -509,7 +523,7 @@ class ProtMotionCorr(ProtAlignMovies):
                                                       self.angDist)
 
         if inputMovies.getGain():
-            argsDict.update({'-Gain': "%s" % inputMovies.getGain(),
+            argsDict.update({'-Gain': '"%s"' % inputMovies.getGain(),
                              '-RotGain': self.gainRot.get(),
                              '-FlipGain': self.gainFlip.get()})
 
@@ -613,6 +627,10 @@ class ProtMotionCorr(ProtAlignMovies):
 
         if self._doSaveUnweightedMic():
             _moveToExtra(self._getOutputMicName(movie))
+
+        if self.splitEvenOdd:
+            _moveToExtra(self._getOutputMicEvenName(movie))
+            _moveToExtra(self._getOutputMicOddName(movie))
 
         if self.doSaveMovie:
             outputMicFn = self._getCwdPath(movie, self._getOutputMicName(movie))
