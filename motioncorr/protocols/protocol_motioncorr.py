@@ -619,11 +619,13 @@ class ProtMotionCorr(ProtAlignMovies):
         """ Move output from tmp to extra folder. """
         def _moveToExtra(fn):
             """ Move file from movies tmp folder to extra """
-            pwutils.moveFile(self._getCwdPath(movie, fn),
-                             self._getExtraPath(fn))
+            if os.path.exists(self._getCwdPath(movie, fn)):
+                pwutils.moveFile(self._getCwdPath(movie, fn),
+                                 self._getExtraPath(fn))
 
         _moveToExtra(self._getMovieLogFile(movie))
         _moveToExtra(self._getMicFn(movie))
+        _moveToExtra(pwutils.replaceExt(movie.getBaseName(), "star"))
 
         if self._doSaveUnweightedMic():
             _moveToExtra(self._getOutputMicName(movie))
