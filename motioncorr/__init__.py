@@ -47,13 +47,15 @@ class Plugin(pwem.Plugin):
         cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.5.0')
         cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
-        # Define the variable default value based on cuda vesion guess
+        # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR2_CUDA_LIB)
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.5.0_Cuda%s%s_05-31-2022' % (cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.5.0_Cuda%s%s_05-31-2022' % (
+            cudaVersion.major, cudaVersion.minor))
 
-        # Final progeam to use.
-        defaultProgram = os.path.join(cls.getHome('bin'), os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
-        cls._defineVar(MOTIONCOR2_PROGRAM,defaultProgram )
+        # Final program to use
+        defaultProgram = os.path.join(cls.getHome('bin'),
+                                      os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
+        cls._defineVar(MOTIONCOR2_PROGRAM, defaultProgram)
 
     @classmethod
     def getProgram(cls):
