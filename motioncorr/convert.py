@@ -26,6 +26,8 @@
 
 from tifffile import TiffFile
 import xml.etree.ElementTree as ET
+import logging
+logger = logging.getLogger(__name__)
 
 
 def parseMovieAlignment2(logFile):
@@ -72,7 +74,7 @@ def parseEERDefects(fn):
     if not fn.endswith(".gain"):
         return defects
 
-    print("Parsing defects from EER gain file..")
+    logger.info("Parsing defects from EER gain file..")
 
     with TiffFile(fn) as tif:
         for page in tif.pages:
