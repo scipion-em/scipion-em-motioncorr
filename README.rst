@@ -49,7 +49,7 @@ b) Developer's version
    
    .. code-block::
    
-      git clone https://github.com/scipion-em/scipion-em-motioncorr.git
+      git clone -b devel https://github.com/scipion-em/scipion-em-motioncorr.git
 
    * install
    
