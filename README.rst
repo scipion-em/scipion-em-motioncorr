@@ -57,13 +57,14 @@ b) Developer's version
 
       scipion installp -p /path/to/scipion-em-motioncorr --devel
 
-Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/motioncor2-1.5.0``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to
-the folder where the Motioncor2 is installed. Depending on your CUDA version you might want to change the default binary from ``MotionCor2_1.5.0_Cuda101_05-31-2022``
-to a different one by explicitly setting *MOTIONCOR2_BIN* variable. If you need to use CUDA different from the one used during Scipion installation
-(defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
+- Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation.
+- Default installation path assumed is ``software/em/motioncor2-1.5.0``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to the folder where the Motioncor2 is installed.
+- Depending on your CUDA version this plugin will guess the right default binary from ``MotionCor2_1.5.0_CudaXY_05-31-2022`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting *MOTIONCOR2_BIN* variable.
+- If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
-To check the installation, simply run the following Scipion test: 
+For an automatically updated installation of motioncor2 binaries, do not define neither *MOTIONCOR2_HOME* nor *MOTIONCOR2_BIN*.
+
+To check the installation, simply run the following Scipion test:
 
 ``scipion test motioncorr.tests.test_protocols_motioncor2.TestMotioncor2AlignMovies``
 

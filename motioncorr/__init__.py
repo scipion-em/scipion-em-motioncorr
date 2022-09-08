@@ -38,20 +38,28 @@ _references = ['Zheng2017']
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
-    _pathVars = [MOTIONCOR2_HOME]
+    _pathVars = [MOTIONCOR2_PROGRAM, MOTIONCOR2_CUDA_LIB]
     _supportedVersions = ['1.4.0', '1.4.2', '1.4.4', '1.4.5', '1.4.7', '1.5.0']
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.5.0')
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.5.0_Cuda101_05-31-2022')
         cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
+
+        # Define the variable default value based on the guessed cuda version
+        cudaVersion = cls.guessCudaVersion(MOTIONCOR2_CUDA_LIB)
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.5.0_Cuda%s%s_05-31-2022' % (
+            cudaVersion.major, cudaVersion.minor))
+
+        # Final program to use
+        defaultProgram = os.path.join(cls.getHome('bin'),
+                                      os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
+        cls._defineVar(MOTIONCOR2_PROGRAM, defaultProgram)
 
     @classmethod
     def getProgram(cls):
-        return os.path.join(cls.getHome('bin'),
-                            os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
+        return cls.getVar(MOTIONCOR2_PROGRAM)
 
     @classmethod
     def versionGE(cls, version):
