@@ -25,9 +25,9 @@
 # *
 # **************************************************************************
 
-from pyworkflow.tests import BaseTest, DataSet, setupTestProject
+from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import magentaStr
-
+from tomo.tests import DataSet  # initialization of tomo data set definition
 from tomo.protocols import ProtImportTsMovies
 from ..protocols import ProtTsMotionCorr
 
@@ -36,8 +36,7 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet(folder='tomo-em', name='tomo-em',
-                              files={'empiar': 'EMPIAR-10164'})
+        cls.dataset = DataSet.getDataSet('tomo-em')
         cls.getFileM = cls.dataset.getFile('empiar')
 
     def _runImportTiltSeriesM(self, filesPattern='{TS}_{TO}_{TA}.mrc'):
