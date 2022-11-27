@@ -1,3 +1,4 @@
+3.9: remove MOTIONCOR2_PROGRAM, improve validation msg
 3.8:
     - guess cuda binary version
     - set gain to output optics table if input movies had one
