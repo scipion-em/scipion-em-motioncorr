@@ -6,7 +6,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -102,7 +102,7 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
 
         form.addParam('doSaveUnweightedMic', params.BooleanParam, default=True,
                       condition='doApplyDoseFilter',
-                      label="Save unweighted micrographs?",
+                      label="Save unweighted tilt-series?",
                       help="Aligned but non-dose weighted images are sometimes "
                            "useful in CTF estimation, although there is no "
                            "difference in most cases.")
@@ -299,8 +299,8 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
             self.oddAvgFrameList.append(oddName)
 
         tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
-        if not os.path.exists(tiFn):
-            raise Exception("Expected output file '%s' not produced!" % tiFn)
+        if not os.path.exists(tiFn) and not os.path.exists(tiFnDW):
+            raise Exception("Expected output file(s) '%s' not produced!" % tiFn)
 
         if not pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
             pwutils.cleanPath(workingFolder)
