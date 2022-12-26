@@ -40,7 +40,7 @@ class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
     _pathVars = [MOTIONCOR2_CUDA_LIB]
     _supportedVersions = ['1.4.0', '1.4.2', '1.4.4', '1.4.5', '1.4.7', '1.5.0']
-    _url = "https://github.com/scipion-em/scipion-em-motioncorr"
+    _url = "https://emcore.ucsf.edu/ucsf-software"
 
     @classmethod
     def _defineVariables(cls):
