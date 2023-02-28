@@ -548,7 +548,13 @@ class ProtMotionCorr(ProtAlignMovies):
                                     '-Patch' if usePatches else '')
 
     def _getLogSuffix(self):
-        return '_aligned_mic' if Plugin.versionGE('1.4.7') else '_0'
+        """ Most annoying part... """
+        if Plugin.versionGE('1.6.2'):
+            return ''
+        elif Plugin.versionGE('1.4.7'):
+            return '_aligned_mic'
+        else:
+            return '_0'
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext

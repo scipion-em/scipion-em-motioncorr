@@ -348,12 +348,17 @@ class ProtTsMotionCorr(ProtTsCorrectMotion):
     # --------------------------- UTILS functions -----------------------------
     def _getMovieLogFile(self, tiltImageM):
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s%s%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
-                                    self._getLogSuffix(),
-                                    '-Patch' if usePatches else '')
 
-    def _getLogSuffix(self):
-        return '' if Plugin.versionGE('1.4.7') else '_0'
+        if Plugin.versionGE('1.6.2'):
+            return '%s%s-Full.log' % (pwutils.removeBaseExt(tiltImageM.getFileName()),
+                                      '-Patch' if usePatches else '')
+        elif Plugin.versionGE('1.4.7'):
+            suffix = ''
+        else:
+            suffix = '_0'
+
+        return '%s%s%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
+                                    suffix, '-Patch' if usePatches else '')
 
     def _getRange(self, movie, prefix):
         n = self._getNumberOfFrames(movie)
