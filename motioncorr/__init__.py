@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.10'
+__version__ = '3.10.1'
 _references = ['Zheng2017']
 
 
@@ -50,7 +50,7 @@ class Plugin(pwem.Plugin):
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR2_CUDA_LIB)
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.6.3_Cuda%s%s114_Feb18_2023' % (
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.6.3_Cuda%s%s_Feb18_2023' % (
             cudaVersion.major, cudaVersion.minor))
 
 
