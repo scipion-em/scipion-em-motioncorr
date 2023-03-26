@@ -122,8 +122,9 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             logFnExtra = self._getExtraPath(self._getMovieLogFile(tiltImageM))
             pwutils.moveFile(logFn, logFnExtra)
 
-            if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
-                pwutils.cleanPath(outputFn)
+            # FIXME: below not supported by ProtTsCorrectMotion
+            #if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
+            #    pwutils.cleanPath(outputFn)
 
         except Exception as e:
             self.error(f"ERROR: Motioncor2 has failed for {tiFn} --> {str(e)}\n")
@@ -168,6 +169,13 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             summary.append('Output is not ready')
 
         return summary
+
+    def _validate(self):
+        errors = ProtMotionCorrBase._validate(self)
+        if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
+            errors.append("Removing unweighted images is not supported for now.")
+
+        return errors
 
     # --------------------------- UTILS functions -----------------------------
     def getInputMovies(self):

@@ -32,6 +32,7 @@ from pyworkflow.protocol import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
 from pwem.protocols import EMProtocol
 from pwem.emlib.image import ImageHandler
+from pwem.objects import Movie
 
 from ..constants import NO_FLIP, NO_ROTATION
 from ..convert import parseMovieAlignment2, parseEERDefects
@@ -86,13 +87,13 @@ class ProtMotionCorrBase(EMProtocol):
         line.addParam('group', params.IntParam, default='1',
                       label='global align')
         if Plugin.versionGE("1.6.3"):
-            line.addParam('groupLocal', params.IntParam, default='1',
+            line.addParam('groupLocal', params.IntParam, default='4',
                           label='local align')
 
-        form.addParam('tol', params.FloatParam, default='0.5',
+        form.addParam('tol', params.FloatParam, default='0.2',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Tolerance (px)',
-                      help='Tolerance for iterative alignment, default *0.5px*.')
+                      help='Tolerance for iterative alignment, default *0.2px*.')
 
         form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
                       condition='doApplyDoseFilter',
@@ -194,6 +195,9 @@ class ProtMotionCorrBase(EMProtocol):
 
         # check if the first movie exists
         firstMovie = inputMovies.getFirstItem()
+        if not isinstance(firstMovie, Movie):
+            firstMovie = firstMovie.getFirstItem()
+
         if not os.path.exists(firstMovie.getFileName()):
             errors.append("The input movie files do not exist!!! "
                           "Since usually input movie files are symbolic links, "
