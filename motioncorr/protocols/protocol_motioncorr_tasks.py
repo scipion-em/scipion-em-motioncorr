@@ -34,9 +34,9 @@ from uuid import uuid4
 from collections import OrderedDict
 from datetime import datetime
 
-from emtools.utils import Pipeline
+from emtools.utils import Timer, Pipeline
 
-import pyworkflow.protocol.constants as cons
+from pyworkflow import SCIPION_DEBUG_NOCLEAN
 import pyworkflow.protocol.params as params
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
@@ -59,7 +59,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         (written by Shawn Zheng @ David Agard lab)
     """
 
-    _label = 'motioncor2 tasks'
+    _label = 'tasks'
 
     def __init__(self, **kwargs):
         ProtMotionCorr.__init__(self, **kwargs)
@@ -92,8 +92,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         return inputMovies
 
     def _processAllMoviesStep(self):
+        self.info("processing all movies............")
         self.program = Plugin.getProgram()
         self.command = self._getCmd()
+        self._firstTimeOutput = True  # FIXME check if there are already output
 
         mc = Pipeline()
         g = mc.addGenerator(self._generateBatches)
@@ -102,7 +104,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         for gpu in gpus[1:]:
             mc.addProcessor(g.outputQueue, self._getMcProcessor(gpu),
                             outputQueue=mc1.outputQueue)
-        moveQueue = mc1.outputQueue
+
+        o = mc.addProcessor(mc1.outputQueue, self._moveBatchOutput)
 
         mc.run()
 
@@ -142,8 +145,11 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _getMcProcessor(self, gpu):
         def _processBatch(batch):
             try:
-                cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
-                self.runJob(self.program, cmd, cwd=batch['path'])
+                n = len(batch['movies'])
+                with Timer(f'Ran motioncor batch of {n} movies'):
+                    cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
+                    self.runJob(self.program, cmd, cwd=batch['path'])
+                return batch
 
             except Exception as e:
                 self.error("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
@@ -153,6 +159,61 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         return _processBatch
 
+    def _moveBatchOutput(self, batch):
+        t = Timer()
+        srcDir = batch['path']
+        doClean = not pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN)
+        applyDose = self.doApplyDoseFilter
+        saveUnweighted = self._doSaveUnweightedMic()
+        usePatches = self.patchX != 0 or self.patchY != 0
+        logSuffix = '%s-Full.log' % ('-Patch' if usePatches else '')
+        newDone = []
+
+        def _moveToExtra(src, dst):
+            srcFn = os.path.join(srcDir, src)
+            dstFn = self._getExtraPath(dst)
+            #print(f"Moving {srcFn} -> {dstFn}\n\texists source: {os.path.exists(srcFn)}")
+            if os.path.exists(srcFn):
+                pwutils.moveFile(srcFn, dstFn)
+                return True
+            return False
+
+        def _moveMovieFiles(movie):
+            movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
+            a = b = False
+            if applyDose:
+                _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
+
+            if not applyDose or saveUnweighted:
+                _moveToExtra(movieRoot + '.mrc', self._getOutputMicName(movie))
+
+            if self.splitEvenOdd:
+                _moveToExtra(movieRoot + '_EVN.mrc',
+                             self._getOutputMicEvenName(movie))
+                _moveToExtra(movieRoot + '_ODD.mrc',
+                             self._getOutputMicOddName(movie))
+
+            done = _moveToExtra(movieRoot + logSuffix,
+                                self._getMovieLogFile(movie))
+            if done:
+                newDone.append(movie)
+
+        for movie in batch['movies']:
+            _moveMovieFiles(movie)
+
+        if newDone:
+            with Timer('Updated outputs'):
+                self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
+
+        self._firstTimeOutput = False
+
+        # Clean batch folder if not in debug mode
+        if doClean:
+            os.system('rm -rf %s' % batch['path'])
+
+        t.toc(f"Moved output for batch {batch['id']}")
+        return batch
+
     # --------------------------- INFO functions ------------------------------
 
     # --------------------------- UTILS functions -----------------------------
@@ -160,7 +221,6 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         """ Set return a command string that will be used for each batch. """
         inputMovies = self.getInputMovies()
         argsDict = self._getMcArgs()
-        print("gpu: ", argsDict['-Gpu'])
         argsDict['-Gpu'] = '#'
         argsDict['-Serial'] = 1
 
@@ -199,3 +259,52 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         cmd += self.extraParams2.get()
 
         return cmd
+
+    def _setPlotInfo(self, movie, mic):
+        # FIXME: For now not support PSD or Thumbnail
+        if self.doApplyDoseFilter:
+            total, early, late = self.calcFrameMotion(movie)
+            mic._rlnAccumMotionTotal = Float(total)
+            mic._rlnAccumMotionEarly = Float(early)
+            mic._rlnAccumMotionLate = Float(late)
+
+    def _getMovieRoot(self, movie):
+        return "mic_%06d" % movie.getObjId()
+
+    def _getOutputMovieName(self, movie):
+        """ Returns the name of the output movie.
+        (relative to micFolder)
+        """
+        return "movie_%06d" % movie.getObjId()
+
+    def _getOutputMicName(self, movie):
+        """ Returns the name of the output micrograph
+        (relative to micFolder)
+        """
+        return self._getMovieRoot(movie) + '.mrc'
+
+    def _getOutputMicWtName(self, movie):
+        """ Returns the name of the output dose-weighted micrograph
+        (relative to micFolder)
+        """
+        return self._getMovieRoot(movie) + '_DW.mrc'
+
+    def _getOutputMicEvenName(self, movie):
+        """ Returns the name of the output EVEN micrograph
+        (relative to micFolder)
+        """
+        return self._getMovieRoot(movie) + '_EVN.mrc'
+
+    def _getOutputMicOddName(self, movie):
+        """ Returns the name of the output EVEN micrograph
+        (relative to micFolder)
+        """
+        return self._getMovieRoot(movie) + '_ODD.mrc'
+
+    def _getOutputMicThumbnail(self, movie):
+        return self._getExtraPath(self._getMovieRoot(movie) + '_thumbnail.png')
+
+    def _getMovieLogFile(self, movie):
+        usePatches = self.patchX != 0 or self.patchY != 0
+        return '%s%s-Full.log' % (self._getMovieRoot(movie),
+                                  '-Patch' if usePatches else '')
