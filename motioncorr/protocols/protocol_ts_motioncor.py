@@ -74,24 +74,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         self.info(f"workingFolder: {workingFolder}")
         self.info(f"outputFn: {outputFn}")
 
-        argsDict = self._getMcArgs()
+        argsDict = self._getMcArgs(acqOrder=tiltImageM.getAcquisitionOrder())
         argsDict['-OutMrc'] = f'"{_getPath(outputFn)}"'
-
-        numbOfFrames = self._getNumberOfFrames()
-        dose = dosePerFrame / numbOfFrames if dosePerFrame else 0.0
-
-        if self.isEER:
-            argsDict['-EerSampling'] = self.eerSampling.get() + 1
-            argsDict['-FmIntFile'] = "FmIntFile.txt"
-
-            with open("FmIntFile.txt", "w") as f:
-                f.write(f"{numbOfFrames} {self.eerGroup.get()} {dose}")
-
-        elif self.doApplyDoseFilter:
-            order = tiltImageM.getAcquisitionOrder()
-            initDose = initialDose + (order - 1) * dosePerFrame
-            argsDict.update({'-FmDose': dose,
-                             '-InitDose': initDose if initDose > 0.001 else 0})
 
         tiFn = tiltImageM.getFileName()
         inputFn = os.path.abspath(tiFn)
@@ -101,14 +85,6 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         args = self._getInputFormat(inputFn, absPath=True)
         args += ' '.join(['%s %s' % (k, v)
                           for k, v in argsDict.items()])
-
-        if gain:
-            args += f' -Gain "{gain}" '
-            args += f' -RotGain {self.gainRot.get()}'
-            args += f' -FlipGain {self.gainFlip.get()}'
-
-        if dark:
-            args += f' -Dark "{dark}"'
 
         args += ' ' + self.extraParams2.get()
 

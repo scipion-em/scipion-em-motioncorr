@@ -187,6 +187,16 @@ class ProtMotionCorrBase(EMProtocol):
                 with open(self._getExtraPath("defects_eer.txt"), "w") as f:
                     for d in defects:
                         f.write(" ".join(str(i) for i in d) + "\n")
+        if self.isEER:
+            # write FmIntFile
+            numbOfFrames = self._getNumberOfFrames()
+            if self.doApplyDoseFilter:
+                _, dose = self._getCorrectedDose(self.getInputMovies(),
+                                                 acqOrder=1)
+            else:
+                dose = 0.0
+            with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
+                f.write(f"{numbOfFrames} {self.eerGroup.get()} {dose}")
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
@@ -262,7 +272,7 @@ class ProtMotionCorrBase(EMProtocol):
         """ Should be implemented in subclasses. """
         raise NotImplementedError
 
-    def _getMcArgs(self):
+    def _getMcArgs(self, acqOrder=None):
         """ Prepare most arguments for mc2 run. """
         inputMovies = self.getInputMovies()
 
@@ -297,6 +307,14 @@ class ProtMotionCorrBase(EMProtocol):
             # '-FmRef': 0
         }
 
+        if self.isEER:
+            argsDict['-EerSampling'] = self.eerSampling.get() + 1
+            argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
+        elif self.doApplyDoseFilter:
+            preExp, dose = self._getCorrectedDose(inputMovies, acqOrder)
+            argsDict.update({'-FmDose': dose,
+                             '-InitDose': preExp if preExp > 0.001 else 0})
+
         if Plugin.versionGE("1.6.3"):
             argsDict['-Group'] = f'{self.group.get()} {self.groupLocal.get()}'
         else:
@@ -304,13 +322,20 @@ class ProtMotionCorrBase(EMProtocol):
 
         if self.splitEvenOdd:
             argsDict['-SplitSum'] = 1
-
         if self.defectFile.get():
             argsDict['-DefectFile'] = self.defectFile.get()
         elif self.defectMap.get():
             argsDict['-DefectMap'] = self.defectMap.get()
         elif os.path.exists(self._getExtraPath("defects_eer.txt")):
             argsDict['-DefectFile'] = "../../extra/defects_eer.txt"
+
+        if inputMovies.getGain():
+            argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',
+                             '-RotGain': self.gainRot.get(),
+                             '-FlipGain': self.gainFlip.get()})
+
+        if inputMovies.getDark():
+            argsDict['-Dark'] = inputMovies.getDark()
 
         patchOverlap = self.getAttributeValue('patchOverlap')
         if patchOverlap:  # 0 or None is False
@@ -371,3 +396,19 @@ class ProtMotionCorrBase(EMProtocol):
             frames = self.getInputMovies().getFirstItem().getDim()[2]
 
         return frames
+
+    def _getCorrectedDose(self, movieSet, acqOrder=None):
+        """ Reimplement this because of a special tomo case. """
+        acq = movieSet.getAcquisition()
+        preExp = acq.getDoseInitial()
+        dose = acq.getDosePerFrame()
+
+        if acqOrder is not None:
+            # in tomo case dose = dosePerTilt
+            preExp += (acqOrder - 1) * dose
+            dosePerFrame = dose / self._getNumberOfFrames() if dose else 0.0
+            return preExp, dosePerFrame
+        else:
+            firstFrame, _, _ = movieSet.getFramesRange()
+            preExp += dose * (firstFrame - 1)
+            return preExp, dose

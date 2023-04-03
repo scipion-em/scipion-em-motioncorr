@@ -151,41 +151,15 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
     # --------------------------- STEPS functions -----------------------------
     def _convertInputStep(self):
         self._prepareEERFiles()
-        if self.isEER:
-            # write FmIntFile
-            numbOfFrames = self._getNumberOfFrames()
-            if self.doApplyDoseFilter:
-                _, dose = self._getCorrectedDose(self.getInputMovies())
-            else:
-                dose = 0.0
-            with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
-                f.write(f"{numbOfFrames} {self.eerGroup.get()} {dose}")
         ProtAlignMovies._convertInputStep(self)
 
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
         outputMicFn = self._getOutputMicName(movie)
-        program = Plugin.getProgram()
 
         argsDict = self._getMcArgs()
         argsDict['-OutMrc'] = f'"{outputMicFn}"'
-
-        if self.isEER:
-            argsDict['-EerSampling'] = self.eerSampling.get() + 1
-            argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-        elif self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-            argsDict.update({'-FmDose': dose,
-                             '-InitDose': preExp if preExp > 0.001 else 0})
-
-        if inputMovies.getGain():
-            argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',
-                             '-RotGain': self.gainRot.get(),
-                             '-FlipGain': self.gainFlip.get()})
-
-        if inputMovies.getDark():
-            argsDict['-Dark'] = inputMovies.getDark()
 
         args = self._getInputFormat(movie.getFileName())
         args += ' '.join(['%s %s' % (k, v)
@@ -193,7 +167,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         args += ' ' + self.extraParams2.get()
 
         try:
-            self.runJob(program, args, cwd=movieFolder,
+            self.runJob(Plugin.getProgram(), args, cwd=movieFolder,
                         env=Plugin.getEnviron())
 
             self._moveOutput(movie)
