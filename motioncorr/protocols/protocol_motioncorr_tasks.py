@@ -81,15 +81,21 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     def _loadInputMovies(self):
         inputMovies = OrderedDict()
-        moviesFile = self.getInputMovies().getFileName()
-        movieSet = SetOfMovies(filename=moviesFile)
-        movieSet.loadAllProperties()
-        for m in movieSet:
-            mid = m.getObjId()
-            if mid not in inputMovies:
-                inputMovies[mid] = m.clone()
-        movieSet.close()
-        return inputMovies
+        while True:
+            moviesFile = self.getInputMovies().getFileName()
+            movieSet = SetOfMovies(filename=moviesFile)
+            movieSet.loadAllProperties()
+            for m in movieSet:
+                mid = m.getObjId()
+                if mid not in inputMovies:
+                    inputMovies[mid] = newMovie = m.clone()
+                    yield newMovie
+            movieSet.close()
+            if movieSet.isStreamClosed():
+                break
+
+            time.sleep(60)
+        #return inputMovies
 
     def _processAllMoviesStep(self):
         self.info("processing all movies............")
@@ -105,8 +111,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             mc.addProcessor(g.outputQueue, self._getMcProcessor(gpu),
                             outputQueue=mc1.outputQueue)
 
-        o = mc.addProcessor(mc1.outputQueue, self._moveBatchOutput)
-
+        o1 = mc.addProcessor(mc1.outputQueue, self._moveBatchOutput)
         mc.run()
 
     def _generateBatches(self):
@@ -121,7 +126,6 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             for movie in movies:
                 fn = movie.getFileName()
                 baseName = os.path.basename(fn)
-                self._getPath
                 os.symlink(os.path.abspath(fn),
                            os.path.join(batch_path, baseName))
             return {
@@ -130,9 +134,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 'path': batch_path
             }
 
-        inputMovies = self._loadInputMovies()
         movies = []
-        for movie in inputMovies.values():
+        for movie in self._loadInputMovies():
             movies.append(movie)
 
             if len(movies) == 16:
