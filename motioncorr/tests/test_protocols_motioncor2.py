@@ -101,7 +101,7 @@ class TestMotioncor2AlignMovies(BaseTest):
     def test_cct_motioncor2_patch(self):
         print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='cct - motioncor2 test1 (patch-based)',
+                                objLabel='cct - motioncor2 test1',
                                 patchX=2, patchY=2)
         prot.inputMovies.set(self.protImport2.outputMovies)
         self.launchProtocol(prot)
@@ -113,7 +113,7 @@ class TestMotioncor2AlignMovies(BaseTest):
     def test_qbeta_motioncor2_patch(self):
         print(magentaStr("\n==> Testing motioncor2 - patch-based with grouping:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='qbeta - motioncor2 test2 (patch-based)',
+                                objLabel='qbeta - motioncor2 test2 (grouping)',
                                 patchX=2, patchY=2,
                                 group=2)
         prot.inputMovies.set(self.protImport1.outputMovies)
