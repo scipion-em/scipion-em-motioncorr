@@ -306,14 +306,15 @@ class ProtMotionCorrBase(EMProtocol):
             '-LogDir': './'
             # '-FmRef': 0
         }
-
         if self.isEER:
-            argsDict['-EerSampling'] = self.eerSampling.get() + 1
-            argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-        elif self.doApplyDoseFilter:
+            argsDict.update({'-EerSampling': self.eerSampling.get() + 1,
+                             '-FmIntFile': "../../extra/FmIntFile.txt"})
+
+        if self.doApplyDoseFilter:
             preExp, dose = self._getCorrectedDose(inputMovies, acqOrder)
-            argsDict.update({'-FmDose': dose,
-                             '-InitDose': preExp if preExp > 0.001 else 0})
+            argsDict['-InitDose'] = preExp if preExp > 0.001 else 0
+            if not self.isEER:
+                argsDict['-FmDose'] = dose
 
         if Plugin.versionGE("1.6.3"):
             argsDict['-Group'] = f'{self.group.get()} {self.groupLocal.get()}'
