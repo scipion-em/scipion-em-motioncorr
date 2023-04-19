@@ -27,6 +27,7 @@
 # ******************************************************************************
 
 import os
+import threading
 import time
 from math import ceil, sqrt
 from threading import Thread
@@ -64,6 +65,11 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def __init__(self, **kwargs):
         ProtMotionCorr.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_SERIAL
+        # Disable parallelization options just take into account GPUs
+        self.numberOfMpi.set(0)
+        self.numberOfThreads.set(0)
+        self.allowMpi = False
+        self.allowThreads = False
 
     # We are not using the steps mechanism for parallelism from Scipion
     def _stepsCheck(self):
@@ -71,7 +77,18 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
+
+
         ProtMotionCorr._defineAlignmentParams(self, form)
+        self._defineStreamingParams(form)
+
+
+        # form.getParam('numberOfMpi').default = pwobj.Integer(0)
+        # form.getParam('numberOfThreads').default = pwobj.Integer(0)
+
+
+        # Make default 1 minute for sleeping when no new input movies
+        form.getParam('streamingSleepOnWait').setDefault(60)
 
     # --------------------------- STEPS functions -----------------------------
     def _insertAllSteps(self):
@@ -81,6 +98,17 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     def _loadInputMovies(self):
         inputMovies = OrderedDict()
+        # If there are already some output movies, added them to avoid
+        # re-processing them
+        outputMovies = getattr(self, 'outputMovies', None)
+        if outputMovies is not None:
+            self._firstTimeOutput = False
+            self.error(f"Existing output: {outputMovies.getSize()} movies")
+            for m in outputMovies:
+                inputMovies[m.getObjId()] = m.clone()
+        else:
+            self.error("No output movies ")
+
         while True:
             moviesFile = self.getInputMovies().getFileName()
             movieSet = SetOfMovies(filename=moviesFile)
@@ -94,14 +122,18 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             if movieSet.isStreamClosed():
                 break
 
-            time.sleep(60)
-        #return inputMovies
+            time.sleep(self.streamingSleepOnWait.get())
+        self.info(f"No more movies, stream closed. Total: {len(inputMovies)}")
 
     def _processAllMoviesStep(self):
-        self.info("processing all movies............")
+        self.lock = threading.Lock()
+        self.processed = 0
+        self.registered = 0
+
+        self.error(">>> Starting processing movies...")
         self.program = Plugin.getProgram()
         self.command = self._getCmd()
-        self._firstTimeOutput = True  # FIXME check if there are already output
+        self._firstTimeOutput = True
 
         mc = Pipeline()
         g = mc.addGenerator(self._generateBatches)
@@ -113,10 +145,13 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         o1 = mc.addProcessor(mc1.outputQueue, self._moveBatchOutput)
         mc.run()
+        # Mark the output as closed
+        self._updateOutputSets([], pwobj.Set.STREAM_CLOSED)
 
     def _generateBatches(self):
         """ Check for new input movies and generate new tasks. """
         # FIXME: Take streaming into account
+        self._batchCount = 0
         def _createBatch(movies):
             batch_id = str(uuid4())
             batch_path = self._getTmpPath(batch_id)
@@ -128,17 +163,20 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 baseName = os.path.basename(fn)
                 os.symlink(os.path.abspath(fn),
                            os.path.join(batch_path, baseName))
+            self._batchCount += 1
             return {
                 'movies': movies,
                 'id': batch_id,
-                'path': batch_path
+                'path': batch_path,
+                'index': self._batchCount
             }
 
+        batchSize = self.streamingBatchSize.get()
         movies = []
         for movie in self._loadInputMovies():
             movies.append(movie)
 
-            if len(movies) == 16:
+            if len(movies) == batchSize:
                 yield _createBatch(movies)
                 movies = []
 
@@ -149,9 +187,20 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         def _processBatch(batch):
             try:
                 n = len(batch['movies'])
-                with Timer(f'Ran motioncor batch of {n} movies'):
-                    cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
-                    self.runJob(self.program, cmd, cwd=batch['path'])
+                t = Timer()
+
+                cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
+                self.runJob(self.program, cmd, cwd=batch['path'])
+
+                elapsed = t.getToc()
+                t.toc(f'Ran motioncor batch of {n} movies')
+
+                with self.lock:
+                    self.processed += n
+                    batch_ids = [m.getObjId() for m in batch['movies']]
+                    self.error(f"Batch {batch['index']}:{batch_ids}, "
+                               f"{elapsed}, Processed: {self.processed}")
+
                 return batch
 
             except Exception as e:
@@ -205,8 +254,19 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             _moveMovieFiles(movie)
 
         if newDone:
-            with Timer('Updated outputs'):
-                self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
+            self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
+
+        elapsed = t.getToc()
+        t.toc('Registered outputs')
+
+        with self.lock:
+            self.registered += len(newDone)
+            batch_ids = [m.getObjId() for m in batch['movies']]
+            self.error(f"OUTPUT: Batch {batch['index']}:{batch_ids}, "
+                       f"{elapsed}, "
+                       f"New done {len(newDone)}, "
+                       f"Registered {self.registered}, "
+                       f"Processed {self.processed}")
 
         self._firstTimeOutput = False
 
@@ -215,6 +275,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             os.system('rm -rf %s' % batch['path'])
 
         t.toc(f"Moved output for batch {batch['id']}")
+
         return batch
 
     # --------------------------- INFO functions ------------------------------
