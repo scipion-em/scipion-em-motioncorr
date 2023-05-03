@@ -32,34 +32,47 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.8'
+__version__ = '3.11'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR2_HOME
-    _pathVars = [MOTIONCOR2_PROGRAM, MOTIONCOR2_CUDA_LIB]
-    _supportedVersions = ['1.4.0', '1.4.2', '1.4.4', '1.4.5', '1.4.7', '1.5.0']
+    _pathVars = [MOTIONCOR2_CUDA_LIB]
+    _supportedVersions = ['1.5.0', '1.6.2', '1.6.3']
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.5.0')
+        cls._defineEmVar(MOTIONCOR2_HOME, 'motioncor2-1.6.3')
         cls._defineVar(MOTIONCOR2_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR2_CUDA_LIB)
-        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.5.0_Cuda%s%s_05-31-2022' % (
+        cls._defineVar(MOTIONCOR2_BIN, 'MotionCor2_1.6.3_Cuda%s%s_Feb18_2023' % (
             cudaVersion.major, cudaVersion.minor))
-
-        # Final program to use
-        defaultProgram = os.path.join(cls.getHome('bin'),
-                                      os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
-        cls._defineVar(MOTIONCOR2_PROGRAM, defaultProgram)
 
     @classmethod
     def getProgram(cls):
-        return cls.getVar(MOTIONCOR2_PROGRAM)
+        return os.path.join(cls.getHome('bin'),
+                            os.path.basename(cls.getVar(MOTIONCOR2_BIN)))
+
+    @classmethod
+    def validateInstallation(cls):
+        """ Check if the binaries are properly installed. """
+        try:
+            if not os.path.exists(cls.getProgram()):
+                return [f"{cls.getProgram()} does not exist, please verify "
+                        "the following variables or edit the config file:\n\n"
+                        f"{MOTIONCOR2_HOME}: {cls.getVar(MOTIONCOR2_HOME)}\n"
+                        f"{MOTIONCOR2_BIN}: {cls.getVar(MOTIONCOR2_BIN)}"]
+
+            if not os.path.exists(cls.getVar(MOTIONCOR2_CUDA_LIB)):
+                return [f"{cls.getVar(MOTIONCOR2_CUDA_LIB)} does not exist, "
+                        f"please verify {MOTIONCOR2_CUDA_LIB} variable."]
+
+        except Exception as e:
+            return [f"validateInstallation fails: {str(e)}"]
 
     @classmethod
     def versionGE(cls, version):
@@ -90,4 +103,4 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             env.addPackage('motioncor2', version=v,
                            tar='motioncor2-%s.tgz' % v,
-                           default=v == '1.5.0')
+                           default=v == '1.6.3')
