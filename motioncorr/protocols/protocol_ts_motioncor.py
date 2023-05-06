@@ -115,15 +115,12 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
         if self._doSplitEvenOdd():
             baseName = self._getTiltImageMRoot(tiltImageM)
-            evenName = os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc'))
-            oddName = os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc'))
+
+            evenName = (os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc')))
+            oddName  = (os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc')))
 
             # Store the corresponding tsImM to use its data later in the even/odd TS
-            self.tsMList.append(tiltImageM)
-
-            # Update even and odd average lists
-            self.evenAvgFrameList.append(evenName)
-            self.oddAvgFrameList.append(oddName)
+            tiltImageM.setOddEven([oddName, evenName])
 
         tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
         if not os.path.exists(tiFn) and not os.path.exists(tiFnDW):
