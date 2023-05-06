@@ -58,15 +58,18 @@ b) Developer's version
       scipion installp -p /path/to/scipion-em-motioncorr --devel
 
 - Motioncor2 binaries will be installed automatically with the plugin, but you can also link an existing installation.
-- Default installation path assumed is ``software/em/motioncor2-1.6.3``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to the folder where the Motioncor2 is installed.
-- Depending on your CUDA version this plugin will guess the right default binary from ``MotionCor2_1.6.3_CudaXY_Feb18_2023`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting *MOTIONCOR2_BIN* variable.
+- Default installation path assumed is ``software/em/motioncor2-1.6.4``, if you want to change it, set *MOTIONCOR2_HOME* in ``scipion.conf`` file to the folder where the Motioncor2 is installed.
+- Depending on your CUDA version this plugin will guess the right default binary from ``MotionCor2_1.6.4_CudaXY_Mar312023`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting *MOTIONCOR2_BIN* variable.
 - If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *MOTIONCOR2_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
 For an automatically updated installation of motioncor2 binaries, do not define neither *MOTIONCOR2_HOME* nor *MOTIONCOR2_BIN*.
 
-To check the installation, simply run the following Scipion test:
+To check the installation, simply run the following Scipion tests:
 
-``scipion test motioncorr.tests.test_protocols_motioncor2.TestMotioncor2AlignMovies``
+.. code-block::
+
+    scipion test motioncorr.tests.test_protocols_motioncor2.TestMotioncor2AlignMovies
+    scipion test motioncorr.tests.test_protocols_tomo.TestMotioncor2TiltSeriesAlignMovies
 
 Licensing
 ---------
@@ -79,7 +82,7 @@ Motioncor2 is free for academic use only. For commercial use, please contact Dav
 Supported versions
 ------------------
 
-1.4.0, 1.4.2, 1.4.4, 1.4.5, 1.4.7, 1.5.0, 1.6.2, 1.6.3
+1.5.0, 1.6.2, 1.6.3, 1.6.4
 
 Protocols
 ---------
