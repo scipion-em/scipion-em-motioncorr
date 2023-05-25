@@ -60,8 +60,10 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, inputId):
-        self._prepareEERFiles()
-        ProtTsCorrectMotion.convertInputStep(self, inputId)
+        if self.isEER:
+            self._prepareEERFiles()
+        else:
+            ProtTsCorrectMotion.convertInputStep(self, inputId)
 
     def _processTiltImageM(self, workingFolder, tiltImageM,
                            initialDose, dosePerFrame, gain, dark, *args):
