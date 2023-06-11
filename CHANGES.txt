@@ -1,3 +1,4 @@
+3.13.1: raise a warning when trying to use DW for tomo
 3.13: fix convertInputStep for EER movies
 3.12:
     - add mc2 1.6.4 binary

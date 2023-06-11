@@ -147,10 +147,21 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     def _validate(self):
         errors = ProtMotionCorrBase._validate(self)
+
         if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
             errors.append("Removing unweighted images is not supported for now.")
 
         return errors
+
+    def _warnings(self):
+        warnings = []
+
+        if self.doApplyDoseFilter:
+            warnings.append("Motioncor2 dose weighting is not working properly "
+                            "on tilt-series movies. It is recommended to do it "
+                            "later with the tilt-series instead.")
+
+        return warnings
 
     # --------------------------- UTILS functions -----------------------------
     def getInputMovies(self):
