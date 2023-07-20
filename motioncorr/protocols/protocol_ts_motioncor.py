@@ -60,8 +60,10 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, inputId):
-        self._prepareEERFiles()
-        ProtTsCorrectMotion.convertInputStep(self, inputId)
+        if self.isEER:
+            self._prepareEERFiles()
+        else:
+            ProtTsCorrectMotion.convertInputStep(self, inputId)
 
     def _processTiltImageM(self, workingFolder, tiltImageM,
                            initialDose, dosePerFrame, gain, dark, *args):
@@ -115,15 +117,12 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
         if self._doSplitEvenOdd():
             baseName = self._getTiltImageMRoot(tiltImageM)
-            evenName = os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc'))
-            oddName = os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc'))
+
+            evenName = (os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc')))
+            oddName  = (os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc')))
 
             # Store the corresponding tsImM to use its data later in the even/odd TS
-            self.tsMList.append(tiltImageM)
-
-            # Update even and odd average lists
-            self.evenAvgFrameList.append(evenName)
-            self.oddAvgFrameList.append(oddName)
+            tiltImageM.setOddEven([oddName, evenName])
 
         tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
         if not os.path.exists(tiFn) and not os.path.exists(tiFnDW):
@@ -148,10 +147,21 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     def _validate(self):
         errors = ProtMotionCorrBase._validate(self)
+
         if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
             errors.append("Removing unweighted images is not supported for now.")
 
         return errors
+
+    def _warnings(self):
+        warnings = []
+
+        if self.doApplyDoseFilter:
+            warnings.append("Motioncor2 dose weighting is not working properly "
+                            "on tilt-series movies. It is recommended to do it "
+                            "later with the tilt-series instead.")
+
+        return warnings
 
     # --------------------------- UTILS functions -----------------------------
     def getInputMovies(self):
