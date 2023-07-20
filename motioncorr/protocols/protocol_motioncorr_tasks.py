@@ -1,9 +1,9 @@
 # ******************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@gmail.com) [1]
 # *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [4]
 # *
-# * [1] SciLifeLab, Stockholm University
+# * [1] St.Jude Children's Research Hospital, Memphis, TN
 # * [4] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
