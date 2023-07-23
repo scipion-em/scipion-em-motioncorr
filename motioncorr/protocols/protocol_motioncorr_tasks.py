@@ -1,10 +1,10 @@
 # ******************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@gmail.com) [1]
-# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [4]
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
 # *
 # * [1] St.Jude Children's Research Hospital, Memphis, TN
-# * [4] MRC Laboratory of Molecular Biology (MRC-LMB)
+# * [2] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -29,27 +29,17 @@
 import os
 import threading
 import time
-from math import ceil, sqrt
-from threading import Thread
 from uuid import uuid4
 from collections import OrderedDict
-from datetime import datetime
-
 from emtools.utils import Timer, Pipeline
 
-from pyworkflow import SCIPION_DEBUG_NOCLEAN
-import pyworkflow.protocol.params as params
+from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
-from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol import STEPS_SERIAL
-from pwem.emlib.image import ImageHandler
-from pwem.objects import Image, Float, SetOfMovies
-from pwem.protocols import ProtAlignMovies
+from pwem.objects import Float, SetOfMovies
 
 from .. import Plugin
-from ..constants import *
-from ..convert import *
 from .protocol_motioncorr import ProtMotionCorr
 
 
@@ -61,6 +51,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     """
 
     _label = 'tasks'
+    _devStatus = BETA
 
     def __init__(self, **kwargs):
         ProtMotionCorr.__init__(self, **kwargs)
@@ -77,15 +68,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
-
-
         ProtMotionCorr._defineAlignmentParams(self, form)
         self._defineStreamingParams(form)
-
-
-        # form.getParam('numberOfMpi').default = pwobj.Integer(0)
-        # form.getParam('numberOfThreads').default = pwobj.Integer(0)
-
 
         # Make default 1 minute for sleeping when no new input movies
         form.getParam('streamingSleepOnWait').setDefault(60)
@@ -93,8 +77,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     # --------------------------- STEPS functions -----------------------------
     def _insertAllSteps(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self._insertFunctionStep('_convertInputStep')
-        self._insertFunctionStep('_processAllMoviesStep')
+        self._insertFunctionStep(self._convertInputStep)
+        self._insertFunctionStep(self._processAllMoviesStep)
 
     def _loadInputMovies(self):
         inputMovies = OrderedDict()
@@ -152,6 +136,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         """ Check for new input movies and generate new tasks. """
         # FIXME: Take streaming into account
         self._batchCount = 0
+
         def _createBatch(movies):
             batch_id = str(uuid4())
             batch_path = self._getTmpPath(batch_id)
@@ -224,7 +209,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         def _moveToExtra(src, dst):
             srcFn = os.path.join(srcDir, src)
             dstFn = self._getExtraPath(dst)
-            #print(f"Moving {srcFn} -> {dstFn}\n\texists source: {os.path.exists(srcFn)}")
+            print(f"Moving {srcFn} -> {dstFn}\n\texists source: {os.path.exists(srcFn)}")
             if os.path.exists(srcFn):
                 pwutils.moveFile(srcFn, dstFn)
                 return True
@@ -232,7 +217,6 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         def _moveMovieFiles(movie):
             movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
-            a = b = False
             if applyDose:
                 _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
 
@@ -245,7 +229,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 _moveToExtra(movieRoot + '_ODD.mrc',
                              self._getOutputMicOddName(movie))
 
-            done = _moveToExtra(movieRoot + logSuffix,
+            done = _moveToExtra(ProtMotionCorr._getMovieRoot(self, movie) + logSuffix,
                                 self._getMovieLogFile(movie))
             if done:
                 newDone.append(movie)
@@ -292,7 +276,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         if self.isEER:
             argsDict['-EerSampling'] = self.eerSampling.get() + 1
             argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-        elif self.doApplyDoseFilter:
+
+        if self.doApplyDoseFilter:
             preExp, dose = self._getCorrectedDose(inputMovies)
             argsDict.update({'-FmDose': dose,
                              '-InitDose': preExp if preExp > 0.001 else 0})
