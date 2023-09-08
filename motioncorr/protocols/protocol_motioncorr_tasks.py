@@ -31,7 +31,8 @@ import threading
 import time
 from uuid import uuid4
 from collections import OrderedDict
-from emtools.utils import Timer, Pipeline
+
+from emtools.utils import Timer, Pipeline, Pretty
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
@@ -70,7 +71,6 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _defineAlignmentParams(self, form):
         ProtMotionCorr._defineAlignmentParams(self, form)
         self._defineStreamingParams(form)
-
         # Make default 1 minute for sleeping when no new input movies
         form.getParam('streamingSleepOnWait').setDefault(60)
 
@@ -107,6 +107,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 break
 
             time.sleep(self.streamingSleepOnWait.get())
+
         self.info(f"No more movies, stream closed. Total: {len(inputMovies)}")
 
     def _processAllMoviesStep(self):
@@ -140,6 +141,9 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         def _createBatch(movies):
             batch_id = str(uuid4())
             batch_path = self._getTmpPath(batch_id)
+            ts = Pretty.now()
+            self.error(f"{ts}: Creating batch: {batch_path}")
+
             pwutils.cleanPath(batch_path)
             os.mkdir(batch_path)
 
@@ -170,29 +174,34 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     def _getMcProcessor(self, gpu):
         def _processBatch(batch):
-            try:
-                n = len(batch['movies'])
-                t = Timer()
+            tries = 2
+            while tries:
+                tries -= 1
+                try:
+                    n = len(batch['movies'])
+                    t = Timer()
 
-                cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
-                self.runJob(self.program, cmd, cwd=batch['path'])
+                    cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
+                    self.runJob(self.program, cmd, cwd=batch['path'])
 
-                elapsed = t.getToc()
-                t.toc(f'Ran motioncor batch of {n} movies')
+                    elapsed = t.getToc()
+                    t.toc(f'Ran motioncor batch of {n} movies')
 
-                with self.lock:
-                    self.processed += n
-                    batch_ids = [m.getObjId() for m in batch['movies']]
-                    self.error(f"Batch {batch['index']}:{batch_ids}, "
-                               f"{elapsed}, Processed: {self.processed}")
+                    with self.lock:
+                        self.processed += n
+                        batch_ids = [m.getObjId() for m in batch['movies']]
+                        self.error(f"Batch {batch['index']}:{batch_ids}, "
+                                   f"{elapsed}, Processed: {self.processed}")
 
-                return batch
+                except Exception as e:
+                    self.error("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
+                               % (batch['id'], str(e)))
+                    import traceback
+                    traceback.print_exc()
+                    if tries == 0:
+                        self.error("ERROR: No more tries for this batch!!!")
 
-            except Exception as e:
-                self.error("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
-                           % (batch['id'], str(e)))
-                import traceback
-                traceback.print_exc()
+            return batch
 
         return _processBatch
 
@@ -209,7 +218,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         def _moveToExtra(src, dst):
             srcFn = os.path.join(srcDir, src)
             dstFn = self._getExtraPath(dst)
-            print(f"Moving {srcFn} -> {dstFn}\n\texists source: {os.path.exists(srcFn)}")
+            self.error(f"Moving {srcFn} -> {dstFn}"
+                       f"\n\texists source: {os.path.exists(srcFn)}")
             if os.path.exists(srcFn):
                 pwutils.moveFile(srcFn, dstFn)
                 return True
@@ -218,10 +228,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         def _moveMovieFiles(movie):
             movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
             if applyDose:
-                _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
+                a = _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
 
             if not applyDose or saveUnweighted:
-                _moveToExtra(movieRoot + '.mrc', self._getOutputMicName(movie))
+                b = _moveToExtra(movieRoot + '.mrc', self._getOutputMicName(movie))
 
             if self.splitEvenOdd:
                 _moveToExtra(movieRoot + '_EVN.mrc',
@@ -229,9 +239,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 _moveToExtra(movieRoot + '_ODD.mrc',
                              self._getOutputMicOddName(movie))
 
-            done = _moveToExtra(ProtMotionCorr._getMovieRoot(self, movie) + logSuffix,
-                                self._getMovieLogFile(movie))
-            if done:
+            _moveToExtra(movieRoot + logSuffix, self._getMovieLogFile(movie))
+            if a or b:
                 newDone.append(movie)
 
         for movie in batch['movies']:
