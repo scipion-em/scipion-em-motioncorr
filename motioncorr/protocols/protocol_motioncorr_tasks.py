@@ -67,6 +67,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _stepsCheck(self):
         pass
 
+    @classmethod
+    def worksInStreaming(cls):
+        return True
+
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
         ProtMotionCorr._defineAlignmentParams(self, form)
