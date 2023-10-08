@@ -27,7 +27,7 @@
 import os
 
 import pyworkflow.utils as pwutils
-from pyworkflow import BETA
+from pyworkflow import PROD
 import pyworkflow.object as pwobj
 
 from tomo.protocols import ProtTsCorrectMotion
@@ -44,7 +44,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
     """
 
     _label = 'align tilt-series movies'
-    _devStatus = BETA
+    _devStatus = PROD
     evenOddCapable = True
 
     def __init__(self, **kwargs):
