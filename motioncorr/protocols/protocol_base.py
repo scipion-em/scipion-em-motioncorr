@@ -48,7 +48,7 @@ class ProtMotionCorrBase(EMProtocol):
         self.isEER = False
 
     # -------------------------- DEFINE param functions -----------------------
-    def _defineCommonParams(self, form):
+    def _defineCommonParams(self, form, allowDW=True):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -59,11 +59,12 @@ class ProtMotionCorrBase(EMProtocol):
                             " set to i.e. *0 1 2*.")
 
         form.addSection(label="Motioncor2 params")
-        form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
-                      label='Apply dose filter',
-                      help='Apply a dose-dependent filter to frames before '
-                           'summing them. Pre-exposure and dose per frame '
-                           'should be specified during movies import.')
+        if allowDW:
+            form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
+                          label='Apply dose filter',
+                          help='Apply a dose-dependent filter to frames before '
+                               'summing them. Pre-exposure and dose per frame '
+                               'should be specified during movies import.')
 
         line = form.addLine('Number of patches',
                             help='Number of patches to be used for patch based '
@@ -95,12 +96,13 @@ class ProtMotionCorrBase(EMProtocol):
                       label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.2px*.')
 
-        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
-                      condition='doApplyDoseFilter',
-                      label="Save unweighted images?",
-                      help="Aligned but non-dose weighted images are sometimes "
-                           "useful in CTF estimation, although there is no "
-                           "difference in most cases.")
+        if allowDW:
+            form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
+                          condition='doApplyDoseFilter',
+                          label="Save unweighted images?",
+                          help="Aligned but non-dose weighted images are sometimes "
+                               "useful in CTF estimation, although there is no "
+                               "difference in most cases.")
 
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -220,7 +222,7 @@ class ProtMotionCorrBase(EMProtocol):
         if self.isEER:
             if self.alignFrame0.get() != 1 or self.alignFrameN.get() not in [0, lastFrame]:
                 errors.append(f"For EER data please set frame range "
-                              "from 1 to 0 (or 1 to {lastFrame}).")
+                              f"from 1 to 0 (or 1 to {lastFrame}).")
 
         msg = f"Frames range must be within 1 - {lastFrame}"
         if self.alignFrameN.get() == 0:
@@ -360,7 +362,7 @@ class ProtMotionCorrBase(EMProtocol):
         elif ext == '.eer':
             args = f' -InEer "{inputFn}" '
         else:
-            raise Exception(f"Unsupported format: {ext}")
+            raise ValueError(f"Unsupported format: {ext}")
 
         return args
 

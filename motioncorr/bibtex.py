@@ -35,7 +35,7 @@
   pages="331-332",
   year="2017",
   publisher="Nature Publishing Group",
-  doi = "http://dx.doi.org/10.1038/nmeth.4193"
+  doi = "https://dx.doi.org/10.1038/nmeth.4193"
 }
 
 """
