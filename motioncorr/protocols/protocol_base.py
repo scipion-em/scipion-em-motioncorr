@@ -242,7 +242,7 @@ class ProtMotionCorrBase(EMProtocol):
                               "dose-weighting can not be performed.")
 
         # check gain dimensions and extension
-        if inputMovies.getGain():
+        if inputMovies.getGain() and os.path.exists(inputMovies.getGain()):
             ih = ImageHandler()
             gain = inputMovies.getGain()
             gainx, gainy, _, _ = ih.getDimensions(gain)
