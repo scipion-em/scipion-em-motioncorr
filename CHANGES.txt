@@ -1,3 +1,7 @@
+3.14:
+    - add mc tasks protocol for testing
+    - check if gain file exists
+    - remove DW from tomo protocol
 3.13.1: raise a warning when trying to use DW for tomo
 3.13: fix convertInputStep for EER movies
 3.12:
