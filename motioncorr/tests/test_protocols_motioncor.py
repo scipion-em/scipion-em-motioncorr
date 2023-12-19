@@ -35,7 +35,7 @@ from pyworkflow.utils import magentaStr
 from ..protocols import ProtMotionCorr
 
 
-class TestMotioncor2AlignMovies(BaseTest):
+class TestMotioncorAlignMovies(BaseTest):
     @classmethod
     def setData(cls):
         cls.ds = DataSet.getDataSet('movies')
@@ -98,10 +98,10 @@ class TestMotioncor2AlignMovies(BaseTest):
         self.assertEqual(nrShifts, aliFrames, "Number of shifts is not equal"
                                               " number of aligned frames.")
 
-    def test_cct_motioncor2_patch(self):
-        print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
+    def test_cct_motioncor_patch(self):
+        print(magentaStr("\n==> Testing motioncor - patch-based:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='cct - motioncor2 test1',
+                                objLabel='cct - motioncor test1',
                                 patchX=2, patchY=2)
         prot.inputMovies.set(self.protImport2.outputMovies)
         self.launchProtocol(prot)
@@ -110,10 +110,10 @@ class TestMotioncor2AlignMovies(BaseTest):
         self._checkAlignment(prot.outputMovies[1],
                              (1, 7), [0, 0, 0, 0])
 
-    def test_qbeta_motioncor2_patch(self):
-        print(magentaStr("\n==> Testing motioncor2 - patch-based with grouping:"))
+    def test_qbeta_motioncor_patch(self):
+        print(magentaStr("\n==> Testing motioncor - patch-based with grouping:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='qbeta - motioncor2 test2 (grouping)',
+                                objLabel='qbeta - motioncor test2 (grouping)',
                                 patchX=2, patchY=2,
                                 group=2)
         prot.inputMovies.set(self.protImport1.outputMovies)
@@ -123,10 +123,10 @@ class TestMotioncor2AlignMovies(BaseTest):
         self._checkAlignment(prot.outputMovies[1],
                              (1, 7), [0, 0, 0, 0])
 
-    def test_qbeta_motioncor2_sel(self):
-        print(magentaStr("\n==> Testing motioncor2 - patch-based with frame range:"))
+    def test_qbeta_motioncor_sel(self):
+        print(magentaStr("\n==> Testing motioncor - patch-based with frame range:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='qbeta - motioncor2 test3 (frame range)',
+                                objLabel='qbeta - motioncor test3 (frame range)',
                                 patchX=2, patchY=2,
                                 alignFrame0=2,
                                 alignFrameN=6)

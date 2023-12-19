@@ -36,7 +36,6 @@ from pwem.objects import Movie
 
 from ..constants import NO_FLIP, NO_ROTATION
 from ..convert import parseMovieAlignment2, parseEERDefects
-from .. import Plugin
 
 
 class ProtMotionCorrBase(EMProtocol):
@@ -55,10 +54,10 @@ class ProtMotionCorrBase(EMProtocol):
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on."
-                            " Motioncor2 can use multiple GPUs - in that case"
+                            " Motioncor can use multiple GPUs - in that case"
                             " set to i.e. *0 1 2*.")
 
-        form.addSection(label="Motioncor2 params")
+        form.addSection(label="Motioncor params")
         if allowDW:
             form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
                           label='Apply dose filter',
@@ -87,9 +86,8 @@ class ProtMotionCorrBase(EMProtocol):
                                  'performed.')
         line.addParam('group', params.IntParam, default='1',
                       label='global align')
-        if Plugin.versionGE("1.6.3"):
-            line.addParam('groupLocal', params.IntParam, default='4',
-                          label='local align')
+        line.addParam('groupLocal', params.IntParam, default='4',
+                      label='local align')
 
         form.addParam('tol', params.FloatParam, default='0.2',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -107,7 +105,7 @@ class ProtMotionCorrBase(EMProtocol):
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional parameters',
-                      help="Extra command line parameters. See MotionCor2 help.")
+                      help="Extra command line parameters. See MotionCor help.")
 
         form.addSection(label="Gain and defects")
         form.addParam('gainRot', params.EnumParam,
@@ -275,17 +273,17 @@ class ProtMotionCorrBase(EMProtocol):
         raise NotImplementedError
 
     def _getMcArgs(self, acqOrder=None):
-        """ Prepare most arguments for mc2 run. """
+        """ Prepare most arguments for the binary. """
         inputMovies = self.getInputMovies()
 
-        # default values for motioncor2 are (1, 1)
+        # default values for motioncor are (1, 1)
         cropDimX = self.cropDimX.get() or 1
         cropDimY = self.cropDimY.get() or 1
 
         frame0, frameN = self._getFramesRange()
         numbOfFrames = self._getNumberOfFrames()
 
-        # reset values = 1 to 0 (motioncor2 does it automatically,
+        # reset values = 1 to 0 (motioncor does it automatically,
         # but we need to keep this for consistency)
         if self.patchX.get() == 1:
             self.patchX.set(0)
@@ -302,6 +300,7 @@ class ProtMotionCorrBase(EMProtocol):
             '-Tol': self.tol.get(),
             '-PixSize': inputMovies.getSamplingRate(),
             '-kV': inputMovies.getAcquisition().getVoltage(),
+            '-Cs': 0,
             '-OutStack': 1 if self.doSaveMovie else 0,
             '-Gpu': '%(GPU)s',
             '-SumRange': "0.0 0.0",  # switch off writing out DWS,
@@ -318,10 +317,7 @@ class ProtMotionCorrBase(EMProtocol):
             if not self.isEER:
                 argsDict['-FmDose'] = dose
 
-        if Plugin.versionGE("1.6.3"):
-            argsDict['-Group'] = f'{self.group.get()} {self.groupLocal.get()}'
-        else:
-            argsDict['-Group'] = self.group.get()
+        argsDict['-Group'] = f'{self.group.get()} {self.groupLocal.get()}'
 
         if self.splitEvenOdd:
             argsDict['-SplitSum'] = 1

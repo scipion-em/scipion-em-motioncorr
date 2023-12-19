@@ -37,7 +37,7 @@ from .protocols import ProtMotionCorr
 
 
 class ProtMotioncorrViewer(EmProtocolViewer):
-    """ Visualization of Motioncor2 results. """
+    """ Visualization of Motioncor results. """
 
     _targets = [ProtMotionCorr]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
