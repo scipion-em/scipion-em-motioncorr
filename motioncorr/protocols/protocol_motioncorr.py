@@ -50,9 +50,9 @@ from relion.convert.convert31 import OpticsGroups
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
-    """ This protocol wraps motioncor3 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor3 performs anisotropic drift correction and dose weighting
+    Motioncor performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -136,7 +136,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional protocol parameters',
                       help="Here you can provide some extra parameters for the "
-                           "protocol, not the underlying motioncor3 program."
+                           "protocol, not the underlying motioncor program."
                            "You can provide many options separated by space. "
                            "\n\n*Options:* \n\n"
                            "--dont_use_worker_thread \n"
@@ -194,7 +194,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
                 _extraWork()
 
         except Exception as e:
-            self.error(f"ERROR: Motioncor3 has failed for {movie.getFileName()} --> {str(e)}\n")
+            self.error(f"ERROR: Motioncor has failed for {movie.getFileName()} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
         
@@ -217,7 +217,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
         if hasattr(self, 'outputMicrographs') or \
                 hasattr(self, 'outputMicrographsDoseWeighted'):
-            summary.append('Aligned %d movies using Motioncor3.'
+            summary.append('Aligned %d movies using Motioncor.'
                            % self.getInputMovies().getSize())
             if self.splitEvenOdd and self._createOutputWeightedMicrographs():
                 summary.append('Even/odd outputs are dose-weighted!')

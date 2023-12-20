@@ -104,3 +104,6 @@ class Plugin(pwem.Plugin):
             env.addPackage('motioncor3', version=v,
                            tar='motioncor3-%s.tgz' % v,
                            default=v == '1.0.1')
+
+        env.addPackage('motioncor2', version="1.6.4",
+                       tar='motioncor2-1.6.4.tgz')

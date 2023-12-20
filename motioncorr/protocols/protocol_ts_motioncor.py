@@ -36,9 +36,9 @@ from .protocol_base import ProtMotionCorrBase
 
 
 class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
-    """ This protocol wraps motioncor3 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor3 performs anisotropic drift correction
+    Motioncor performs anisotropic drift correction
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -99,7 +99,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             pwutils.moveFile(logFn, logFnExtra)
 
         except Exception as e:
-            self.error(f"ERROR: Motioncor3 has failed for {tiFn} --> {str(e)}\n")
+            self.error(f"ERROR: Motioncor has failed for {tiFn} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
 
@@ -130,7 +130,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         summary = []
 
         if hasattr(self, 'outputTiltSeries'):
-            summary.append('Aligned %d tilt series movies using Motioncor3.'
+            summary.append('Aligned %d tilt series movies using Motioncor.'
                            % self.getInputMovies().getSize())
         else:
             summary.append('Output is not ready')

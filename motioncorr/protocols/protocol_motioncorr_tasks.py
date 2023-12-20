@@ -46,7 +46,7 @@ from .protocol_motioncorr import ProtMotionCorr
 class ProtMotionCorrTasks(ProtMotionCorr):
     """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor3 performs anisotropic drift correction and dose weighting
+    Motioncor performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -189,7 +189,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 return batch
 
             except Exception as e:
-                self.error("ERROR: Motioncor3 has failed for batch %s. --> %s\n"
+                self.error("ERROR: Motioncor has failed for batch %s. --> %s\n"
                            % (batch['id'], str(e)))
                 import traceback
                 traceback.print_exc()
