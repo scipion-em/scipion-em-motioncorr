@@ -1,3 +1,4 @@
+3.15: fix bug in EER defects parsing
 3.14:
     - add mc tasks protocol for testing
     - check if gain file exists
