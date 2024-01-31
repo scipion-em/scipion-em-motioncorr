@@ -50,9 +50,9 @@ from relion.convert.convert31 import OpticsGroups
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
-    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor2 performs anisotropic drift correction and dose weighting
+    Motioncor performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -136,7 +136,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       label='Additional protocol parameters',
                       help="Here you can provide some extra parameters for the "
-                           "protocol, not the underlying motioncor2 program."
+                           "protocol, not the underlying motioncor program."
                            "You can provide many options separated by space. "
                            "\n\n*Options:* \n\n"
                            "--dont_use_worker_thread \n"
@@ -169,7 +169,6 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         try:
             self.runJob(Plugin.getProgram(), args, cwd=movieFolder,
                         env=Plugin.getEnviron())
-
             self._moveOutput(movie)
 
             def _extraWork():
@@ -195,10 +194,10 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
                 _extraWork()
 
         except Exception as e:
-            self.error(f"ERROR: Motioncor2 has failed for {movie.getFileName()} --> {str(e)}\n")
+            self.error(f"ERROR: Motioncor has failed for {movie.getFileName()} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
-
+        
     def _insertFinalSteps(self, deps):
         stepsId = []
         if self._useWorkerThread():
@@ -218,7 +217,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
         if hasattr(self, 'outputMicrographs') or \
                 hasattr(self, 'outputMicrographsDoseWeighted'):
-            summary.append('Aligned %d movies using motioncor2.'
+            summary.append('Aligned %d movies using Motioncor.'
                            % self.getInputMovies().getSize())
             if self.splitEvenOdd and self._createOutputWeightedMicrographs():
                 summary.append('Even/odd outputs are dose-weighted!')
@@ -247,13 +246,8 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
     def _getMovieLogFile(self, movie):
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s%s%s-Full.log' % (self._getMovieRoot(movie),
-                                    self._getLogSuffix(),
-                                    '-Patch' if usePatches else '')
-
-    def _getLogSuffix(self):
-        """ Most annoying part... """
-        return '' if Plugin.versionGE('1.6.2') else '_aligned_mic'
+        return '%s%s-Full.log' % (self._getMovieRoot(movie),
+                                  '-Patch' if usePatches else '')
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext

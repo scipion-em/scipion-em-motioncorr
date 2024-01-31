@@ -36,9 +36,9 @@ from .protocol_base import ProtMotionCorrBase
 
 
 class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
-    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor2 performs anisotropic drift correction
+    Motioncor performs anisotropic drift correction
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -99,7 +99,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             pwutils.moveFile(logFn, logFnExtra)
 
         except Exception as e:
-            self.error(f"ERROR: Motioncor2 has failed for {tiFn} --> {str(e)}\n")
+            self.error(f"ERROR: Motioncor has failed for {tiFn} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
 
@@ -130,7 +130,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         summary = []
 
         if hasattr(self, 'outputTiltSeries'):
-            summary.append('Aligned %d tilt series movies using motioncor2.'
+            summary.append('Aligned %d tilt series movies using Motioncor.'
                            % self.getInputMovies().getSize())
         else:
             summary.append('Output is not ready')
@@ -148,13 +148,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     def _getMovieLogFile(self, tiltImageM):
         usePatches = self.patchX != 0 or self.patchY != 0
-
-        if Plugin.versionGE('1.6.2'):
-            return '%s%s-Full.log' % (pwutils.removeBaseExt(tiltImageM.getFileName()),
-                                      '-Patch' if usePatches else '')
-        else:
-            return '%s%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
-                                      '-Patch' if usePatches else '')
+        return '%s%s-Full.log' % (pwutils.removeBaseExt(tiltImageM.getFileName()),
+                                  '-Patch' if usePatches else '')
 
     def _createOutputWeightedTS(self):
         return False
