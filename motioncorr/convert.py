@@ -96,13 +96,13 @@ def parseEERDefects(fn):
                             int(area[3])-int(area[1])+1))
         elif item.tag == "col":
             area = item.text.split("-")
-            defects.append((area[0],
-                            0,
+            defects.append((area[0], 0,
                             int(area[1])-int(area[0])+1,
                             4096))
         elif item.tag == "row":
             area = item.text.split("-")
-            defects.append((0, area[0], 0, 4096,
+            defects.append((0, area[0],
+                            4096,
                             int(area[1])-int(area[0])+1))
 
     return defects

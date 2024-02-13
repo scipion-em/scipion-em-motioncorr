@@ -46,9 +46,9 @@ from .protocol_motioncorr import ProtMotionCorr
 
 
 class ProtMotionCorrTasks(ProtMotionCorr):
-    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor2 performs anisotropic drift correction and dose weighting
+    Motioncor performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 

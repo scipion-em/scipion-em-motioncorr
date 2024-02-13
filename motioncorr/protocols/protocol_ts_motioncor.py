@@ -28,7 +28,6 @@ import os
 
 import pyworkflow.utils as pwutils
 from pyworkflow import BETA
-import pyworkflow.object as pwobj
 
 from tomo.protocols import ProtTsCorrectMotion
 
@@ -37,9 +36,9 @@ from .protocol_base import ProtMotionCorrBase
 
 
 class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
-    """ This protocol wraps motioncor2 movie alignment program developed at UCSF.
+    """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
-    Motioncor2 performs anisotropic drift correction and dose weighting
+    Motioncor performs anisotropic drift correction
         (written by Shawn Zheng @ David Agard lab)
     """
 
@@ -51,12 +50,12 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         ProtTsCorrectMotion.__init__(self, **kwargs)
         ProtMotionCorrBase.__init__(self, **kwargs)
         self.doSaveMovie = False
+        self.doApplyDoseFilter = False
 
     # -------------------------- DEFINE param functions -----------------------
-    def _defineParams(self, form):
+    def _defineParams(self, form, addEvenOddParam=True):
         ProtTsCorrectMotion._defineParams(self, form)
-        self._defineCommonParams(form)
-        form.getParam('doApplyDoseFilter').default = pwobj.Boolean(False)
+        self._defineCommonParams(form, allowDW=False)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, inputId):
@@ -65,9 +64,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         else:
             ProtTsCorrectMotion.convertInputStep(self, inputId)
 
-    def _processTiltImageM(self, workingFolder, tiltImageM,
-                           initialDose, dosePerFrame, gain, dark, *args):
-        outputFn, outputFnDW = self._getOutputTiltImagePaths(tiltImageM)
+    def _processTiltImageM(self, workingFolder, tiltImageM, *args):
+        outputFn, _ = self._getOutputTiltImagePaths(tiltImageM)
 
         def _getPath(path):
             """ shortcut to get relative path from workingFolder. """
@@ -84,14 +82,14 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
         self.info(f"inputFn: {tiFn}")
 
-        args = self._getInputFormat(inputFn, absPath=True)
-        args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.items()])
+        params = self._getInputFormat(inputFn, absPath=True)
+        params += ' '.join(['%s %s' % (k, v)
+                            for k, v in argsDict.items()])
 
-        args += ' ' + self.extraParams2.get()
+        params += ' ' + self.extraParams2.get()
 
         try:
-            self.runJob(Plugin.getProgram(), args,
+            self.runJob(Plugin.getProgram(), params,
                         cwd=workingFolder,
                         env=Plugin.getEnviron())
 
@@ -100,12 +98,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             logFnExtra = self._getExtraPath(self._getMovieLogFile(tiltImageM))
             pwutils.moveFile(logFn, logFnExtra)
 
-            # FIXME: below not supported by ProtTsCorrectMotion
-            #if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
-            #    pwutils.cleanPath(outputFn)
-
         except Exception as e:
-            self.error(f"ERROR: Motioncor2 has failed for {tiFn} --> {str(e)}\n")
+            self.error(f"ERROR: Motioncor has failed for {tiFn} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
 
@@ -119,14 +113,14 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
             baseName = self._getTiltImageMRoot(tiltImageM)
 
             evenName = (os.path.abspath(self._getExtraPath(baseName + '_EVN.mrc')))
-            oddName  = (os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc')))
+            oddName = (os.path.abspath(self._getExtraPath(baseName + '_ODD.mrc')))
 
             # Store the corresponding tsImM to use its data later in the even/odd TS
             tiltImageM.setOddEven([oddName, evenName])
 
-        tiFn, tiFnDW = self._getOutputTiltImagePaths(tiltImageM)
-        if not os.path.exists(tiFn) and not os.path.exists(tiFnDW):
-            raise Exception(f"Expected output file(s) '{tiFn}' not produced!")
+        tiFn, _ = self._getOutputTiltImagePaths(tiltImageM)
+        if not os.path.exists(tiFn):
+            raise FileNotFoundError(f"Expected output file '{tiFn}' not produced!")
 
         if not pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
             pwutils.cleanPath(workingFolder)
@@ -136,10 +130,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         summary = []
 
         if hasattr(self, 'outputTiltSeries'):
-            summary.append('Aligned %d tilt series movies using motioncor2.'
+            summary.append('Aligned %d tilt series movies using Motioncor.'
                            % self.getInputMovies().getSize())
-            if self.splitEvenOdd and self._createOutputWeightedTS():
-                summary.append('Even/odd outputs are dose-weighted!')
         else:
             summary.append('Output is not ready')
 
@@ -148,20 +140,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
     def _validate(self):
         errors = ProtMotionCorrBase._validate(self)
 
-        if self.doApplyDoseFilter and not self.doSaveUnweightedMic:
-            errors.append("Removing unweighted images is not supported for now.")
-
         return errors
-
-    def _warnings(self):
-        warnings = []
-
-        if self.doApplyDoseFilter:
-            warnings.append("Motioncor2 dose weighting is not working properly "
-                            "on tilt-series movies. It is recommended to do it "
-                            "later with the tilt-series instead.")
-
-        return warnings
 
     # --------------------------- UTILS functions -----------------------------
     def getInputMovies(self):
@@ -169,13 +148,8 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     def _getMovieLogFile(self, tiltImageM):
         usePatches = self.patchX != 0 or self.patchY != 0
-
-        if Plugin.versionGE('1.6.2'):
-            return '%s%s-Full.log' % (pwutils.removeBaseExt(tiltImageM.getFileName()),
-                                      '-Patch' if usePatches else '')
-        else:
-            return '%s%s-Full.log' % (self._getTiltImageMRoot(tiltImageM),
-                                      '-Patch' if usePatches else '')
+        return '%s%s-Full.log' % (pwutils.removeBaseExt(tiltImageM.getFileName()),
+                                  '-Patch' if usePatches else '')
 
     def _createOutputWeightedTS(self):
-        return self.doApplyDoseFilter
+        return False
