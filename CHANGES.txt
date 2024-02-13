@@ -1,3 +1,4 @@
+3.16.1: bugfix: convert gain to mrc, take reciprocal for .gain file
 3.16:
     - motioncor3 support
     - all variables renamed to remove specific version from the name

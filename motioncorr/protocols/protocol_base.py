@@ -25,13 +25,14 @@
 # **************************************************************************
 
 import os
+import numpy as np
 
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
 from pwem.protocols import EMProtocol
-from pwem.emlib.image import ImageHandler
+from pwem.emlib.image import ImageHandler, DT_FLOAT
 from pwem.objects import Movie
 
 from ..constants import NO_FLIP, NO_ROTATION
@@ -179,7 +180,8 @@ class ProtMotionCorrBase(EMProtocol):
 
     # --------------------------- STEPS functions -----------------------------
     def _prepareEERFiles(self):
-        # parse EER gain file before its conversion to mrc
+        """ Parse .gain file for defects and create dose distribution file.
+        EER gain must be parsed before conversion to mrc. """
         inputMovies = self.getInputMovies()
         if self.isEER and inputMovies.getGain():
             defects = parseEERDefects(inputMovies.getGain())
@@ -411,3 +413,30 @@ class ProtMotionCorrBase(EMProtocol):
             firstFrame, _, _ = movieSet.getFramesRange()
             preExp += dose * (firstFrame - 1)
             return preExp, dose
+
+    def __convertCorrectionImage(self, image):
+        """ Overwrites ProtAlignMovies class behaviour because motioncorr only
+        supports dark or gain files in MRC format. """
+
+        # Get final correction image file
+        finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
+
+        if not os.path.exists(finalName):
+            ih = ImageHandler()
+            self.info(f"Converting {image} to {finalName}")
+
+            if image.endswith(".mrc"):
+                pwutils.createAbsLink(image, finalName)
+            elif image.endswith('.gain'):
+                # Convert tif to mrc, also take reciprocal
+                inputData = ih.read(image+":tif").getData()
+                outputData = ih.createImage()
+                recip = np.reciprocal(inputData, dtype=float)
+                recip[recip == np.inf] = 0
+                outputData.setData(recip)
+                outputData.write(finalName)
+            else:
+                ih.convert(image, finalName, DT_FLOAT)
+
+        # return final name
+        return os.path.abspath(finalName)
