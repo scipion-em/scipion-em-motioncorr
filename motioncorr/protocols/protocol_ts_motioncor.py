@@ -58,17 +58,6 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         self._defineCommonParams(form, allowDW=False)
 
     # --------------------------- STEPS functions -----------------------------
-    def convertInputStep(self, inputId):
-        self._prepareEERFiles()
-        inputTsM = self.getInputMovies()
-        # Convert gain
-        gain = inputTsM.getGain()
-        inputTsM.setGain(self._convertCorrectionImage(gain))
-
-        # Convert dark
-        dark = inputTsM.getDark()
-        inputTsM.setDark(self._convertCorrectionImage(dark))
-
     def _processTiltImageM(self, workingFolder, tiltImageM, *args):
         outputFn, _ = self._getOutputTiltImagePaths(tiltImageM)
 

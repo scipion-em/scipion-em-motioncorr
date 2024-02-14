@@ -149,19 +149,6 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         self._defineCommonParams(form)
 
     # --------------------------- STEPS functions -----------------------------
-    def _convertInputStep(self):
-        self._prepareEERFiles()
-        pwutils.makePath(self._getExtraPath('DONE'))
-        movs = self.getInputMovies()
-
-        # Convert gain
-        gain = movs.getGain()
-        movs.setGain(self._convertCorrectionImage(gain))
-
-        # Convert dark
-        dark = movs.getDark()
-        movs.setDark(self._convertCorrectionImage(dark))
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)

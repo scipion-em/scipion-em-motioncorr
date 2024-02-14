@@ -179,10 +179,22 @@ class ProtMotionCorrBase(EMProtocol):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
-    def _prepareEERFiles(self):
+    def _convertInputStep(self):
+        inputMovies = self.getInputMovies()
+        self._prepareEERFiles(inputMovies)
+        pwutils.makePath(self._getExtraPath('DONE'))
+
+        # Convert gain
+        gain = inputMovies.getGain()
+        inputMovies.setGain(self._convertCorrectionImage(gain))
+
+        # Convert dark
+        dark = inputMovies.getDark()
+        inputMovies.setDark(self._convertCorrectionImage(dark))
+
+    def _prepareEERFiles(self, inputMovies):
         """ Parse .gain file for defects and create dose distribution file.
         EER gain must be parsed before conversion to mrc. """
-        inputMovies = self.getInputMovies()
         if self.isEER and inputMovies.getGain():
             defects = parseEERDefects(inputMovies.getGain())
             if defects:
