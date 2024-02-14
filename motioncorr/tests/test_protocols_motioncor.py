@@ -27,6 +27,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os.path
 
 from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
@@ -38,28 +39,15 @@ from ..protocols import ProtMotionCorr
 class TestMotioncorAlignMovies(BaseTest):
     @classmethod
     def setData(cls):
-        cls.ds = DataSet.getDataSet('movies')
+        cls.ds1 = DataSet.getDataSet('movies')
+        cls.ds2 = DataSet.getDataSet('relion30_tutorial')
 
     @classmethod
-    def runImportMovies(cls, pattern, **kwargs):
+    def runImportMovies(cls, pattern, label, **kwargs):
         """ Run an Import micrograph protocol. """
-        params = {'samplingRate': 1.14,
-                  'voltage': 300,
-                  'sphericalAberration': 2.7,
-                  'magnification': 50000,
-                  'scannedPixelSize': None,
-                  'filesPattern': pattern,
-                  'dosePerFrame': 1.3
-                  }
-        if 'samplingRate' not in kwargs:
-            del params['samplingRate']
-            params['samplingRateMode'] = 0
-        else:
-            params['samplingRateMode'] = 1
-
-        params.update(kwargs)
-
-        protImport = cls.newProtocol(ProtImportMovies, **params)
+        protImport = cls.newProtocol(ProtImportMovies, filesPattern=pattern,
+                                     **kwargs)
+        protImport.setObjLabel(f"import movies - {label}")
         cls.launchProtocol(protImport)
         return protImport
 
@@ -68,14 +56,63 @@ class TestMotioncorAlignMovies(BaseTest):
         setupTestProject(cls)
         cls.setData()
         print(magentaStr("\n==> Importing data - movies:"))
-        cls.protImport1 = cls.runImportMovies(cls.ds.getFile('qbeta/qbeta.mrc'),
-                                              magnification=50000)
-        cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
-                                              magnification=61000)
+        cls.protImport1 = cls.runImportMovies(
+            cls.ds1.getFile('c3-adp-se-xyz-0228_200.tif'),
+            "tif + dm4 gain",
+            samplingRate=0.554,
+            voltage=300,
+            sphericalAberration=2.7,
+            dosePerFrame=1.3,
+            gainFile=cls.ds1.getFile('SuperRef_c3-adp-se-xyz-0228_001.dm4')
+        )
 
-    def _checkMicrographs(self, protocol):
-        self.assertIsNotNone(getattr(protocol, 'outputMicrographsDoseWeighted'),
-                             "Output SetOfMicrographs were not created.")
+        cls.protImport2 = cls.runImportMovies(
+            cls.ds1.getFile('cct/cct_1.em'),
+            "em",
+            samplingRate=1.4,
+            voltage=300,
+            sphericalAberration=2.7,
+            dosePerFrame=1.3
+        )
+
+        cls.protImport3 = cls.runImportMovies(
+            cls.ds1.getFile('Falcon*.mrcs'),
+            "mrcs",
+            samplingRate=1.1,
+            voltage=300,
+            sphericalAberration=2.7,
+            dosePerFrame=1.2
+        )
+
+        cls.protImport4 = cls.runImportMovies(
+            cls.ds1.getFile('FoilHole*.eer'),
+            "eer + gain",
+            samplingRate=1.2,
+            voltage=300,
+            sphericalAberration=2.7,
+            dosePerFrame=0.07,
+            gainFile=cls.ds1.getFile('eer.gain')
+        )
+
+        cls.protImport5 = cls.runImportMovies(
+            cls.ds2.getFile('Movies/20170629_00030_frameImage.tiff'),
+            "tif + mrc gain",
+            samplingRate=0.885,
+            voltage=200,
+            sphericalAberration=1.4,
+            dosePerFrame=1.277,
+            gainFile=cls.ds2.getFile('Movies/gain.mrc')
+        )
+
+    def _checkOutput(self, protocol):
+        output = protocol._possibleOutputs.OUT_MICS_DW.name
+        self.assertIsNotNone(getattr(protocol, output),
+                             "Output SetOfMicrographs was not created.")
+
+    def _checkGainFile(self, protocol):
+        gainFile = protocol.inputMovies.get().getGain()
+        self.assertTrue(os.path.exists(gainFile),
+                        f"Gain file {gainFile} was not found.")
 
     def _checkAlignment(self, movie, goldRange, goldRoi):
         alignment = movie.getAlignment()
@@ -96,43 +133,69 @@ class TestMotioncorAlignMovies(BaseTest):
                                                  roi, type(roi)))
         self.assertNotEqual(zeroShifts, shifts, msgShifts)
         self.assertEqual(nrShifts, aliFrames, "Number of shifts is not equal"
-                                              " number of aligned frames.")
+                                              "to number of aligned frames.")
 
-    def test_cct_motioncor_patch(self):
-        print(magentaStr("\n==> Testing motioncor - patch-based:"))
+    def test_tif(self):
+        print(magentaStr("\n==> Testing motioncor - tif movies:"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='cct - motioncor test1',
-                                patchX=2, patchY=2)
-        prot.inputMovies.set(self.protImport2.outputMovies)
-        self.launchProtocol(prot)
-
-        self._checkMicrographs(prot)
-        self._checkAlignment(prot.outputMovies[1],
-                             (1, 7), [0, 0, 0, 0])
-
-    def test_qbeta_motioncor_patch(self):
-        print(magentaStr("\n==> Testing motioncor - patch-based with grouping:"))
-        prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='qbeta - motioncor test2 (grouping)',
-                                patchX=2, patchY=2,
-                                group=2)
+                                objLabel='tif - motioncor',
+                                patchX=0, patchY=0, binFactor=2)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
-        self._checkMicrographs(prot)
+        self._checkOutput(prot)
+        self._checkGainFile(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1, 7), [0, 0, 0, 0])
+                             (1, 38), [0, 0, 0, 0])
 
-    def test_qbeta_motioncor_sel(self):
-        print(magentaStr("\n==> Testing motioncor - patch-based with frame range:"))
+    def test_tif2(self):
+        print(magentaStr("\n==> Testing motioncor - tif movies (2):"))
         prot = self.newProtocol(ProtMotionCorr,
-                                objLabel='qbeta - motioncor test3 (frame range)',
+                                objLabel='tif - motioncor (2)',
+                                patchX=0, patchY=0)
+        prot.inputMovies.set(self.protImport5.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkOutput(prot)
+        self._checkGainFile(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1, 24), [0, 0, 0, 0])
+
+    def test_mrcs(self):
+        print(magentaStr("\n==> Testing motioncor - mrcs movies:"))
+        prot = self.newProtocol(ProtMotionCorr,
+                                objLabel='mrcs - motioncor',
+                                patchX=0, patchY=0)
+        prot.inputMovies.set(self.protImport3.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkOutput(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1, 16), [0, 0, 0, 0])
+
+    def test_eer(self):
+        print(magentaStr("\n==> Testing motioncor - eer movies:"))
+        prot = self.newProtocol(ProtMotionCorr,
+                                objLabel='eer - motioncor',
+                                patchX=0, patchY=0, eerGroup=14)
+        prot.inputMovies.set(self.protImport4.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkOutput(prot)
+        self._checkGainFile(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1, 567), [0, 0, 0, 0])
+
+    def test_em(self):
+        print(magentaStr("\n==> Testing motioncor - em movies:"))
+        prot = self.newProtocol(ProtMotionCorr,
+                                objLabel='em - motioncor',
                                 patchX=2, patchY=2,
                                 alignFrame0=2,
                                 alignFrameN=6)
-        prot.inputMovies.set(self.protImport1.outputMovies)
+        prot.inputMovies.set(self.protImport2.outputMovies)
         self.launchProtocol(prot)
 
-        self._checkMicrographs(prot)
+        self._checkOutput(prot)
         self._checkAlignment(prot.outputMovies[1],
                              (2, 6), [0, 0, 0, 0])
