@@ -437,19 +437,21 @@ class ProtMotionCorrBase(EMProtocol):
 
         if not os.path.exists(finalName):
             ih = ImageHandler()
-            self.info(f"Converting {image} to {finalName}")
 
             if image.endswith(".mrc"):
                 pwutils.createAbsLink(image, finalName)
             elif image.endswith('.gain'):
+                self.info(f"Converting {image} to {finalName}")
                 # Convert tif to mrc, also take reciprocal
                 inputData = ih.read(image+":tif").getData()
                 outputData = ih.createImage()
-                recip = np.reciprocal(inputData, dtype=float)
+                with np.errstate(divide='ignore'):
+                    recip = np.reciprocal(inputData, dtype=float)
                 recip[recip == np.inf] = 0
                 outputData.setData(recip)
                 outputData.write(finalName)
             else:
+                self.info(f"Converting {image} to {finalName}")
                 ih.convert(image, finalName, DT_FLOAT)
 
         # return final name
