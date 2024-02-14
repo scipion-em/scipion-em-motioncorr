@@ -63,11 +63,11 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         inputTsM = self.getInputMovies()
         # Convert gain
         gain = inputTsM.getGain()
-        inputTsM.setGain(self.__convertCorrectionImage(gain))
+        inputTsM.setGain(self._convertCorrectionImage(gain))
 
         # Convert dark
         dark = inputTsM.getDark()
-        inputTsM.setDark(self.__convertCorrectionImage(dark))
+        inputTsM.setDark(self._convertCorrectionImage(dark))
 
     def _processTiltImageM(self, workingFolder, tiltImageM, *args):
         outputFn, _ = self._getOutputTiltImagePaths(tiltImageM)

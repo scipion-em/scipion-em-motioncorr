@@ -414,9 +414,11 @@ class ProtMotionCorrBase(EMProtocol):
             preExp += dose * (firstFrame - 1)
             return preExp, dose
 
-    def __convertCorrectionImage(self, image):
+    def _convertCorrectionImage(self, image):
         """ Overwrites ProtAlignMovies class behaviour because motioncorr only
         supports dark or gain files in MRC format. """
+        if image is None:
+            return None
 
         # Get final correction image file
         finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
