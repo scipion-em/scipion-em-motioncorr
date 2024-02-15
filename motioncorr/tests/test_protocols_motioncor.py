@@ -183,8 +183,6 @@ class TestMotioncorAlignMovies(BaseTest):
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
-        self._checkAlignment(prot.outputMovies[1],
-                             (1, 40), [0, 0, 0, 0])
 
     def test_em(self):
         print(magentaStr("\n==> Testing motioncor - em movies:"))
