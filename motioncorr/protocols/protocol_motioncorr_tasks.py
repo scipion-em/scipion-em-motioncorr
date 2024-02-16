@@ -83,9 +83,12 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _insertAllSteps(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
         self._insertFunctionStep(self._convertInputStep)
-        self._insertFunctionStep(self._processAllMoviesStep)
+        # Make the following step to always run, despite finished
+        # this may be useful when new input items (from streaming)
+        # and need to continue
+        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now())
 
-    def _processAllMoviesStep(self):
+    def _processAllMoviesStep(self, when):
         self.lock = threading.Lock()
         self.processed = 0
         self.registered = 0
@@ -135,12 +138,11 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
                     with self.lock:
                         self.processed += n
-                        batch_ids = [m.getObjId() for m in batch['items']]
-                        self.error(f"Batch {batch['index']}:{batch_ids}, "
+                        self.debug(f" Processing {self.batch_str(batch)}, "
                                    f"{elapsed}, Processed: {self.processed}")
 
                 except Exception as e:
-                    self.error("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
+                    self.debug("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
                                % (batch['id'], str(e)))
                     import traceback
                     traceback.print_exc()
@@ -160,43 +162,46 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         usePatches = self.patchX != 0 or self.patchY != 0
         logSuffix = '%s-Full.log' % ('-Patch' if usePatches else '')
         newDone = []
+        missing = {}
 
-        def _moveToExtra(src, dst):
+        def _moveToExtra(movie, src, dst):
             srcFn = os.path.join(srcDir, src)
             dstFn = self._getExtraPath(dst)
-            self.error(f"Moving {srcFn} -> {dstFn}"
-                       f"\n\texists source: {os.path.exists(srcFn)}")
             if os.path.exists(srcFn):
                 pwutils.moveFile(srcFn, dstFn)
                 return True
+            missing[movie.getObjId()] = movie
             return False
 
         def _moveMovieFiles(movie):
             movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
-            self.error(f"Moving output for movie: {movieRoot}")
+            self.debug(f"Moving output for movie: {movieRoot}")
 
             if applyDose:
-                a = _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
+                _moveToExtra(movie, movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
 
             if not applyDose or saveUnweighted:
-                b = _moveToExtra(movieRoot + '.mrc', self._getOutputMicName(movie))
+                _moveToExtra(movie, movieRoot + '.mrc', self._getOutputMicName(movie))
 
             if self.splitEvenOdd:
-                _moveToExtra(movieRoot + '_EVN.mrc',
+                _moveToExtra(movie, movieRoot + '_EVN.mrc',
                              self._getOutputMicEvenName(movie))
-                _moveToExtra(movieRoot + '_ODD.mrc',
+                _moveToExtra(movie, movieRoot + '_ODD.mrc',
                              self._getOutputMicOddName(movie))
 
-            _moveToExtra(movieRoot + logSuffix, self._getMovieLogFile(movie))
-            if a or b:
-                newDone.append(movie)
+            _moveToExtra(movie, movieRoot + logSuffix, self._getMovieLogFile(movie))
 
         for movie in batch['items']:
             _moveMovieFiles(movie)
+            if movie.getObjId() not in missing:
+                newDone.append(movie)
+
+        self.debug(f" Moving {self.batch_str(batch)}, "
+                   f"newDone: {len(newDone)}, missing: {len(missing)}")
 
         if newDone:
             self._firstTimeOutput = not hasattr(self, 'outputMovies')
-            self.error(f">>> Updating outputs, newDone: {len(newDone)}, "
+            self.debug(f">>> Updating outputs, newDone: {len(newDone)}, "
                        f"firstTimeOutput: {self._firstTimeOutput}")
             self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
 
@@ -205,12 +210,13 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         with self.lock:
             self.registered += len(newDone)
-            batch_ids = [m.getObjId() for m in batch['items']]
-            self.error(f"OUTPUT: Batch {batch['index']}:{batch_ids}, "
+            self.debug(f"OUTPUT: {self.batch_str(batch)}, "
                        f"{elapsed}, "
                        f"New done {len(newDone)}, "
                        f"Registered {self.registered}, "
                        f"Processed {self.processed}")
+            for movie in missing.values():
+                self.debug(f"FAILED: {movie.getFileName()}")
 
         # Clean batch folder if not in debug mode
         if doClean:
@@ -315,3 +321,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         usePatches = self.patchX != 0 or self.patchY != 0
         return '%s%s-Full.log' % (self._getMovieRoot(movie),
                                   '-Patch' if usePatches else '')
+
+    def debug(self, msg):
+        self.error(f"{Pretty.now()}: DEBUG >>> {msg}")
+
+    def batch_str(self, batch):
+        batch_ids = [m.getObjId() for m in batch['items']]
+        return f"Batch {batch['index']}:{batch_ids}"
