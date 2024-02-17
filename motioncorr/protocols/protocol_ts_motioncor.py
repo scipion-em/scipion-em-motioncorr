@@ -58,6 +58,9 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
         self._defineCommonParams(form, allowDW=False)
 
     # --------------------------- STEPS functions -----------------------------
+    def convertInputStep(self, inputId):
+        ProtMotionCorrBase._convertInputStep(self)
+
     def _processTiltImageM(self, workingFolder, tiltImageM, *args):
         outputFn, _ = self._getOutputTiltImagePaths(tiltImageM)
 

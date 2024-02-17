@@ -25,7 +25,6 @@
 # **************************************************************************
 
 import os
-import numpy as np
 
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
@@ -440,16 +439,12 @@ class ProtMotionCorrBase(EMProtocol):
 
             if image.endswith(".mrc"):
                 pwutils.createAbsLink(image, finalName)
-            elif image.endswith('.gain'):
+            elif image.endswith(".gain"):
+                # this gain reference in the TIFF container
+                # is a multiplicative gain, as in K2 and K3, hence no need for reciprocal
                 self.info(f"Converting {image} to {finalName}")
-                # Convert tif to mrc, also take reciprocal
-                inputData = ih.read(image+":tif").getData()
-                outputData = ih.createImage()
-                with np.errstate(divide='ignore'):
-                    recip = np.reciprocal(inputData, dtype=float)
-                recip[recip == np.inf] = 0
-                outputData.setData(recip)
-                outputData.write(finalName)
+                image += ":tif"
+                ih.convert(image, finalName, DT_FLOAT)
             else:
                 self.info(f"Converting {image} to {finalName}")
                 ih.convert(image, finalName, DT_FLOAT)
