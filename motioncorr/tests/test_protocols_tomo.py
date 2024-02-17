@@ -29,6 +29,7 @@ from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import magentaStr
 from tomo.tests import DataSet  # initialization of tomo data set definition
 from tomo.protocols import ProtImportTsMovies
+
 from ..protocols import ProtTsMotionCorr
 
 
@@ -55,7 +56,7 @@ class TestMotioncorTiltSeriesAlignMovies(BaseTest):
         return protImport
 
     def test_tiltseries_motioncor(self):
-        print(magentaStr("\n==> Importing data - TiltSeries:"))
+        print(magentaStr("\n==> Importing data - tilt-series movies:"))
         protImport = self._runImportTiltSeriesM()
         print(magentaStr("\n==> Testing motioncor - patch-based:"))
         protMc = self.newProtocol(ProtTsMotionCorr)

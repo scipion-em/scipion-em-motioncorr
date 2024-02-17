@@ -149,10 +149,6 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         self._defineCommonParams(form)
 
     # --------------------------- STEPS functions -----------------------------
-    def _convertInputStep(self):
-        self._prepareEERFiles()
-        ProtAlignMovies._convertInputStep(self)
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
