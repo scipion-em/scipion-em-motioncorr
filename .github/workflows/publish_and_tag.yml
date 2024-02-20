@@ -8,6 +8,6 @@ on:
 
 jobs:
   call-publish-workflow:
-    uses: scipion-em/.github/workflows/publish_and_tag.yml@test
+    uses: scipion-em/.github/.github/workflows/publish_and_tag.yml@test
     with:
       folder: motioncorr
