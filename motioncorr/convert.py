@@ -69,7 +69,7 @@ def getMovieFileName(movie):
 
 def parseEERDefects(fn):
     """ Extract defects coords from XML metadata inside EER *.gain file. """
-    defects = []  # x y w h
+    defects = []  # x y w h. 0,0 is lower left corner
     xmlStr = None
 
     if not fn.endswith(".gain"):
