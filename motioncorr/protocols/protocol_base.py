@@ -31,7 +31,7 @@ import pyworkflow.utils as pwutils
 from pyworkflow.protocol import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
 from pwem.protocols import EMProtocol
-from pwem.emlib.image import ImageHandler
+from pwem.emlib.image import ImageHandler, DT_FLOAT
 from pwem.objects import Movie
 
 from ..constants import NO_FLIP, NO_ROTATION
@@ -178,9 +178,22 @@ class ProtMotionCorrBase(EMProtocol):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
-    def _prepareEERFiles(self):
-        # parse EER gain file before its conversion to mrc
+    def _convertInputStep(self):
         inputMovies = self.getInputMovies()
+        self._prepareEERFiles(inputMovies)
+        pwutils.makePath(self._getExtraPath('DONE'))
+
+        # Convert gain
+        gain = inputMovies.getGain()
+        inputMovies.setGain(self._convertCorrectionImage(gain))
+
+        # Convert dark
+        dark = inputMovies.getDark()
+        inputMovies.setDark(self._convertCorrectionImage(dark))
+
+    def _prepareEERFiles(self, inputMovies):
+        """ Parse .gain file for defects and create dose distribution file.
+        EER gain must be parsed before conversion to mrc. """
         if self.isEER and inputMovies.getGain():
             defects = parseEERDefects(inputMovies.getGain())
             if defects:
@@ -411,3 +424,30 @@ class ProtMotionCorrBase(EMProtocol):
             firstFrame, _, _ = movieSet.getFramesRange()
             preExp += dose * (firstFrame - 1)
             return preExp, dose
+
+    def _convertCorrectionImage(self, image):
+        """ Overwrites ProtAlignMovies class behaviour because motioncorr only
+        supports dark or gain files in MRC format. """
+        if image is None:
+            return None
+
+        # Get final correction image file
+        finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
+
+        if not os.path.exists(finalName):
+            ih = ImageHandler()
+
+            if image.endswith(".mrc"):
+                pwutils.createAbsLink(image, finalName)
+            elif image.endswith(".gain"):
+                # this gain reference in the TIFF container
+                # is a multiplicative gain, as in K2 and K3, hence no need for reciprocal
+                self.info(f"Converting {image} to {finalName}")
+                image += ":tif"
+                ih.convert(image, finalName, DT_FLOAT)
+            else:
+                self.info(f"Converting {image} to {finalName}")
+                ih.convert(image, finalName, DT_FLOAT)
+
+        # return final name
+        return os.path.abspath(finalName)
