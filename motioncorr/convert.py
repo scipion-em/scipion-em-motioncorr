@@ -69,40 +69,49 @@ def getMovieFileName(movie):
 
 def parseEERDefects(fn):
     """ Extract defects coords from XML metadata inside EER *.gain file. """
-    defects = []  # x y w h
+    defects = []  # x y w h. 0,0 is lower left corner
+    xmlStr = None
 
     if not fn.endswith(".gain"):
         return defects
 
-    logger.info("Parsing defects from EER gain file..")
+    logger.info(f"Parsing defects from EER gain file: {fn}")
 
-    with TiffFile(fn) as tif:
-        for page in tif.pages:
-            for tag in page.tags:
-                if tag.code == 65100:  # TFS EER gain Metadata
-                    gainStr = tag.value
-                    break
-            break
+    try:
+        with TiffFile(fn) as tif:
+            for page in tif.pages:
+                for tag in page.tags:
+                    if tag.code == 65100:  # TFS EER gain Metadata
+                        gainStr = tag.value
+                        xmlStr = ET.fromstring(gainStr.decode('utf-8'))
+                        break
+                break
+    except ET.ParseError:
+        logger.error("Failed to parse EER defects")
+        return defects
 
-    for item in ET.fromstring(gainStr.decode('utf-8')):
-        if item.tag == "point":
-            point = item.text.split(",")
-            defects.append((point[0], point[1], 1, 1))
-        elif item.tag == "area":
-            area = item.text.split(",")
-            defects.append((area[0],
-                            area[1],
-                            int(area[2])-int(area[0])+1,
-                            int(area[3])-int(area[1])+1))
-        elif item.tag == "col":
-            area = item.text.split("-")
-            defects.append((area[0], 0,
-                            int(area[1])-int(area[0])+1,
-                            4096))
-        elif item.tag == "row":
-            area = item.text.split("-")
-            defects.append((0, area[0],
-                            4096,
-                            int(area[1])-int(area[0])+1))
+    if xmlStr is not None:
+        for item in xmlStr:
+            if item.tag == "point":
+                point = item.text.split(",")
+                defects.append((point[0], point[1], 1, 1))
+            elif item.tag == "area":
+                area = item.text.split(",")
+                defects.append((area[0],
+                                area[1],
+                                int(area[2])-int(area[0])+1,
+                                int(area[3])-int(area[1])+1))
+            elif item.tag == "col":
+                area = item.text.split("-")
+                defects.append((area[0], 0,
+                                int(area[1])-int(area[0])+1,
+                                4096))
+            elif item.tag == "row":
+                area = item.text.split("-")
+                defects.append((0, area[0],
+                                4096,
+                                int(area[1])-int(area[0])+1))
 
-    return defects
+        logger.info(f"Number of defects found: {len(defects)}")
+
+        return defects

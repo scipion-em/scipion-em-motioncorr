@@ -29,10 +29,11 @@ from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import magentaStr
 from tomo.tests import DataSet  # initialization of tomo data set definition
 from tomo.protocols import ProtImportTsMovies
+
 from ..protocols import ProtTsMotionCorr
 
 
-class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
+class TestMotioncorTiltSeriesAlignMovies(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -54,10 +55,10 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
         self.launchProtocol(protImport)
         return protImport
 
-    def test_tiltseries_motioncor2(self):
-        print(magentaStr("\n==> Importing data - TiltSeries:"))
+    def test_tiltseries_motioncor(self):
+        print(magentaStr("\n==> Importing data - tilt-series movies:"))
         protImport = self._runImportTiltSeriesM()
-        print(magentaStr("\n==> Testing motioncor2 - patch-based:"))
+        print(magentaStr("\n==> Testing motioncor - patch-based:"))
         protMc = self.newProtocol(ProtTsMotionCorr)
         protMc.inputTiltSeriesM.set(protImport.outputTiltSeriesM)
         self.launchProtocol(protMc)
@@ -85,4 +86,4 @@ class TestMotioncor2TiltSeriesAlignMovies(BaseTest):
                                  "Tilt image id is incorrect")
                 self.assertEqual(ti.getSamplingRate(), ts.getSamplingRate(),
                                  'Tilt image sampling rate must be equal to '
-                                 'tilt serie')
+                                 'tilt series')
