@@ -32,7 +32,7 @@ import time
 
 from collections import OrderedDict
 
-from emtools.utils import Timer, Pipeline, Pretty
+from emtools.utils import Timer, Pipeline, Pretty,Process
 from emtools.pwx import SetMonitor, BatchManager
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
@@ -111,6 +111,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         g = mc.addGenerator(batchMgr.generate)
         gpus = self.getGpuList()
         outputQueue = None
+        self.debug(f"GPUS: {gpus}")
         for gpu in gpus:
             p = mc.addProcessor(g.outputQueue, self._getMcProcessor(gpu),
                                 outputQueue=outputQueue)
@@ -119,6 +120,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         o1 = mc.addProcessor(outputQueue, self._moveBatchOutput)
         mc.run()
         # Mark the output as closed
+        self._firstTimeOutput = False
         self._updateOutputSets([], pwobj.Set.STREAM_CLOSED)
 
     def _getMcProcessor(self, gpu):
@@ -130,20 +132,30 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                     n = len(batch['items'])
                     t = Timer()
 
+                    batch_path = batch['path']
+                    batch_output = os.path.join(batch_path, 'output')
+
+                    # The output folder may exists if re-trying
+                    if not os.path.exists(batch_output):
+                        Process.system(f"mkdir '{batch_output}'")
+
                     cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
-                    self.runJob(self.program, cmd, cwd=batch['path'])
+                    self.runJob(self.program, cmd, cwd=batch_path)
 
                     elapsed = t.getToc()
                     t.toc(f'Ran motioncor batch of {n} movies')
+                    tries = 0  # Everything run OK, no more tries
 
                     with self.lock:
                         self.processed += n
-                        self.debug(f" Processing {self.batch_str(batch)}, "
+                        thread_id = threading.get_ident()
+                        self.debug(f" {thread_id}: Processing {self.batch_str(batch)}, "
                                    f"{elapsed}, Processed: {self.processed}")
 
                 except Exception as e:
-                    self.debug("ERROR: Motioncor2 has failed for batch %s. --> %s\n"
-                               % (batch['id'], str(e)))
+                    self.debug("ERROR: Motioncor2 has failed for batch %s. --> %s\n."
+                               "Sleeping and re-trying in one minute." % (batch['id'], str(e)))
+                    time.sleep(60)
                     import traceback
                     traceback.print_exc()
                     if tries == 0:
@@ -170,11 +182,12 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             if os.path.exists(srcFn):
                 pwutils.moveFile(srcFn, dstFn)
                 return True
+            self.debug(f"Missing file: {srcFn}")
             missing[movie.getObjId()] = movie
             return False
 
         def _moveMovieFiles(movie):
-            movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
+            movieRoot = 'output/' + ProtMotionCorr._getMovieRoot(self, movie)
             self.debug(f"Moving output for movie: {movieRoot}")
 
             if applyDose:
@@ -220,7 +233,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         # Clean batch folder if not in debug mode
         if doClean:
-            os.system('rm -rf %s' % batch['path'])
+            Process.system('rm -rf %s' % batch['path'])
 
         t.toc(f"Moved output for batch {batch['id']}")
 
@@ -235,6 +248,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         argsDict = self._getMcArgs()
         argsDict['-Gpu'] = '#'
         argsDict['-Serial'] = 1
+        argsDict['-LogDir'] = "output/"
 
         # FIXME: Duplicated from ProtMotionCorr._processMovie
         if self.isEER:
@@ -266,7 +280,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                             f"in Motioncor protocol. ")
 
         argsDict[inprefix] = './'
-        argsDict['-OutMrc'] = 'output_'
+        argsDict['-OutMrc'] = 'output/'
 
         cmd = ' '.join(['%s %s' % (k, v) for k, v in argsDict.items()])
         cmd += self.extraParams2.get()

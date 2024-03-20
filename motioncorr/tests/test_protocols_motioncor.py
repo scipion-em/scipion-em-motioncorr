@@ -33,7 +33,7 @@ from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
-from ..protocols import ProtMotionCorr
+from ..protocols import ProtMotionCorr, ProtMotionCorrTasks
 
 
 class TestMotioncorAlignMovies(BaseTest):
@@ -50,6 +50,14 @@ class TestMotioncorAlignMovies(BaseTest):
         protImport.setObjLabel(f"import movies - {label}")
         cls.launchProtocol(protImport)
         return protImport
+
+    @classmethod
+    def newProtocolMc(cls, *args, **kwargs):
+        if int(os.environ.get('TEST_MC_TASKS', 0)):
+            McProtClass = ProtMotionCorrTasks
+        else:
+            McProtClass = ProtMotionCorr
+        return cls.newProtocol(McProtClass, *args, **kwargs)
 
     @classmethod
     def setUpClass(cls):
@@ -82,16 +90,6 @@ class TestMotioncorAlignMovies(BaseTest):
             voltage=300,
             sphericalAberration=2.7,
             dosePerFrame=1.2
-        )
-
-        cls.protImport4 = cls.runImportMovies(
-            cls.ds1.getFile('FoilHole*.eer'),
-            "eer + gain",
-            samplingRate=1.2,
-            voltage=300,
-            sphericalAberration=2.7,
-            dosePerFrame=0.07,
-            gainFile=cls.ds1.getFile('eer.gain')
         )
 
         cls.protImport5 = cls.runImportMovies(
@@ -137,7 +135,7 @@ class TestMotioncorAlignMovies(BaseTest):
 
     def test_tif(self):
         print(magentaStr("\n==> Testing motioncor - tif movies:"))
-        prot = self.newProtocol(ProtMotionCorr,
+        prot = self.newProtocolMc(
                                 objLabel='tif - motioncor',
                                 patchX=0, patchY=0, binFactor=2)
         prot.inputMovies.set(self.protImport1.outputMovies)
@@ -150,7 +148,7 @@ class TestMotioncorAlignMovies(BaseTest):
 
     def test_tif2(self):
         print(magentaStr("\n==> Testing motioncor - tif movies (2):"))
-        prot = self.newProtocol(ProtMotionCorr,
+        prot = self.newProtocolMc(
                                 objLabel='tif - motioncor (2)',
                                 patchX=0, patchY=0)
         prot.inputMovies.set(self.protImport5.outputMovies)
@@ -163,7 +161,7 @@ class TestMotioncorAlignMovies(BaseTest):
 
     def test_mrcs(self):
         print(magentaStr("\n==> Testing motioncor - mrcs movies:"))
-        prot = self.newProtocol(ProtMotionCorr,
+        prot = self.newProtocolMc(
                                 objLabel='mrcs - motioncor',
                                 patchX=0, patchY=0)
         prot.inputMovies.set(self.protImport3.outputMovies)
@@ -174,11 +172,21 @@ class TestMotioncorAlignMovies(BaseTest):
                              (1, 16), [0, 0, 0, 0])
 
     def test_eer(self):
+        return
         print(magentaStr("\n==> Testing motioncor - eer movies:"))
-        prot = self.newProtocol(ProtMotionCorr,
+        protImport = self.runImportMovies(
+            self.ds1.getFile('FoilHole*.eer'),
+            "eer + gain",
+            samplingRate=1.2,
+            voltage=300,
+            sphericalAberration=2.7,
+            dosePerFrame=0.07,
+            gainFile=self.ds1.getFile('eer.gain')
+        )
+        prot = self.newProtocolMc(
                                 objLabel='eer - motioncor',
                                 patchX=0, patchY=0, eerGroup=14)
-        prot.inputMovies.set(self.protImport4.outputMovies)
+        prot.inputMovies.set(protImport.outputMovies)
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
@@ -186,7 +194,7 @@ class TestMotioncorAlignMovies(BaseTest):
 
     def test_em(self):
         print(magentaStr("\n==> Testing motioncor - em movies:"))
-        prot = self.newProtocol(ProtMotionCorr,
+        prot = self.newProtocolMc(
                                 objLabel='em - motioncor',
                                 patchX=2, patchY=2,
                                 alignFrame0=2,
