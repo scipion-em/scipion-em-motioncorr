@@ -61,8 +61,8 @@ b) Developer's version
 **Important:** Starting from plugin v3.15, the config variables have been renamed. See: `scipion3 config -p motioncorr`
 
 - Motioncor binaries will be installed automatically with the plugin, but you can also link an existing installation.
-- Default installation path assumed is ``software/em/motioncor3-1.0.1``, if you want to change it, set *MOTIONCOR_HOME* in ``scipion.conf`` file to the folder where the Motioncor3 is installed.
-- Depending on your CUDA version this plugin will guess the right default binary from ``MotionCor3_1.0.1_CudaXY_10-26-2023`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting *MOTIONCOR_BIN* variable.
+- Default installation path assumed is ``software/em/motioncor3-1.1.1``, if you want to change it, set *MOTIONCOR_HOME* in ``scipion.conf`` file to the folder where the Motioncor3 is installed.
+- Depending on your CUDA version this plugin will guess the right default binary from ``MotionCor3_1.1.1_CudaXY_05-27-2024`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting *MOTIONCOR_BIN* variable.
 - If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *MOTIONCOR_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
 For an automatically updated installation of motioncor binaries, do not define neither *MOTIONCOR_HOME* nor *MOTIONCOR_BIN*.
@@ -82,8 +82,8 @@ Motioncor3 is provided under BSD-3-Clause license
 Supported versions
 ------------------
 
-motioncor3 1.0.1
-motioncor2 1.6.4
+* motioncor3 1.0.1, 1.1.1
+* motioncor2 1.6.4
 
 Protocols
 ---------
