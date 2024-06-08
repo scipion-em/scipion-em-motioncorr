@@ -56,6 +56,9 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
     def _defineParams(self, form, addEvenOddParam=True):
         ProtTsCorrectMotion._defineParams(self, form)
         self._defineCommonParams(form, allowDW=False)
+        # Patch alignment is not recommended
+        form.getParam('patchX').setDefault(0)
+        form.getParam('patchY').setDefault(0)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, inputId):
