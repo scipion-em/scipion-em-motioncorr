@@ -1,0 +1,5 @@
+scipion-em
+emtable>=0.0.14
+emtools>=0.1.0
+scipion-em-relion
+tifffile
