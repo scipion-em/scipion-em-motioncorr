@@ -31,7 +31,8 @@ import threading
 import time
 from uuid import uuid4
 from collections import OrderedDict
-from emtools.utils import Timer, Pipeline
+from emtools.utils import Timer
+from emtools.jobs import Pipeline
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
