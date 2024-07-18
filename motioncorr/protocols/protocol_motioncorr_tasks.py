@@ -30,10 +30,8 @@ import os
 import threading
 import time
 
-from collections import OrderedDict
-
-from emtools.utils import Timer, Pipeline, Pretty,Process
-from emtools.pwx import SetMonitor, BatchManager
+from emtools.utils import Timer, Pretty, Process
+from emtools.jobs import Pipeline
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
