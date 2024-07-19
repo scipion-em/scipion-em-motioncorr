@@ -32,6 +32,7 @@ import time
 
 from emtools.utils import Timer, Pretty, Process
 from emtools.jobs import Pipeline
+from emtools.pwx import SetMonitor, BatchManager
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
