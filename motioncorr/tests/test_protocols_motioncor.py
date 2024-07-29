@@ -172,7 +172,6 @@ class TestMotioncorAlignMovies(BaseTest):
                              (1, 16), [0, 0, 0, 0])
 
     def test_eer(self):
-        return
         print(magentaStr("\n==> Testing motioncor - eer movies:"))
         protImport = self.runImportMovies(
             self.ds1.getFile('FoilHole*.eer'),
