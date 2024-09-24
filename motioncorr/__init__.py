@@ -32,25 +32,25 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.16.3'
+__version__ = '3.16.4'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_0_1, V1_1_1]
+    _supportedVersions = [V1_0_1, V1_1_1, V1_1_2]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_1_1}')
+        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_1_2}')
         cls._defineVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
-                                           default="11.8")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3_1.1.1_Cuda%s%s_05-27-2024' % (
+                                           default="12.1")
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3_1.1.2_Cuda%s%s_06-11-2024' % (
             cudaVersion.major, cudaVersion.minor))
 
     @classmethod
