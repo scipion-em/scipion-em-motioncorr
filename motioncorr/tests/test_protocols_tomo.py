@@ -58,11 +58,11 @@ class TestMotioncorTiltSeriesAlignMovies(BaseTest):
     def test_tiltseries_motioncor(self):
         print(magentaStr("\n==> Importing data - tilt-series movies:"))
         protImport = self._runImportTiltSeriesM()
-        print(magentaStr("\n==> Testing motioncor - patch-based:"))
+        print(magentaStr("\n==> Testing motioncor:"))
         protMc = self.newProtocol(ProtTsMotionCorr)
-        protMc.inputTiltSeriesM.set(protImport.outputTiltSeriesM)
+        protMc.inputTiltSeriesM.set(getattr(protImport, protImport.OUTPUT_NAME))
         self.launchProtocol(protMc)
-        self.checkTSSet(protMc.outputTiltSeries, 2, 3, checkIds=True)
+        self.checkTSSet(protMc.TiltSeries, 2, 3, checkIds=True)
 
     def checkTSSet(self, set, size, anglesCount, checkIds=False):
         """

@@ -129,7 +129,7 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
     def _summary(self):
         summary = []
 
-        if hasattr(self, 'outputTiltSeries'):
+        if hasattr(self, 'TiltSeries'):
             summary.append('Aligned %d tilt series movies using Motioncor.'
                            % self.getInputMovies().getSize())
         else:
