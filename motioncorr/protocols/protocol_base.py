@@ -211,6 +211,9 @@ class ProtMotionCorrBase(EMProtocol):
             with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
                 f.write(f"{numbOfFrames} {self.eerGroup.get()} {dose}")
 
+    def allowsDelete(self, obj):
+        return True
+
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []

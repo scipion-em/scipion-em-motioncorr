@@ -29,10 +29,10 @@
 import os
 import threading
 import time
-from uuid import uuid4
-from collections import OrderedDict
-from emtools.utils import Timer
+
+from emtools.utils import Timer, Pretty, Process
 from emtools.jobs import Pipeline
+from emtools.pwx import SetMonitor, BatchManager
 
 from pyworkflow import SCIPION_DEBUG_NOCLEAN, BETA
 import pyworkflow.object as pwobj
@@ -67,11 +67,14 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _stepsCheck(self):
         pass
 
+    @classmethod
+    def worksInStreaming(cls):
+        return True
+
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
         ProtMotionCorr._defineAlignmentParams(self, form)
         self._defineStreamingParams(form)
-
         # Make default 1 minute for sleeping when no new input movies
         form.getParam('streamingSleepOnWait').setDefault(60)
 
@@ -79,121 +82,85 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     def _insertAllSteps(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
         self._insertFunctionStep(self._convertInputStep)
-        self._insertFunctionStep(self._processAllMoviesStep)
+        # Make the following step to always run, despite finished
+        # this may be useful when new input items (from streaming)
+        # and need to continue
+        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now())
 
-    def _loadInputMovies(self):
-        inputMovies = OrderedDict()
-        # If there are already some output movies, added them to avoid
-        # re-processing them
-        outputMovies = getattr(self, 'outputMovies', None)
-        if outputMovies is not None:
-            self._firstTimeOutput = False
-            self.error(f"Existing output: {outputMovies.getSize()} movies")
-            for m in outputMovies:
-                inputMovies[m.getObjId()] = m.clone()
-        else:
-            self.error("No output movies ")
-
-        while True:
-            moviesFile = self.getInputMovies().getFileName()
-            movieSet = SetOfMovies(filename=moviesFile)
-            movieSet.loadAllProperties()
-            for m in movieSet:
-                mid = m.getObjId()
-                if mid not in inputMovies:
-                    inputMovies[mid] = newMovie = m.clone()
-                    yield newMovie
-            movieSet.close()
-            if movieSet.isStreamClosed():
-                break
-
-            time.sleep(self.streamingSleepOnWait.get())
-        self.info(f"No more movies, stream closed. Total: {len(inputMovies)}")
-
-    def _processAllMoviesStep(self):
+    def _processAllMoviesStep(self, when):
         self.lock = threading.Lock()
         self.processed = 0
         self.registered = 0
 
-        self.error(">>> Starting processing movies...")
+        self.error(f">>> {Pretty.now()}: ----------------- "
+                   f"Start processing movies----------- ")
         self.program = Plugin.getProgram()
         self.command = self._getCmd()
         self._firstTimeOutput = True
 
-        mc = Pipeline()
-        g = mc.addGenerator(self._generateBatches)
-        gpus = self.getGpuList()
-        mc1 = mc.addProcessor(g.outputQueue, self._getMcProcessor(gpus[0]))
-        for gpu in gpus[1:]:
-            mc.addProcessor(g.outputQueue, self._getMcProcessor(gpu),
-                            outputQueue=mc1.outputQueue)
+        moviesMtr = SetMonitor(SetOfMovies,
+                               self.getInputMovies().getFileName(),
+                               blacklist=getattr(self, 'outputMovies', None))
+        waitSecs = self.streamingSleepOnWait.get()
+        moviesIter = moviesMtr.iterProtocolInput(self, 'movies', waitSecs=waitSecs)
+        batchMgr = BatchManager(self.streamingBatchSize.get(), moviesIter,
+                                self._getTmpPath())
 
-        o1 = mc.addProcessor(mc1.outputQueue, self._moveBatchOutput)
+        mc = Pipeline()
+        g = mc.addGenerator(batchMgr.generate)
+        gpus = self.getGpuList()
+        outputQueue = None
+        self.debug(f"GPUS: {gpus}")
+        for gpu in gpus:
+            p = mc.addProcessor(g.outputQueue, self._getMcProcessor(gpu),
+                                outputQueue=outputQueue)
+            outputQueue = p.outputQueue
+
+        o1 = mc.addProcessor(outputQueue, self._moveBatchOutput)
         mc.run()
         # Mark the output as closed
+        self._firstTimeOutput = False
         self._updateOutputSets([], pwobj.Set.STREAM_CLOSED)
-
-    def _generateBatches(self):
-        """ Check for new input movies and generate new tasks. """
-        # FIXME: Take streaming into account
-        self._batchCount = 0
-
-        def _createBatch(movies):
-            batch_id = str(uuid4())
-            batch_path = self._getTmpPath(batch_id)
-            pwutils.cleanPath(batch_path)
-            os.mkdir(batch_path)
-
-            for movie in movies:
-                fn = movie.getFileName()
-                baseName = os.path.basename(fn)
-                os.symlink(os.path.abspath(fn),
-                           os.path.join(batch_path, baseName))
-            self._batchCount += 1
-            return {
-                'movies': movies,
-                'id': batch_id,
-                'path': batch_path,
-                'index': self._batchCount
-            }
-
-        batchSize = self.streamingBatchSize.get()
-        movies = []
-        for movie in self._loadInputMovies():
-            movies.append(movie)
-
-            if len(movies) == batchSize:
-                yield _createBatch(movies)
-                movies = []
-
-        if movies:
-            yield _createBatch(movies)
 
     def _getMcProcessor(self, gpu):
         def _processBatch(batch):
-            try:
-                n = len(batch['movies'])
-                t = Timer()
+            tries = 2
+            while tries:
+                tries -= 1
+                try:
+                    n = len(batch['items'])
+                    t = Timer()
 
-                cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
-                self.runJob(self.program, cmd, cwd=batch['path'])
+                    batch_path = batch['path']
+                    batch_output = os.path.join(batch_path, 'output')
 
-                elapsed = t.getToc()
-                t.toc(f'Ran motioncor batch of {n} movies')
+                    # The output folder may exists if re-trying
+                    if not os.path.exists(batch_output):
+                        Process.system(f"mkdir '{batch_output}'")
 
-                with self.lock:
-                    self.processed += n
-                    batch_ids = [m.getObjId() for m in batch['movies']]
-                    self.error(f"Batch {batch['index']}:{batch_ids}, "
-                               f"{elapsed}, Processed: {self.processed}")
+                    cmd = self.command.replace('-Gpu #', f'-Gpu {gpu}')
+                    self.runJob(self.program, cmd, cwd=batch_path)
 
-                return batch
+                    elapsed = t.getToc()
+                    t.toc(f'Ran motioncor batch of {n} movies')
+                    tries = 0  # Everything run OK, no more tries
 
-            except Exception as e:
-                self.error("ERROR: Motioncor has failed for batch %s. --> %s\n"
-                           % (batch['id'], str(e)))
-                import traceback
-                traceback.print_exc()
+                    with self.lock:
+                        self.processed += n
+                        thread_id = threading.get_ident()
+                        self.debug(f" {thread_id}: Processing {self.batch_str(batch)}, "
+                                   f"{elapsed}, Processed: {self.processed}")
+
+                except Exception as e:
+                    self.debug("ERROR: Motioncor2 has failed for batch %s. --> %s\n."
+                               "Sleeping and re-trying in one minute." % (batch['id'], str(e)))
+                    time.sleep(60)
+                    import traceback
+                    traceback.print_exc()
+                    if tries == 0:
+                        self.error("ERROR: No more tries for this batch!!!")
+
+            return batch
 
         return _processBatch
 
@@ -206,39 +173,48 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         usePatches = self.patchX != 0 or self.patchY != 0
         logSuffix = '%s-Full.log' % ('-Patch' if usePatches else '')
         newDone = []
+        missing = {}
 
-        def _moveToExtra(src, dst):
+        def _moveToExtra(movie, src, dst):
             srcFn = os.path.join(srcDir, src)
             dstFn = self._getExtraPath(dst)
-            print(f"Moving {srcFn} -> {dstFn}\n\texists source: {os.path.exists(srcFn)}")
             if os.path.exists(srcFn):
                 pwutils.moveFile(srcFn, dstFn)
                 return True
+            self.debug(f"Missing file: {srcFn}")
+            missing[movie.getObjId()] = movie
             return False
 
         def _moveMovieFiles(movie):
-            movieRoot = 'output_' + ProtMotionCorr._getMovieRoot(self, movie)
+            movieRoot = 'output/' + ProtMotionCorr._getMovieRoot(self, movie)
+            self.debug(f"Moving output for movie: {movieRoot}")
+
             if applyDose:
-                _moveToExtra(movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
+                _moveToExtra(movie, movieRoot + '_DW.mrc', self._getOutputMicWtName(movie))
 
             if not applyDose or saveUnweighted:
-                _moveToExtra(movieRoot + '.mrc', self._getOutputMicName(movie))
+                _moveToExtra(movie, movieRoot + '.mrc', self._getOutputMicName(movie))
 
             if self.splitEvenOdd:
-                _moveToExtra(movieRoot + '_EVN.mrc',
+                _moveToExtra(movie, movieRoot + '_EVN.mrc',
                              self._getOutputMicEvenName(movie))
-                _moveToExtra(movieRoot + '_ODD.mrc',
+                _moveToExtra(movie, movieRoot + '_ODD.mrc',
                              self._getOutputMicOddName(movie))
 
-            done = _moveToExtra(ProtMotionCorr._getMovieRoot(self, movie) + logSuffix,
-                                self._getMovieLogFile(movie))
-            if done:
+            _moveToExtra(movie, movieRoot + logSuffix, self._getMovieLogFile(movie))
+
+        for movie in batch['items']:
+            _moveMovieFiles(movie)
+            if movie.getObjId() not in missing:
                 newDone.append(movie)
 
-        for movie in batch['movies']:
-            _moveMovieFiles(movie)
+        self.debug(f" Moving {self.batch_str(batch)}, "
+                   f"newDone: {len(newDone)}, missing: {len(missing)}")
 
         if newDone:
+            self._firstTimeOutput = not hasattr(self, 'outputMovies')
+            self.debug(f">>> Updating outputs, newDone: {len(newDone)}, "
+                       f"firstTimeOutput: {self._firstTimeOutput}")
             self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
 
         elapsed = t.getToc()
@@ -246,18 +222,17 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
         with self.lock:
             self.registered += len(newDone)
-            batch_ids = [m.getObjId() for m in batch['movies']]
-            self.error(f"OUTPUT: Batch {batch['index']}:{batch_ids}, "
+            self.debug(f"OUTPUT: {self.batch_str(batch)}, "
                        f"{elapsed}, "
                        f"New done {len(newDone)}, "
                        f"Registered {self.registered}, "
                        f"Processed {self.processed}")
-
-        self._firstTimeOutput = False
+            for movie in missing.values():
+                self.debug(f"FAILED: {movie.getFileName()}")
 
         # Clean batch folder if not in debug mode
         if doClean:
-            os.system('rm -rf %s' % batch['path'])
+            Process.system('rm -rf %s' % batch['path'])
 
         t.toc(f"Moved output for batch {batch['id']}")
 
@@ -272,6 +247,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         argsDict = self._getMcArgs()
         argsDict['-Gpu'] = '#'
         argsDict['-Serial'] = 1
+        argsDict['-LogDir'] = "output/"
 
         # FIXME: Duplicated from ProtMotionCorr._processMovie
         if self.isEER:
@@ -303,7 +279,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                             f"in Motioncor protocol. ")
 
         argsDict[inprefix] = './'
-        argsDict['-OutMrc'] = 'output_'
+        argsDict['-OutMrc'] = 'output/'
 
         cmd = ' '.join(['%s %s' % (k, v) for k, v in argsDict.items()])
         cmd += self.extraParams2.get()
@@ -358,3 +334,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         usePatches = self.patchX != 0 or self.patchY != 0
         return '%s%s-Full.log' % (self._getMovieRoot(movie),
                                   '-Patch' if usePatches else '')
+
+    def debug(self, msg):
+        self.error(f"{Pretty.now()}: DEBUG >>> {msg}")
+
+    def batch_str(self, batch):
+        batch_ids = [m.getObjId() for m in batch['items']]
+        return f"Batch {batch['index']}:{batch_ids}"
