@@ -153,3 +153,10 @@ class ProtTsMotionCorr(ProtMotionCorrBase, ProtTsCorrectMotion):
 
     def _createOutputWeightedTS(self):
         return False
+
+    def _getOutputName(self):
+        """ Return the output name, by default 'outputTiltSeries'.
+        This method can be re-implemented in subclasses that have a
+        different output. (e.g outputTomograms).
+        """
+        return 'TiltSeries'
