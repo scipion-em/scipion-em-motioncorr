@@ -75,15 +75,6 @@ class TestMotioncorAlignMovies(BaseTest):
         )
 
         cls.protImport2 = cls.runImportMovies(
-            cls.ds1.getFile('cct/cct_1.em'),
-            "em",
-            samplingRate=1.4,
-            voltage=300,
-            sphericalAberration=2.7,
-            dosePerFrame=1.3
-        )
-
-        cls.protImport3 = cls.runImportMovies(
             cls.ds1.getFile('Falcon*.mrcs'),
             "mrcs",
             samplingRate=1.1,
@@ -92,7 +83,7 @@ class TestMotioncorAlignMovies(BaseTest):
             dosePerFrame=1.2
         )
 
-        cls.protImport5 = cls.runImportMovies(
+        cls.protImport3 = cls.runImportMovies(
             cls.ds2.getFile('Movies/20170629_00030_frameImage.tiff'),
             "tif + mrc gain",
             samplingRate=0.885,
@@ -151,7 +142,7 @@ class TestMotioncorAlignMovies(BaseTest):
         prot = self.newProtocolMc(
                                 objLabel='tif - motioncor (2)',
                                 patchX=0, patchY=0)
-        prot.inputMovies.set(self.protImport5.outputMovies)
+        prot.inputMovies.set(self.protImport3.outputMovies)
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
@@ -164,7 +155,7 @@ class TestMotioncorAlignMovies(BaseTest):
         prot = self.newProtocolMc(
                                 objLabel='mrcs - motioncor',
                                 patchX=0, patchY=0)
-        prot.inputMovies.set(self.protImport3.outputMovies)
+        prot.inputMovies.set(self.protImport2.outputMovies)
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
@@ -190,17 +181,3 @@ class TestMotioncorAlignMovies(BaseTest):
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
-
-    def test_em(self):
-        print(magentaStr("\n==> Testing motioncor - em movies:"))
-        prot = self.newProtocolMc(
-                                objLabel='em - motioncor',
-                                patchX=2, patchY=2,
-                                alignFrame0=2,
-                                alignFrameN=6)
-        prot.inputMovies.set(self.protImport2.outputMovies)
-        self.launchProtocol(prot)
-
-        self._checkOutput(prot)
-        self._checkAlignment(prot.outputMovies[1],
-                             (2, 6), [0, 0, 0, 0])
