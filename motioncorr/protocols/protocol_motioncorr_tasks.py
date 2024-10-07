@@ -152,7 +152,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                                    f"{elapsed}, Processed: {self.processed}")
 
                 except Exception as e:
-                    self.debug("ERROR: Motioncor2 has failed for batch %s. --> %s\n."
+                    self.debug("ERROR: Motioncor has failed for batch %s. --> %s\n."
                                "Sleeping and re-trying in one minute." % (batch['id'], str(e)))
                     time.sleep(60)
                     import traceback
@@ -249,24 +249,6 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         argsDict['-Serial'] = 1
         argsDict['-LogDir'] = "output/"
 
-        # FIXME: Duplicated from ProtMotionCorr._processMovie
-        if self.isEER:
-            argsDict['-EerSampling'] = self.eerSampling.get() + 1
-            argsDict['-FmIntFile'] = "../../extra/FmIntFile.txt"
-
-        if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies)
-            argsDict.update({'-FmDose': dose,
-                             '-InitDose': preExp if preExp > 0.001 else 0})
-
-        if inputMovies.getGain():
-            argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',
-                             '-RotGain': self.gainRot.get(),
-                             '-FlipGain': self.gainFlip.get()})
-
-        if inputMovies.getDark():
-            argsDict['-Dark'] = inputMovies.getDark()
-
         # Get input format, but for the batch
         firstMovie = inputMovies.getFirstItem()
         ext = pwutils.getExt(firstMovie.getFileName()).lower()
@@ -274,6 +256,8 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             inprefix = '-InMrc'
         elif ext in ['.tif', '.tiff']:
             inprefix = '-InTiff'
+        elif ext in ['.eer']:
+            inprefix = '-InEer'
         else:
             raise Exception(f"Unsupported format '{ext}' for batch processing "
                             f"in Motioncor protocol. ")
