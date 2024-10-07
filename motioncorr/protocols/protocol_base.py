@@ -204,8 +204,12 @@ class ProtMotionCorrBase(EMProtocol):
             # write FmIntFile
             numbOfFrames = self._getNumberOfFrames()
             if self.doApplyDoseFilter:
+                if self.getClassName() == "ProtTsMotionCorr":
+                    acqOrder = 1
+                else:
+                    acqOrder = None
                 _, dose = self._getCorrectedDose(self.getInputMovies(),
-                                                 acqOrder=1)
+                                                 acqOrder)
             else:
                 dose = 0.0
             with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
