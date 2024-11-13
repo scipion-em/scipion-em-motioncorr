@@ -61,8 +61,6 @@ def getMovieFileName(movie):
     fn = movie.getFileName()
     if fn.endswith('.mrc'):
         fn += ':mrcs'
-    elif fn.endswith('.em'):
-        fn += ':ems'
 
     return fn
 

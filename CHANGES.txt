@@ -1,3 +1,4 @@
+3.16.7: tasks support EER, pin emtools version
 3.16.6: bugfix for eer dose per frame
 3.16.5: hotfix output name for TS protocol
 3.16.4: add mc3 1.1.2
