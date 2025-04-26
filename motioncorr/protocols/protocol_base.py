@@ -40,10 +40,10 @@ from ..convert import parseMovieAlignment2, parseEERDefects
 
 class ProtMotionCorrBase(EMProtocol):
     _label = None
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.isEER = False
 
     # -------------------------- DEFINE param functions -----------------------
