@@ -53,10 +53,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     _label = 'tasks'
     _devStatus = BETA
+    stepsExecutionMode = STEPS_SERIAL
 
     def __init__(self, **kwargs):
         ProtMotionCorr.__init__(self, **kwargs)
-        self.stepsExecutionMode = STEPS_SERIAL
         # Disable parallelization options just take into account GPUs
         self.numberOfMpi.set(0)
         self.numberOfThreads.set(0)
