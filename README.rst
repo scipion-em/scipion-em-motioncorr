@@ -82,7 +82,7 @@ Motioncor3 is provided under BSD-3-Clause license
 Supported versions
 ------------------
 
-* motioncor3 1.0.1, 1.1.1, 1.1.2
+* motioncor3 1.1.1, 1.1.2
 * motioncor2 1.6.4
 
 Protocols

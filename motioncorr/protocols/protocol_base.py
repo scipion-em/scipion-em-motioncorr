@@ -129,7 +129,8 @@ class ProtMotionCorrBase(EMProtocol):
                            'The pixels in such a region are replaced by '
                            'neighboring good pixel values. Each entry contains '
                            '4 integers x, y, w, h representing the x, y '
-                           'coordinates, width, and height, respectively.')
+                           'coordinates of the lower left corner, width, and '
+                           'height, respectively.')
 
         form.addParam('defectMap', params.FileParam, allowsNull=True,
                       label='Camera defects map',
@@ -180,20 +181,21 @@ class ProtMotionCorrBase(EMProtocol):
     # --------------------------- STEPS functions -----------------------------
     def _convertInputStep(self):
         inputMovies = self.getInputMovies()
-        self._prepareEERFiles(inputMovies)
+        self._prepareEERFiles()
         pwutils.makePath(self._getExtraPath('DONE'))
 
         # Convert gain
         gain = inputMovies.getGain()
-        inputMovies.setGain(self._convertCorrectionImage(gain))
+        inputMovies.setGain(self.__convertCorrectionImage(gain))
 
         # Convert dark
         dark = inputMovies.getDark()
-        inputMovies.setDark(self._convertCorrectionImage(dark))
+        inputMovies.setDark(self.__convertCorrectionImage(dark))
 
-    def _prepareEERFiles(self, inputMovies):
+    def _prepareEERFiles(self):
         """ Parse .gain file for defects and create dose distribution file.
         EER gain must be parsed before conversion to mrc. """
+        inputMovies = self.getInputMovies()
         if self.isEER and inputMovies.getGain():
             defects = parseEERDefects(inputMovies.getGain())
             if defects:
@@ -208,8 +210,7 @@ class ProtMotionCorrBase(EMProtocol):
                     acqOrder = 1
                 else:
                     acqOrder = None
-                _, dose = self._getCorrectedDose(self.getInputMovies(),
-                                                 acqOrder)
+                _, dose = self._getCorrectedDose(acqOrder)
             else:
                 dose = 0.0
             with open(self._getExtraPath("FmIntFile.txt"), "w") as f:
@@ -332,7 +333,7 @@ class ProtMotionCorrBase(EMProtocol):
                              '-FmIntFile': "../../extra/FmIntFile.txt"})
 
         if self.doApplyDoseFilter:
-            preExp, dose = self._getCorrectedDose(inputMovies, acqOrder)
+            preExp, dose = self._getCorrectedDose(acqOrder)
             argsDict['-InitDose'] = preExp if preExp > 0.001 else 0
             if not self.isEER:
                 argsDict['-FmDose'] = dose
@@ -383,6 +384,7 @@ class ProtMotionCorrBase(EMProtocol):
         return args
 
     def _getFramesRange(self):
+        """ Returns frames range for alignment. """
         if self.isEER:
             return self.alignFrame0.get(), self.alignFrameN.get() // self.eerGroup.get()
         else:
@@ -410,17 +412,27 @@ class ProtMotionCorrBase(EMProtocol):
 
     def _getNumberOfFrames(self):
         """ Dirty hack because of https://github.com/scipion-em/scipion-em-tomo/issues/334 """
-        _, frames, _ = self.getInputMovies().getFramesRange()
+        _, frames, _ = self.__getFramesRange()
         if not frames:
             frames = self.getInputMovies().getFirstItem().getDim()[2]
 
         return frames
 
-    def _getCorrectedDose(self, movieSet, acqOrder=None):
-        """ Reimplement this because of a special tomo case. """
-        acq = movieSet.getAcquisition()
+    def _getDoseParams(self):
+        """ Precalculate params in advance. """
+        acq = self.getInputMovies().getAcquisition()
         preExp = acq.getDoseInitial()
         dose = acq.getDosePerFrame()
+
+        return acq, preExp, dose
+
+    def __getFramesRange(self):
+        """ Returns frames range for input movies. """
+        return self.getInputMovies().getFramesRange()
+
+    def _getCorrectedDose(self, acqOrder=None):
+        """ Reimplement this because of a special tomo case. """
+        acq, preExp, dose = self._getDoseParams()
 
         if acqOrder is not None:
             # in tomo case dose = dosePerTilt
@@ -428,33 +440,24 @@ class ProtMotionCorrBase(EMProtocol):
             dosePerFrame = dose / self._getNumberOfFrames() if dose else 0.0
             return preExp, dosePerFrame
         else:
-            firstFrame, _, _ = movieSet.getFramesRange()
+            firstFrame, _, _ = self.__getFramesRange()
             preExp += dose * (firstFrame - 1)
             return preExp, dose
 
-    def _convertCorrectionImage(self, image):
-        """ Overwrites ProtAlignMovies class behaviour because motioncorr only
-        supports dark or gain files in MRC format. """
+    def __convertCorrectionImage(self, image):
+        """ Reimplement to convert dm4 gain only. """
         if image is None:
             return None
+        elif image.endswith(".dm4"):
+            # Get final correction image file
+            finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
 
-        # Get final correction image file
-        finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
-
-        if not os.path.exists(finalName):
-            ih = ImageHandler()
-
-            if image.endswith(".mrc"):
-                pwutils.createAbsLink(image, finalName)
-            elif image.endswith(".gain"):
-                # this gain reference in the TIFF container
-                # is a multiplicative gain, as in K2 and K3, hence no need for reciprocal
-                self.info(f"Converting {image} to {finalName}")
-                image += ":tif"
-                ih.convert(image, finalName, DT_FLOAT)
-            else:
+            if not os.path.exists(finalName):
+                ih = ImageHandler()
                 self.info(f"Converting {image} to {finalName}")
                 ih.convert(image, finalName, DT_FLOAT)
 
-        # return final name
-        return os.path.abspath(finalName)
+            # return final name
+            return os.path.abspath(finalName)
+        else:
+            return image
