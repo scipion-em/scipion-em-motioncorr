@@ -81,11 +81,11 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     # --------------------------- STEPS functions -----------------------------
     def _insertAllSteps(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self._insertFunctionStep(self._convertInputStep)
+        self._insertFunctionStep(self._convertInputStep, needsGPU=False)
         # Make the following step to always run, despite finished
         # this may be useful when new input items (from streaming)
         # and need to continue
-        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now())
+        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now(), needsGPU=True)
 
     def _processAllMoviesStep(self, when):
         self.lock = threading.Lock()

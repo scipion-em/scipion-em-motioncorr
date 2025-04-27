@@ -198,7 +198,8 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         stepsId = []
         if self._useWorkerThread():
             stepsId.append(self._insertFunctionStep('waitForThreadStep',
-                                                    prerequisites=deps))
+                                                    prerequisites=deps,
+                                                    needsGPU=False))
         return stepsId
 
     def waitForThreadStep(self):
