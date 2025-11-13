@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scipion-em-motioncorr"
 dynamic = ["version", "dependencies"]
-description = "Plugin to use motioncorr within the Scipion framework"
+description = "Plugin to use Motioncorr within the Scipion framework"
 authors = [
     {name = "Scipion Team", email = "scipion@cnb.csic.es"}
 ]

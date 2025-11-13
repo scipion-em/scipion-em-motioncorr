@@ -66,7 +66,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
-        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer'] else 'mrc'
+        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer', '.gain'] else 'mrc'
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineAlignmentParams(self, form):
@@ -198,7 +198,8 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         stepsId = []
         if self._useWorkerThread():
             stepsId.append(self._insertFunctionStep('waitForThreadStep',
-                                                    prerequisites=deps))
+                                                    prerequisites=deps,
+                                                    needsGPU=False))
         return stepsId
 
     def waitForThreadStep(self):
@@ -376,7 +377,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         shiftsX, shiftsY = self._getMovieShifts(movie)
         a0, aN = self._getFramesRange()
         nframes = aN - a0 + 1
-        preExp, dose = self._getCorrectedDose(self.getInputMovies())
+        preExp, dose = self._getCorrectedDose()
         # when using EER, the hardware frames are grouped
         if self.isEER:
             dose *= self.eerGroup.get()

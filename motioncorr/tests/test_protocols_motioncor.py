@@ -128,7 +128,8 @@ class TestMotioncorAlignMovies(BaseTest):
         print(magentaStr("\n==> Testing motioncor - tif movies:"))
         prot = self.newProtocolMc(
                                 objLabel='tif - motioncor',
-                                patchX=0, patchY=0, binFactor=2)
+                                patchX=0, patchY=0, binFactor=2,
+                                gainFlip=1) # flip upside down because of dm4
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
