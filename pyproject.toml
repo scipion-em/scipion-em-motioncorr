@@ -31,7 +31,7 @@ version = {attr = "motioncorr.__version__"}
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.package-data]
-"motioncorr" = ["protocols.conf"]
+"motioncorr" = ["protocols.conf", "icon.png", "templates/*"]
 
 [project.entry-points."pyworkflow.plugin"]
 motioncorr = "motioncorr"
