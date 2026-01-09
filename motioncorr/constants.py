@@ -40,6 +40,5 @@ NO_FLIP = 0
 FLIP_UPDOWN = 1
 FLIP_LEFTRIGHT = 2
 
-V1_0_1 = "1.0.1"
 V1_1_1 = "1.1.1"
 V1_1_2 = "1.1.2"

@@ -32,14 +32,14 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.16.7'
+__version__ = '3.16.8'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_0_1, V1_1_1, V1_1_2]
+    _supportedVersions = [V1_1_1, V1_1_2]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
 
     @classmethod

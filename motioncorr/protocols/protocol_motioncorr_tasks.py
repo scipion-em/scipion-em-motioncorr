@@ -53,10 +53,10 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     _label = 'tasks'
     _devStatus = BETA
+    stepsExecutionMode = STEPS_SERIAL
 
     def __init__(self, **kwargs):
         ProtMotionCorr.__init__(self, **kwargs)
-        self.stepsExecutionMode = STEPS_SERIAL
         # Disable parallelization options just take into account GPUs
         self.numberOfMpi.set(0)
         self.numberOfThreads.set(0)
@@ -81,11 +81,11 @@ class ProtMotionCorrTasks(ProtMotionCorr):
     # --------------------------- STEPS functions -----------------------------
     def _insertAllSteps(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self._insertFunctionStep(self._convertInputStep)
+        self._insertFunctionStep(self._convertInputStep, needsGPU=False)
         # Make the following step to always run, despite finished
         # this may be useful when new input items (from streaming)
         # and need to continue
-        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now())
+        self._insertFunctionStep(self._processAllMoviesStep, Pretty.now(), needsGPU=True)
 
     def _processAllMoviesStep(self, when):
         self.lock = threading.Lock()

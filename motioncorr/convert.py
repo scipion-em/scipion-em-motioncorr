@@ -112,4 +112,4 @@ def parseEERDefects(fn):
 
         logger.info(f"Number of defects found: {len(defects)}")
 
-        return defects
+    return defects
