@@ -28,6 +28,7 @@ import os
 
 import pwem
 import pyworkflow.utils as pwutils
+from pyworkflow import SPA, TOMO
 
 from .constants import *
 
@@ -41,6 +42,7 @@ class Plugin(pwem.Plugin):
     _pathVars = [MOTIONCOR_CUDA_LIB]
     _supportedVersions = [V1_1_1, V1_1_2]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
+    _processingField = [SPA, TOMO]
 
     @classmethod
     def _defineVariables(cls):
