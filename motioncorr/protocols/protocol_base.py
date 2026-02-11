@@ -23,24 +23,31 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import os
+import logging
+from os.path import exists, abspath, basename
 
 import pyworkflow.protocol.constants as cons
 import pyworkflow.utils as pwutils
+from pwem.emlib.image.image_readers import Dm4ImageReader
 from pyworkflow.protocol import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
 from pwem.protocols import EMProtocol
-from pwem.emlib.image import ImageHandler, DT_FLOAT
+from pwem.emlib.image import ImageHandler
 from pwem.objects import Movie
+from pyworkflow.utils import Message, cyanStr
+from .. import Plugin
 
 from ..constants import NO_FLIP, NO_ROTATION
 from ..convert import parseMovieAlignment2, parseEERDefects
 
 
+logger = logging.getLogger(__name__)
+
+
 class ProtMotionCorrBase(EMProtocol):
     _label = None
     stepsExecutionMode = STEPS_PARALLEL
+    program = Plugin.getProgram()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -195,9 +202,9 @@ class ProtMotionCorrBase(EMProtocol):
     def _prepareEERFiles(self):
         """ Parse .gain file for defects and create dose distribution file.
         EER gain must be parsed before conversion to mrc. """
-        inputMovies = self.getInputMovies()
-        if self.isEER and inputMovies.getGain():
-            defects = parseEERDefects(inputMovies.getGain())
+        gainFile = self.getInputMovies().getGain()
+        if self.isEER and gainFile:
+            defects = parseEERDefects(gainFile)
             if defects:
                 with open(self._getExtraPath("defects_eer.txt"), "w") as f:
                     for d in defects:
@@ -229,7 +236,7 @@ class ProtMotionCorrBase(EMProtocol):
         if not isinstance(firstMovie, Movie):
             firstMovie = firstMovie.getFirstItem()
 
-        if not os.path.exists(firstMovie.getFileName()):
+        if not exists(firstMovie.getFileName()):
             errors.append("The input movie files do not exist!!! "
                           "Since usually input movie files are symbolic links, "
                           "please check that links are not broken if you "
@@ -263,7 +270,7 @@ class ProtMotionCorrBase(EMProtocol):
                               "dose-weighting can not be performed.")
 
         # check gain dimensions and extension
-        if inputMovies.getGain() and os.path.exists(inputMovies.getGain()):
+        if inputMovies.getGain() and exists(inputMovies.getGain()):
             ih = ImageHandler()
             gain = inputMovies.getGain()
             gainx, gainy, _, _ = ih.getDimensions(gain)
@@ -325,7 +332,7 @@ class ProtMotionCorrBase(EMProtocol):
             '-OutStack': 1 if self.doSaveMovie else 0,
             '-Gpu': '%(GPU)s',
             '-SumRange': "0.0 0.0",  # switch off writing out DWS,
-            '-LogDir': './'
+            # '-LogDir': './'
             # '-FmRef': 0
         }
         if self.isEER:
@@ -346,7 +353,7 @@ class ProtMotionCorrBase(EMProtocol):
             argsDict['-DefectFile'] = self.defectFile.get()
         elif self.defectMap.get():
             argsDict['-DefectMap'] = self.defectMap.get()
-        elif os.path.exists(self._getExtraPath("defects_eer.txt")):
+        elif exists(self._getExtraPath("defects_eer.txt")):
             argsDict['-DefectFile'] = "../../extra/defects_eer.txt"
 
         if inputMovies.getGain():
@@ -368,9 +375,9 @@ class ProtMotionCorrBase(EMProtocol):
 
     def _getInputFormat(self, inputFn, absPath=False):
         if absPath:
-            inputFn = os.path.abspath(inputFn)
+            inputFn = abspath(inputFn)
         else:
-            inputFn = os.path.basename(inputFn)
+            inputFn = basename(inputFn)
         ext = pwutils.getExt(inputFn).lower()
         if ext in ['.mrc', '.mrcs']:
             args = f' -InMrc "{inputFn}" '
@@ -452,12 +459,11 @@ class ProtMotionCorrBase(EMProtocol):
             # Get final correction image file
             finalName = self._getExtraPath(pwutils.replaceBaseExt(image, "mrc"))
 
-            if not os.path.exists(finalName):
-                ih = ImageHandler()
-                self.info(f"Converting {image} to {finalName}")
-                ih.convert(image, finalName, DT_FLOAT)
+            if not exists(finalName):
+                Dm4ImageReader.dmToMrc(image, finalName)
+                logger.info(cyanStr(f"Converting {image} to {finalName}"))
 
             # return final name
-            return os.path.abspath(finalName)
+            return abspath(finalName)
         else:
             return image
