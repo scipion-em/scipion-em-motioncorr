@@ -1,3 +1,9 @@
+3.17.0:
+ Users:
+  - Tilt-series Movies motioncorr is now parallellized.
+ Developers:
+  - Tilt-series Movies motioncorr does not depend on old motion_correction protocol.
+  - Tests updated using the TCL.
 3.16.8: add toml
 3.16.7: tasks support EER, pin emtools version
 3.16.6: bugfix for eer dose per frame
