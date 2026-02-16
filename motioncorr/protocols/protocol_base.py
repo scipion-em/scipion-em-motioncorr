@@ -34,7 +34,7 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import EMProtocol
 from pwem.emlib.image import ImageHandler
 from pwem.objects import Movie
-from pyworkflow.utils import Message, cyanStr
+from pyworkflow.utils import cyanStr
 from .. import Plugin
 
 from ..constants import NO_FLIP, NO_ROTATION
@@ -54,7 +54,8 @@ class ProtMotionCorrBase(EMProtocol):
         self.isEER = False
 
     # -------------------------- DEFINE param functions -----------------------
-    def _defineCommonParams(self, form, allowDW=True):
+    @staticmethod
+    def _defineCommonParams(form, allowDW=True):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",

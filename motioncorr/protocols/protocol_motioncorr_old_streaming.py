@@ -29,13 +29,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-import logging
+
 import os
 import time
-from collections import Counter
-from enum import Enum
 from math import ceil, sqrt
-from os.path import exists
 from threading import Thread
 
 import pyworkflow.protocol.constants as cons
@@ -43,46 +40,28 @@ import pyworkflow.protocol.params as params
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import Image, Float, SetOfMovies, SetOfMicrographs, Movie
+from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
-from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.utils import cyanStr
 
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 
 from relion.convert.convert31 import OpticsGroups
 
-logger = logging.getLogger(__name__)
 
-
-class MotionCorrOutputs(Enum):
-    movies = SetOfMovies()
-    micrographs = SetOfMicrographs()
-    micrographsDW = SetOfMicrographs()
-    micrographsEven = SetOfMicrographs()
-    micrographsOdd = SetOfMicrographs()
-
-
-class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , ProtAlignMovies):
+class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
     """ This protocol wraps motioncor movie alignment program developed at UCSF.
 
     Motioncor performs anisotropic drift correction and dose weighting
         (written by Shawn Zheng @ David Agard lab)
     """
 
-    _label = 'movie alignment NS'
+    _label = 'movie alignment'
     evenOddCapable = True
-    _possibleOutputs = MotionCorrOutputs
-    stepsExecutionMode = cons.STEPS_PARALLEL
 
     def __init__(self, **kwargs):
-        # ProtAlignMovies.__init__(self, **kwargs)
-        super().__init__(**kwargs)
-        self.itemIdReadList = []
-        self.sRate = None
-        self.gain = None
-        self.dark = None
+        ProtAlignMovies.__init__(self, **kwargs)
+        ProtMotionCorrBase.__init__(self, **kwargs)
 
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
@@ -90,15 +69,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
         return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer', '.gain'] else 'mrc'
 
     # -------------------------- DEFINE param functions -----------------------
-    def _defineParams(self, form):
-        form.addSection(label=pwutils.Message.LABEL_INPUT)
-        form.addParam('inputMovies', params.PointerParam, pointerClass='SetOfMovies',
-                      important=True,
-                      label=pwutils.Message.LABEL_INPUT_MOVS,
-                      help='Select a set of previously imported movies.')
-        self._defineAlignmentParams(form)
-        self._defineCommonParams(form)
-
     def _defineAlignmentParams(self, form):
         form.addHidden('doSaveAveMic', params.BooleanParam,
                        default=True)
@@ -176,88 +146,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
                            " an extra CPU. Use this option (NOT RECOMMENDED) if "
                            " you want to prevent this behaviour")
 
+        self._defineCommonParams(form)
+
     # --------------------------- STEPS functions -----------------------------
-    def stepsGeneratorStep(self) -> None:
-        closeSetStepDeps = []
-        self._initialize()
-        inMoviesSet = self.getInputMovies()
-        self.sRate = inMoviesSet.getSamplingRate()
-        self.readingOutput()
-
-        while True:
-            with self._lock:
-                inIds = set(inMoviesSet.getUniqueValues('id'))
-
-            # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
-            # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
-            # ['id_a', 'id_b'] != ['id_b', 'id_a'], but they are the same with Counter.
-            if not inMoviesSet.isStreamOpen() and Counter(self.itemIdReadList) == Counter(inIds):
-                logger.info(cyanStr('Input set closed.\n'))
-                self._insertFunctionStep(self._closeOutputSet,
-                                         prerequisites=closeSetStepDeps,
-                                         needsGPU=False)
-                break
-
-            nonProcessedIds = inIds - set(self.itemIdReadList)
-            moviesToProcessDict = {objId: movie.clone() for movie in inMoviesSet.iterItems()
-                                   if (objId := movie.getObjId()) in nonProcessedIds}
-            for objId, movie in moviesToProcessDict.items():
-                cInPId = self._insertFunctionStep(self.convertInputStep,
-                                                  prerequisites=[],
-                                                  needsGPU=False)
-                pMovPid = self._insertFunctionStep(self.processMovieStep,
-                                                   prerequisites=cInPId,
-                                                   needsGPU=True)
-                cOutId = self._insertFunctionStep(self.createOutputStep,
-                                                  prerequisites=pMovPid,
-                                                  needsGPU=False)
-                closeSetStepDeps.append(cOutId)
-                logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
-                self.itemIdReadList.append(objId)
-
-            time.sleep(10)
-            if inMoviesSet.isStreamOpen():
-                with self._lock:
-                    inMoviesSet.loadAllProperties()  # refresh status for the streaming
-
-    def readingOutput(self) -> None:
-        movies = getattr(self, self._possibleOutputs.movies.name, None)
-        outputList = []
-        mics = getattr(self, self._possibleOutputs.micrographs.name, None)
-        micsDW = getattr(self, self._possibleOutputs.micrographsDW.name, None)
-        micsEven = getattr(self, self._possibleOutputs.micrographsEven.name, None)
-        micsOdd = getattr(self, self._possibleOutputs.micrographsOdd.name, None)
-        if self.splitEvenOdd:
-            outputList.append(micsEven)
-            outputList.append(micsOdd)
-        if self.doApplyDoseFilter:
-            outputList.append(micsDW)
-        else:
-            outputList.append(mics)
-
-        if None not in outputList:
-            for item in movies:
-                self.itemIdReadList.append(item.getObjId())
-            self.info(cyanStr(f'Ids processed: {self.itemIdReadList}'))
-        else:
-            self.info(cyanStr('No movies have been processed yet'))
-
-    def _initialize(self):
-        inputMovies = self.getInputMovies()
-        self.gain = inputMovies.getGain()
-        self.dark = inputMovies.getDark()
-
-    def convertInputStep(self):
-        # Convert the gain and dark images if they haven't been converted yet or if they weren't provided
-        if self.dark or self.gain and not exists(self._getExtraPath('DONE')):
-            super()._convertInputStep()
-
-    def processMovieStep(self):
-        pass
-
-    def createOutputStep(self):
-        pass
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
@@ -265,7 +156,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
 
         argsDict = self._getMcArgs()
         argsDict['-OutMrc'] = f'"{outputMicFn}"'
-        argsDict['-LogDir'] = './'
 
         args = self._getInputFormat(movie.getFileName())
         args += ' '.join(['%s %s' % (k, v)
@@ -303,7 +193,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
             self.error(f"ERROR: Motioncor has failed for {movie.getFileName()} --> {str(e)}\n")
             import traceback
             traceback.print_exc()
-
+        
     def _insertFinalSteps(self, deps):
         stepsId = []
         if self._useWorkerThread():
@@ -414,7 +304,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
 
     def _moveOutput(self, movie):
         """ Move output from tmp to extra folder. """
-
         def _moveToExtra(fn):
             """ Move file from movies tmp folder to extra """
             if os.path.exists(self._getCwdPath(movie, fn)):

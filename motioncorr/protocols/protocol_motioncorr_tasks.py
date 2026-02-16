@@ -39,9 +39,10 @@ import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol import STEPS_SERIAL
 from pwem.objects import Float, SetOfMovies
+from . import ProtMotionCorr
 
 from .. import Plugin
-from .protocol_motioncorr import ProtMotionCorr
+
 
 
 class ProtMotionCorrTasks(ProtMotionCorr):

@@ -33,7 +33,7 @@ from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
-from ..protocols import ProtMotionCorr, ProtMotionCorrTasks
+from ..protocols import ProtMotionCorr, ProtMotionCorrTasks, ProtMotionCorrNewStreaming
 
 
 class TestMotioncorAlignMovies(BaseTest):
@@ -56,7 +56,7 @@ class TestMotioncorAlignMovies(BaseTest):
         if int(os.environ.get('TEST_MC_TASKS', 0)):
             McProtClass = ProtMotionCorrTasks
         else:
-            McProtClass = ProtMotionCorr
+            McProtClass = ProtMotionCorrNewStreaming
         return cls.newProtocol(McProtClass, *args, **kwargs)
 
     @classmethod
