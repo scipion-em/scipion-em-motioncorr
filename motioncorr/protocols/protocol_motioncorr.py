@@ -30,14 +30,13 @@
 # *
 # ******************************************************************************
 import logging
-import os
 import time
+import traceback
 from collections import Counter
 from enum import Enum
 from math import ceil, sqrt
-from os.path import exists
+from os.path import exists, basename, join, abspath
 from threading import Thread
-
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 import pyworkflow.object as pwobj
@@ -46,12 +45,11 @@ from pyworkflow.gui.plotter import Plotter
 from pwem.objects import Image, Float, SetOfMovies, SetOfMicrographs, Movie
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.utils import cyanStr
-
+from pyworkflow.utils import cyanStr, makePath, Message, redStr, removeBaseExt
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
-
 from relion.convert.convert31 import OpticsGroups
+from ..convert import parseMovieAlignment2
 
 logger = logging.getLogger(__name__)
 
@@ -83,18 +81,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
         self.sRate = None
         self.gain = None
         self.dark = None
-
-    def _getConvertExtension(self, filename):
-        """ Check whether it is needed to convert to .mrc or not """
-        ext = pwutils.getExt(filename).lower()
-        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.eer', '.gain'] else 'mrc'
+        self.sRate = None
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
-        form.addSection(label=pwutils.Message.LABEL_INPUT)
+        form.addSection(label=Message.LABEL_INPUT)
         form.addParam('inputMovies', params.PointerParam, pointerClass='SetOfMovies',
                       important=True,
-                      label=pwutils.Message.LABEL_INPUT_MOVS,
+                      label=Message.LABEL_INPUT_MOVS,
                       help='Select a set of previously imported movies.')
         self._defineAlignmentParams(form)
         self._defineCommonParams(form)
@@ -206,6 +200,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
                                                   prerequisites=[],
                                                   needsGPU=False)
                 pMovPid = self._insertFunctionStep(self.processMovieStep,
+                                                   objId,
+                                                   movie,
                                                    prerequisites=cInPId,
                                                    needsGPU=True)
                 cOutId = self._insertFunctionStep(self.createOutputStep,
@@ -246,77 +242,182 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
         inputMovies = self.getInputMovies()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
+        self.sRate = inputMovies.getSamplingRate()
 
     def convertInputStep(self):
         # Convert the gain and dark images if they haven't been converted yet or if they weren't provided
         if self.dark or self.gain and not exists(self._getExtraPath('DONE')):
             super()._convertInputStep()
 
-    def processMovieStep(self):
-        pass
+    def processMovieStep(self, objId: int, movie: Movie):
+        # movieFolder = self._getOutputMovieFolder(objId)
+        # movieFn = movie.getFileName()
+        # movieName = basename(movieFn)
+        # makePath(movieFolder)
+        # createAbsLink(abspath(movieFn), join(movieFolder, movieName))
 
-    def createOutputStep(self):
-        pass
+        # if movieName.endswith('bz2'):
+        #     newMovieName = movieName.replace('.bz2', '')
+        #     # We assume that if compressed the name ends with .mrc.bz2
+        #     if not exists(newMovieName):
+        #         self.runJob('bzip2', '-d -f %s' % movieName, cwd=movieFolder)
+        # 
+        # elif movieName.endswith('tbz'):
+        #     newMovieName = movieName.replace('.tbz', '.mrc')
+        #     # We assume that if compressed the name ends with .tbz
+        #     if not exists(newMovieName):
+        #         self.runJob('tar', 'jxf %s' % movieName, cwd=movieFolder)
 
-    def _processMovie(self, movie):
-        inputMovies = self.getInputMovies()
-        movieFolder = self._getOutputMovieFolder(movie)
-        outputMicFn = self._getOutputMicName(movie)
+        # elif movieName.endswith('.txt'):
+        #     # Support a list of frame as a simple .txt file containing
+        #     # all the frames in a raw list, we could use a xmd as well,
+        #     # but a plain text was choose to simply its generation
+        #     movieTxt = join(movieFolder, movieName)
+        #     with open(movieTxt) as f:
+        #         movieOrigin = basename(movieFn)
+        #         newMovieName = movieName.replace('.txt', '.mrcs')
+        #         ih = emlib.image.ImageHandler()
+        #         for i, line in enumerate(f):
+        #             if line.strip():
+        #                 inputFrame = join(movieOrigin, line.strip())
+        #                 ih.convert(inputFrame,
+        #                            (i + 1, join(movieFolder, newMovieName)))
+        # else:
+        #     newMovieName = movieName
+
+        # Just store the original name in case it is needed in _processMovie
+        # movie._originalFileName = pwobj.String(objDoStore=False)
+        # movie._originalFileName.set(movie.getFileName())
+        # Now set the new filename (either linked or converted)
+        # movie.setFileName(join(movieFolder, newMovieName))
+        movieFName = movie.getFileName()
+        logger.info(cyanStr(f"Processing movie: {movieFName}"))
+
+        # self._processMovie(objId, movie)
+        outputMicFn = self._getResultMicFn(movie)
 
         argsDict = self._getMcArgs()
         argsDict['-OutMrc'] = f'"{outputMicFn}"'
-        argsDict['-LogDir'] = './'
+        argsDict['-LogDir'] = f'"{self._getExtraPath()}"'
 
-        args = self._getInputFormat(movie.getFileName())
+        args = self._getInputFormat(movieFName, absPath=True)
         args += ' '.join(['%s %s' % (k, v)
                           for k, v in argsDict.items()])
         args += ' ' + self.extraParams2.get()
 
         try:
-            self.runJob(Plugin.getProgram(), args, cwd=movieFolder,
-                        env=Plugin.getEnviron())
-            self._moveOutput(movie)
-
-            def _extraWork():
-                # we need to move shifts log to extra dir before parsing
-                try:
-                    self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
-                    outMicFn = self._getExtraPath(self._getMicFn(movie))
-
-                    if self.doComputePSD:
-                        self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
-
-                    if self._doComputeMicThumbnail():
-                        self.computeThumbnail(
-                            outMicFn, outputFn=self._getOutputMicThumbnail(movie))
-                except:
-                    self.error(f"ERROR: Extra work (i.e plots, PSD, thumbnail) "
-                               f"has failed for {movie.getFileName()}\n")
-
-            if self._useWorkerThread():
-                thread = Thread(target=_extraWork)
-                thread.start()
-            else:
-                _extraWork()
-
+            self.runJob(Plugin.getProgram(), args, env=Plugin.getEnviron())
         except Exception as e:
-            self.error(f"ERROR: Motioncor has failed for {movie.getFileName()} --> {str(e)}\n")
-            import traceback
+            logger.error(redStr(f"ERROR: Motioncor has failed for {movie.getFileName()} "
+                                f"--> {str(e)}\n"))
             traceback.print_exc()
 
-    def _insertFinalSteps(self, deps):
-        stepsId = []
-        if self._useWorkerThread():
-            stepsId.append(self._insertFunctionStep('waitForThreadStep',
-                                                    prerequisites=deps,
-                                                    needsGPU=False))
-        return stepsId
+        # we need to move shifts log to extra dir before parsing
+        try:
+            self._saveAlignmentPlots(outputMicFn, self.sRate)
+            outMicFn = self._getExtraPath(self._getMicFn(movie))
 
-    def waitForThreadStep(self):
-        # Quick and dirty (maybe desperate) way to wait
-        # if the PSD and thumbnail were computed in a thread
-        # If running in streaming this will not be necessary
-        time.sleep(10)  # wait 10 sec for the thread to finish
+            if self.doComputePSD:
+                self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
+
+            if self._doComputeMicThumbnail():
+                self.computeThumbnail(
+                    outMicFn, outputFn=self._getOutputMicThumbnail(movie))
+        except Exception as e:
+            logger.error(redStr(f"ERROR: Extra work (i.e plots, PSD, thumbnail) "
+                                f"has failed for {movie.getFileName()} --> {str(e)}\n"))
+            traceback.print_exc()
+
+            # self._moveOutput(movie)
+
+            # def _extraWork():
+            #     # we need to move shifts log to extra dir before parsing
+            #     try:
+            #         self._saveAlignmentPlots(movie, self.sRate)
+            #         outMicFn = self._getExtraPath(self._getMicFn(movie))
+            #
+            #         if self.doComputePSD:
+            #             self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
+            #
+            #         if self._doComputeMicThumbnail():
+            #             self.computeThumbnail(
+            #                 outMicFn, outputFn=self._getOutputMicThumbnail(movie))
+            #     except:
+            #         self.error(f"ERROR: Extra work (i.e plots, PSD, thumbnail) "
+            #                    f"has failed for {movie.getFileName()}\n")
+            #
+            # if self._useWorkerThread():
+            #     thread = Thread(target=_extraWork)
+            #     thread.start()
+            # else:
+            #     _extraWork()
+
+
+
+        # if self._doMovieFolderCleanUp():
+        #     self._cleanMovieFolder(movieFolder)
+
+    def createOutputStep(self):
+        pass
+
+    # def _processMovie(self, objId: int, movie: Movie):
+    #     # movieFolder = self._getOutputMovieFolder(objId)
+    #     outputMicFn = self._getResultMicFn(movie)
+    #
+    #     argsDict = self._getMcArgs()
+    #     argsDict['-OutMrc'] = f'"{outputMicFn}"'
+    #     argsDict['-LogDir'] = './'
+    #
+    #     args = self._getInputFormat(movie.getFileName())
+    #     args += ' '.join(['%s %s' % (k, v)
+    #                       for k, v in argsDict.items()])
+    #     args += ' ' + self.extraParams2.get()
+    #
+    #     try:
+    #         self.runJob(Plugin.getProgram(), args, cwd=movieFolder,
+    #                     env=Plugin.getEnviron())
+    #         self._moveOutput(movie)
+    #
+    #         def _extraWork():
+    #             # we need to move shifts log to extra dir before parsing
+    #             try:
+    #                 self._saveAlignmentPlots(movie, self.sRate)
+    #                 outMicFn = self._getExtraPath(self._getMicFn(movie))
+    #
+    #                 if self.doComputePSD:
+    #                     self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
+    #
+    #                 if self._doComputeMicThumbnail():
+    #                     self.computeThumbnail(
+    #                         outMicFn, outputFn=self._getOutputMicThumbnail(movie))
+    #             except:
+    #                 self.error(f"ERROR: Extra work (i.e plots, PSD, thumbnail) "
+    #                            f"has failed for {movie.getFileName()}\n")
+    #
+    #         if self._useWorkerThread():
+    #             thread = Thread(target=_extraWork)
+    #             thread.start()
+    #         else:
+    #             _extraWork()
+    #
+    #     except Exception as e:
+    #         self.error(f"ERROR: Motioncor has failed for {movie.getFileName()} --> {str(e)}\n")
+    #         import traceback
+    #         traceback.print_exc()
+    #
+    # def _insertFinalSteps(self, deps):
+    #     stepsId = []
+    #     if self._useWorkerThread():
+    #         stepsId.append(self._insertFunctionStep('waitForThreadStep',
+    #                                                 prerequisites=deps,
+    #                                                 needsGPU=False))
+    #     return stepsId
+    #
+    # def waitForThreadStep(self):
+    #     # Quick and dirty (maybe desperate) way to wait
+    #     # if the PSD and thumbnail were computed in a thread
+    #     # If running in streaming this will not be necessary
+    #     time.sleep(10)  # wait 10 sec for the thread to finish
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -348,20 +449,24 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
         return errors
 
     # --------------------------- UTILS functions -----------------------------
+    def _getOutputMovieFolder(self, objId: int) -> str:
+        """ Create a Movie folder where to work with it. """
+        return self._getTmpPath('movie_%06d' % objId)
+    
     def _getCwdPath(self, movie, path):
-        return os.path.join(self._getOutputMovieFolder(movie), path)
+        return join(self._getOutputMovieFolder(movie), path)
 
-    def _getMovieLogFile(self, movie):
+    def _getMovieLogFile(self, movieFName: str):
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s%s-Full.log' % (self._getMovieRoot(movie),
-                                  '-Patch' if usePatches else '')
+        pattern = '-Patch' if usePatches else ''
+        return self._getExtraPath(f'{removeBaseExt(movieFName)}-{pattern}-Full.log')
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
         return self._getExtraPath(fn) if extra else fn
 
-    def _getPlotGlobal(self, movie):
-        return self._getNameExt(movie, '_global_shifts', 'png', extra=True)
+    def _getPlotGlobal(self, movieFName: str):
+        return self._getNameExt(movieFName, '_global_shifts', 'png', extra=True)
 
     def _getPsdCorr(self, movie):
         return self._getNameExt(movie, '_psd', 'png', extra=True)
@@ -404,40 +509,49 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
             mic._rlnAccumMotionEarly = Float(early)
             mic._rlnAccumMotionLate = Float(late)
 
-    def _saveAlignmentPlots(self, movie, pixSize):
+    def _saveAlignmentPlots(self, movieFName: str, pixSize: float):
         """ Compute alignment shift plots and save to file as png images. """
-        shiftsX, shiftsY = self._getMovieShifts(movie)
+        shiftsX, shiftsY = self._getMovieShifts(movieFName)
         first, _ = self._getFramesRange()
         plotter = createGlobalAlignmentPlot(shiftsX, shiftsY, first, pixSize)
-        plotter.savefig(self._getPlotGlobal(movie))
+        plotter.savefig(self._getPlotGlobal(movieFName))
         plotter.close()
 
-    def _moveOutput(self, movie):
-        """ Move output from tmp to extra folder. """
+    def _getMovieShifts(self, movieFName: str):
+        """ Returns the x and y shifts for the alignment of this movie.
+        The shifts are in pixels irrespective of any binning.
+        """
+        logPath = self._getExtraPath(self._getMovieLogFile(movieFName))
+        xShifts, yShifts = parseMovieAlignment2(logPath)
 
-        def _moveToExtra(fn):
-            """ Move file from movies tmp folder to extra """
-            if os.path.exists(self._getCwdPath(movie, fn)):
-                pwutils.moveFile(self._getCwdPath(movie, fn),
-                                 self._getExtraPath(fn))
+        return xShifts, yShifts
 
-        _moveToExtra(self._getMovieLogFile(movie))
-        _moveToExtra(self._getMicFn(movie))
-        _moveToExtra(pwutils.replaceExt(movie.getBaseName(), "star"))
-
-        if self._doSaveUnweightedMic():
-            _moveToExtra(self._getOutputMicName(movie))
-
-        if self.splitEvenOdd:
-            _moveToExtra(self._getOutputMicEvenName(movie))
-            _moveToExtra(self._getOutputMicOddName(movie))
-
-        if self.doSaveMovie:
-            outputMicFn = self._getCwdPath(movie, self._getOutputMicName(movie))
-            outputMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
-            movieFn = outputMicFn.replace('_aligned_mic.mrc',
-                                          '_aligned_mic_Stk.mrc')
-            pwutils.moveFile(movieFn, outputMovieFn)
+    # def _moveOutput(self, movie):
+    #     """ Move output from tmp to extra folder. """
+    #
+    #     def _moveToExtra(fn):
+    #         """ Move file from movies tmp folder to extra """
+    #         if exists(self._getCwdPath(movie, fn)):
+    #             moveFile(self._getCwdPath(movie, fn),
+    #                              self._getExtraPath(fn))
+    #
+    #     _moveToExtra(self._getMovieLogFile(movie))
+    #     _moveToExtra(self._getMicFn(movie))
+    #     _moveToExtra(replaceExt(movie.getBaseName(), "star"))
+    #
+    #     if self._doSaveUnweightedMic():
+    #         _moveToExtra(self._getOutputMicName(movie))
+    #
+    #     if self.splitEvenOdd:
+    #         _moveToExtra(self._getOutputMicEvenName(movie))
+    #         _moveToExtra(self._getOutputMicOddName(movie))
+    #
+    #     if self.doSaveMovie:
+    #         outputMicFn = self._getCwdPath(movie, self._getOutputMicName(movie))
+    #         outputMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
+    #         movieFn = outputMicFn.replace('_aligned_mic.mrc',
+    #                                       '_aligned_mic_Stk.mrc')
+    #         moveFile(movieFn, outputMovieFn)
 
     def _updateOutputSet(self, outputName, outputSet,
                          state=pwobj.Set.STREAM_OPEN):
@@ -512,6 +626,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):  # , Pr
             self.error(f"Expected {nframes} frames, found less. "
                        f"Check movie {movie.getFileName()}")
 
+    def _getResultMicFn(self, movie: Movie):
+        return self._getExtraPath(f'{basename(movie.getFileName())}_aligned_mic.mrc')
+
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     """ Create a plotter with the shift per frame. """
@@ -568,3 +685,5 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     plotter.tightLayout()
 
     return plotter
+
+
