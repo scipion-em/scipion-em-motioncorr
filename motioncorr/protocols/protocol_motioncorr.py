@@ -35,18 +35,20 @@ import traceback
 from collections import Counter
 from enum import Enum
 from math import ceil
-from os.path import exists, abspath
+from os.path import exists, abspath, basename
+from typing import Tuple
+
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 import pyworkflow.object as pwobj
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import SetOfMovies, SetOfMicrographs
-from pwem.protocols import ProtAlignMovies
+from pwem.objects import SetOfMovies, SetOfMicrographs, Movie
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt
+from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
-from relion.convert.convert31 import OpticsGroups
 from ..convert import parseMovieAlignment2
 
 logger = logging.getLogger(__name__)
@@ -190,6 +192,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                                    needsGPU=True)
                 cOutId = self._insertFunctionStep(self.createOutputStep,
                                                   movieFName,
+                                                  movie,
                                                   prerequisites=pMovPid,
                                                   needsGPU=False)
                 closeSetStepDeps.append(cOutId)
@@ -272,9 +275,58 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                 f"with the exception {e}"))
             traceback.print_exc()
 
-    def createOutputStep(self, movieFName: str):
+    @retry_on_sqlite_lock(log=logger)
+    def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
-            outputMovies = self._getOutputMovies()
+            return
+        try:
+            outMovieFn = self._getResultMicFn(movieFName)
+            if not exists(outMovieFn):
+                logger.error(redStr(f'Movie = {movieFName} -> Output file {outMovieFn} was not generated. Skipping... '))
+                return
+            setMRCSamplingRate(outMovieFn, self.sRate)
+            # Set of movies
+            with self._lock:
+                outputMovies = self._getOutputMovies()
+                outMovie = Movie()
+                outMovie.copyInfo(inMovie)
+                outMovie.setFileName(outMovieFn)
+                outMovie.setMicName(basename(outMovieFn))
+                n = outMovie.getNumberOfFrames()
+                first, last = self._getFrameRange(n, 'align')
+
+                # # Check if user selected to save movie, use the getAttributeValue
+                # # function for allow the protocol to not define this flag
+                # # and use False as default
+                # if self.getAttributeValue('doSaveMovie', False):
+                #     # The subclass protocol is responsible for generating the output
+                #     # movie file in the extra path with the required name
+                #     extraMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
+                #     alignedMovie.setFileName(extraMovieFn)
+                #     # When the output movies are saved, the shifts
+                #     # will be set to zero since they are aligned
+                #     totalFrames = last - first + 1
+                #     xshifts = [0] * totalFrames
+                #     yshifts = xshifts
+                #     # If we save the movies, we need to modify which are the index
+                #     # of the first frame in the stack, now is 1 since the stack is
+                #     # written only with the given frames
+                #     firstFrameIndex = 1
+                # else:
+                #     xshifts, yshifts = self._getMovieShifts(movie)
+                #     firstFrameIndex = first
+                #
+                # alignment = emobj.MovieAlignment(first=first, last=last, xshifts=xshifts,
+                #                                  yshifts=yshifts)
+                #
+                # roiList = [self.getAttributeValue(s, 0) for s in
+                #            ['cropOffsetX', 'cropOffsetY', 'cropDimX', 'cropDimY']]
+                # alignment.setRoi(roiList)
+                # alignedMovie.setAlignment(alignment)
+        except Exception as e:
+            logger.error(redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
+
 
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name
@@ -353,46 +405,73 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         return xShifts, yShifts
 
-    def _updateOutputSet(self, outputName, outputSet,
-                         state=pwobj.Set.STREAM_OPEN):
-        """ Redefine this method to set EER attrs. """
-        first = getattr(self, '_firstUpdate', True)
+    # def _updateOutputSet(self, outputName, outputSet,
+    #                      state=pwobj.Set.STREAM_OPEN):
+    #     """ Redefine this method to set EER attrs. """
+    #     first = getattr(self, '_firstUpdate', True)
+    #
+    #     if first and outputName == 'outputMovies':
+    #         og = OpticsGroups.fromImages(outputSet)
+    #         gain = self.getInputMovies().getGain()
+    #         ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
+    #         if self.isEER:
+    #             ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
+    #                            'rlnEERUpsampling': self.eerSampling.get() + 1})
+    #         if gain:
+    #             ogDict['rlnMicrographGainName'] = gain
+    #         og.updateAll(**ogDict)
+    #         og.toImages(outputSet)
+    #
+    #     ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
+    #                                      state=state)
+    #     self._firstUpdate = False
 
-        if first and outputName == 'outputMovies':
-            og = OpticsGroups.fromImages(outputSet)
-            gain = self.getInputMovies().getGain()
-            ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
-            if self.isEER:
-                ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
-                               'rlnEERUpsampling': self.eerSampling.get() + 1})
-            if gain:
-                ogDict['rlnMicrographGainName'] = gain
-            og.updateAll(**ogDict)
-            og.toImages(outputSet)
+    # def _createOutputMicrographs(self):
+    #     createWeighted = self._createOutputWeightedMicrographs()
+    #     # To create the unweighted average micrographs
+    #     # we only consider the 'doSaveUnweightedMic' flag if the
+    #     # weighted ones should be created.
+    #     return not createWeighted or self.doSaveUnweightedMic
 
-        ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
-                                         state=state)
-        self._firstUpdate = False
-
-    def _createOutputMicrographs(self):
-        createWeighted = self._createOutputWeightedMicrographs()
-        # To create the unweighted average micrographs
-        # we only consider the 'doSaveUnweightedMic' flag if the
-        # weighted ones should be created.
-        return not createWeighted or self.doSaveUnweightedMic
-
-    def _doSaveUnweightedMic(self):
-        """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
-        return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
+    # def _doSaveUnweightedMic(self):
+    #     """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
+    #     return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
 
     def _createOutputWeightedMicrographs(self):
         return self.doApplyDoseFilter
 
-    def _useWorkerThread(self):
-        return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
+    # def _useWorkerThread(self):
+    #     return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
 
     def _getResultMicFn(self, movieFName: str):
         return self._getExtraPath(f'{removeBaseExt(movieFName)}_aligned_mic.mrc')
+
+
+    def _useAlignToSum(self):
+        return self.getAttributeValue('useAlignToSum', False)
+
+    def _getFrameRange(self, n: int, prefix: str) -> Tuple[int, int]:
+        """
+        Params:
+        :param n: Number of frames of the movies
+        :param prefix: what range we want to consider, either 'align' or 'sum'
+        :return: (i, f) initial and last frame range
+        """
+        # In case that the user select the same range for ALIGN and SUM
+        # we also use the 'align' prefix
+        if self._useAlignToSum():
+            prefix = 'align'
+
+        first = self.getAttributeValue('%sFrame0' % prefix)
+        last = self.getAttributeValue('%sFrameN' % prefix)
+
+        if first <= 1:
+            first = 1
+
+        if last <= 0:
+            last = n
+
+        return first, last
 
     @staticmethod
     def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
