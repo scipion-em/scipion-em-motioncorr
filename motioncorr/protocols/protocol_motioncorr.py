@@ -34,24 +34,29 @@ import time
 import traceback
 from collections import Counter
 from enum import Enum
-from math import ceil
+from math import ceil, sqrt
 from os.path import exists, abspath, basename
-from typing import Tuple
-
+from typing import Tuple, List, Union, Optional, Any
+import numpy as np
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
-import pyworkflow.object as pwobj
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import SetOfMovies, SetOfMicrographs, Movie
+from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
+from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt
+from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
 
 logger = logging.getLogger(__name__)
+MC_EVEN_ODD_ATTRIBUTE = '_mcEvenOddMics'
+EVEN_SUFFIX = '_EVN'
+ODD_SUFFIX = '_ODD'
+DW_SUFFIX = '_DW'
+STK_SUFFIX = '_Stk'
 
 
 class MotionCorrOutputs(Enum):
@@ -70,7 +75,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     """
 
     _label = 'movie alignment NS'
-    evenOddCapable = True
     _possibleOutputs = MotionCorrOutputs
     stepsExecutionMode = cons.STEPS_PARALLEL
 
@@ -92,7 +96,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self._defineAlignmentParams(form)
         self._defineCommonParams(form)
 
-    def _defineAlignmentParams(self, form):
+    @staticmethod
+    def _defineAlignmentParams(form):
         form.addHidden('doSaveAveMic', params.BooleanParam,
                        default=True)
         form.addHidden('useAlignToSum', params.BooleanParam,
@@ -130,12 +135,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         line.addParam('cropDimY', params.IntParam, default=0, label='Y',
                       expertLevel=cons.LEVEL_ADVANCED)
 
-        if self.evenOddCapable:
-            form.addParam('splitEvenOdd', params.BooleanParam,
-                          default=False,
-                          label='Split & sum odd/even frames?',
-                          help='Generate odd and even sums using odd and even frames '
-                               'respectively when this option is enabled.')
+        form.addParam('splitEvenOdd', params.BooleanParam,
+                      default=False,
+                      label='Split & sum odd/even frames?',
+                      help='Generate odd and even sums using odd and even frames '
+                           'respectively when this option is enabled.')
 
         form.addParam('doSaveMovie', params.BooleanParam, default=False,
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -162,6 +166,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         inMoviesSet = self.getInputMovies()
         self.sRate = inMoviesSet.getSamplingRate()
         self.readingOutput()
+        outputsToCheck = self._getOutputsToCheck()
 
         while True:
             with self._lock:
@@ -173,6 +178,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             if not inMoviesSet.isStreamOpen() and Counter(self.itemIdReadList) == Counter(inIds):
                 logger.info(cyanStr('Input set closed.\n'))
                 self._insertFunctionStep(self.closeOutputSetStep,
+                                         outputsToCheck,
                                          prerequisites=closeSetStepDeps,
                                          needsGPU=False)
                 break
@@ -204,33 +210,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 with self._lock:
                     inMoviesSet.loadAllProperties()  # refresh status for the streaming
 
-    def readingOutput(self) -> None:
-        movies = getattr(self, self._possibleOutputs.movies.name, None)
-        outputList = []
-        mics = getattr(self, self._possibleOutputs.micrographs.name, None)
-        micsDW = getattr(self, self._possibleOutputs.micrographsDW.name, None)
-        micsEven = getattr(self, self._possibleOutputs.micrographsEven.name, None)
-        micsOdd = getattr(self, self._possibleOutputs.micrographsOdd.name, None)
-        if self.splitEvenOdd:
-            outputList.append(micsEven)
-            outputList.append(micsOdd)
-        if self.doApplyDoseFilter:
-            outputList.append(micsDW)
-        else:
-            outputList.append(mics)
-
-        if None not in outputList:
-            for item in movies:
-                self.itemIdReadList.append(item.getObjId())
-            self.info(cyanStr(f'Ids processed: {self.itemIdReadList}'))
-        else:
-            self.info(cyanStr('No movies have been processed yet'))
-
     def _initialize(self):
         inputMovies = self.getInputMovies()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate()
+        self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
 
     def convertInputStep(self, movieFName: str):
         try:
@@ -247,17 +232,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             return
 
         logger.info(cyanStr(f"Processing movie: {movieFName}"))
-
-        # self._processMovie(objId, movie)
         outputMicFn = self._getResultMicFn(movieFName)
-
         argsDict = self._getMcArgs()
-        argsDict['-OutMrc'] = f'"{outputMicFn}"'
-        argsDict['-LogDir'] = f'"{self._getExtraPath()}"'
-
+        argsDict['-OutMrc'] = f'{outputMicFn}'
+        argsDict['-LogDir'] = f'{self._getExtraPath()}'
         args = self._getInputFormat(movieFName, absPath=True)
-        args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.items()])
+        args += ' '.join(['%s %s' % (k, v) for k, v in argsDict.items()])
         args += ' ' + self.extraParams2.get()
 
         try:
@@ -266,6 +246,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             self.failedMovies.append(movieFName)
             logger.error(redStr(f"ERROR: Motioncor failed for {movieFName} with the exception {e}"))
             traceback.print_exc()
+            return
 
         try:
             self._saveAlignmentPlots(movieFName, self.sRate)
@@ -280,72 +261,63 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if movieFName in self.failedMovies:
             return
         try:
-            outMovieFn = self._getResultMicFn(movieFName)
-            if not exists(outMovieFn):
-                logger.error(redStr(f'Movie = {movieFName} -> Output file {outMovieFn} was not generated. Skipping... '))
-                return
-            setMRCSamplingRate(outMovieFn, self.sRate)
-            # Set of movies
+            if self.doSaveMovie.get():
+                outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
+                setMRCSamplingRate(outMovieFn, self.sRate)
+            else:
+                outMovieFn = movieFName
             with self._lock:
+                # SET OF MOVIES ----------------------------------------------------------------
                 outputMovies = self._getOutputMovies()
                 outMovie = Movie()
                 outMovie.copyInfo(inMovie)
                 outMovie.setFileName(outMovieFn)
                 outMovie.setMicName(basename(outMovieFn))
+                # Movie alignment
                 n = outMovie.getNumberOfFrames()
-                first, last = self._getFrameRange(n, 'align')
+                alignment = self.getMovieAlignment(movieFName, n)
+                outMovie.setAlignment(alignment)
+                # Data persistence
+                outputMovies.append(outMovie)
+                outputMovies.update(outMovie)
+                outputMovies.write()
+                self._store(outputMovies)
 
-                # # Check if user selected to save movie, use the getAttributeValue
-                # # function for allow the protocol to not define this flag
-                # # and use False as default
-                # if self.getAttributeValue('doSaveMovie', False):
-                #     # The subclass protocol is responsible for generating the output
-                #     # movie file in the extra path with the required name
-                #     extraMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
-                #     alignedMovie.setFileName(extraMovieFn)
-                #     # When the output movies are saved, the shifts
-                #     # will be set to zero since they are aligned
-                #     totalFrames = last - first + 1
-                #     xshifts = [0] * totalFrames
-                #     yshifts = xshifts
-                #     # If we save the movies, we need to modify which are the index
-                #     # of the first frame in the stack, now is 1 since the stack is
-                #     # written only with the given frames
-                #     firstFrameIndex = 1
-                # else:
-                #     xshifts, yshifts = self._getMovieShifts(movie)
-                #     firstFrameIndex = first
-                #
-                # alignment = emobj.MovieAlignment(first=first, last=last, xshifts=xshifts,
-                #                                  yshifts=yshifts)
-                #
-                # roiList = [self.getAttributeValue(s, 0) for s in
-                #            ['cropOffsetX', 'cropOffsetY', 'cropDimX', 'cropDimY']]
-                # alignment.setRoi(roiList)
-                # alignedMovie.setAlignment(alignment)
+                # SET OF MICROGRAPHS ----------------------------------------------------------
+                if self.doApplyDoseFilter.get():
+                    suffix = DW_SUFFIX
+                    outputName = self._possibleOutputs.micrographsDW.name
+                else:
+                    suffix = ''
+                    outputName = self._possibleOutputs.micrographs.name
+                self._registerMics(movieFName, inMovie, outputName, suffix=suffix)
+                if self.splitEvenOdd.get():
+                    # Even
+                    outputName = self._possibleOutputs.micrographsEven.name
+                    self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX)
+                    # Odd
+                    outputName = self._possibleOutputs.micrographsOdd.name
+                    self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX)
+
+                # Close explicitly the outputs (for streaming)
+                self.closeOutputsForStreaming()
+
         except Exception as e:
-            logger.error(redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(
+                redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
             logger.error(traceback.format_exc())
 
-
-    def _getOutputMovies(self) -> SetOfMovies:
-        attrName = self._possibleOutputs.movies.name
-        outputMovies = getattr(self, attrName, None)
-        if outputMovies:
-            outputMovies.enableAppend()
-        else:
-            inputMoviesPointer = self.getInputMovies(asPointer=True)
-            outputMovies = SetOfMovies.create(self._getPath(), template='movies')
-            outputMovies.copyInfo(self.getInputMovies())
-            outputMovies.setStreamState(pwobj.Set.STREAM_OPEN)
-            outputMovies.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
-
-            self._defineOutputs(**{attrName: outputMovies})
-            self._defineSourceRelation(inputMoviesPointer, outputMovies)
-        return outputMovies
-
-    def closeOutputSetStep(self):
+    def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
+        attribList = [attrib] if type(attrib) is str else attrib
+        failedOutputList = []
+        for attr in attribList:
+            outTsSet = getattr(self, attr, None)
+            if not outTsSet or (outTsSet and len(outTsSet) == 0):
+                failedOutputList.append(attr)
+        if failedOutputList:
+            raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
+                            f'Output Log > run.stdout and run.stderr')
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -355,7 +327,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 hasattr(self, 'outputMicrographsDoseWeighted'):
             summary.append('Aligned %d movies using Motioncor.'
                            % self.getInputMovies().getSize())
-            if self.splitEvenOdd and self._createOutputWeightedMicrographs():
+            if self.splitEvenOdd.get() and self.doApplyDoseFilter.get():
                 summary.append('Even/odd outputs are dose-weighted!')
         else:
             summary.append('Output is not ready')
@@ -366,29 +338,61 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return ProtMotionCorrBase._validate(self)
 
     # --------------------------- UTILS functions -----------------------------
-    def _getOutputMovieFolder(self, objId: int) -> str:
-        """ Create a Movie folder where to work with it. """
-        return self._getTmpPath('movie_%06d' % objId)
+    def readingOutput(self) -> None:
+        movies = getattr(self, self._possibleOutputs.movies.name, None)
+        outputList = []
+        mics = getattr(self, self._possibleOutputs.micrographs.name, None)
+        micsDW = getattr(self, self._possibleOutputs.micrographsDW.name, None)
+        micsEven = getattr(self, self._possibleOutputs.micrographsEven.name, None)
+        micsOdd = getattr(self, self._possibleOutputs.micrographsOdd.name, None)
+        if self.splitEvenOdd.get():
+            outputList.append(micsEven)
+            outputList.append(micsOdd)
+        if self.doApplyDoseFilter.get():
+            outputList.append(micsDW)
+        else:
+            outputList.append(mics)
 
-    def _getMovieLogFile(self, movieFName: str):
-        usePatches = self.patchX != 0 or self.patchY != 0
-        pattern = '-Patch' if usePatches else ''
-        return abspath(self._getExtraPath(f'{removeBaseExt(movieFName)}{pattern}-Full.log'))
+        if movies and None not in outputList:
+            for item in movies:
+                self.itemIdReadList.append(item.getObjId())
+            self.info(cyanStr(f'Ids processed: {self.itemIdReadList}'))
+        else:
+            self.info(cyanStr('No movies have been processed yet'))
 
-    def _getPlotGlobal(self, movieFName: str):
-        return abspath(self._getExtraPath(f'{removeBaseExt(movieFName)}_global_shifts.png'))
-
-    def _getNameExt(self, movie, postFix, ext, extra=False):
-        fn = self._getMovieRoot(movie) + postFix + '.' + ext
-        return self._getExtraPath(fn) if extra else fn
-
-    def _getPsdCorr(self, movie):
-        return self._getNameExt(movie, '_psd', 'png', extra=True)
-
-    def getInputMovies(self, asPointer: bool = False):
+    def getInputMovies(self, asPointer: bool = False) -> Union[Pointer, SetOfMovies]:
         return self.inputMovies if asPointer else self.inputMovies.get()
 
-    def _saveAlignmentPlots(self, movieFName: str, pixSize: float):
+    def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
+        bName = removeBaseExt(movieFName).replace('.mrc', '')
+        return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
+
+    def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
+        mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
+        if self.doApplyDoseFilter.get():
+            total, early, late = self.calcFrameMotion(movieFName)
+            mic._rlnAccumMotionTotal = Float(total)
+            mic._rlnAccumMotionEarly = Float(early)
+            mic._rlnAccumMotionLate = Float(late)
+
+    def setMicsEvenOdd(self, inMovieFName: str, alignedMic: Micrograph) -> None:
+        if self.splitEvenOdd.get():
+            setattr(alignedMic, MC_EVEN_ODD_ATTRIBUTE, CsvList(pType=str))
+            alignedMic._mcEvenOddMics.set([
+                self._getResultMicFn(inMovieFName, suffix=EVEN_SUFFIX),
+                self._getResultMicFn(inMovieFName, suffix=ODD_SUFFIX),
+            ])
+
+    def _getMovieLogFile(self, movieFName: str) -> str:
+        usePatches = self.patchX != 0 or self.patchY != 0
+        pattern = '-Patch' if usePatches else ''
+        bName = removeBaseExt(movieFName).replace('.mrc', '')
+        return abspath(self._getExtraPath(f'{bName}{pattern}-Full.log'))
+
+    def _getPlotGlobal(self, movieFName: str) -> str:
+        return self._getExtraPath(f'{removeBaseExt(movieFName)}_global_shifts.png')
+
+    def _saveAlignmentPlots(self, movieFName: str, pixSize: float) -> None:
         """ Compute alignment shift plots and save to file as png images. """
         shiftsX, shiftsY = self._getMovieShifts(movieFName)
         first, _ = self._getFramesRange()
@@ -396,7 +400,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         plotter.savefig(self._getPlotGlobal(movieFName))
         plotter.close()
 
-    def _getMovieShifts(self, movieFName: str):
+    def _getMovieShifts(self, movieFName: str) -> Tuple[List[float], List[float]]:
         """ Returns the x and y shifts for the alignment of this movie.
         The shifts are in pixels irrespective of any binning.
         """
@@ -405,50 +409,94 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         return xShifts, yShifts
 
-    # def _updateOutputSet(self, outputName, outputSet,
-    #                      state=pwobj.Set.STREAM_OPEN):
-    #     """ Redefine this method to set EER attrs. """
-    #     first = getattr(self, '_firstUpdate', True)
-    #
-    #     if first and outputName == 'outputMovies':
-    #         og = OpticsGroups.fromImages(outputSet)
-    #         gain = self.getInputMovies().getGain()
-    #         ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
-    #         if self.isEER:
-    #             ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
-    #                            'rlnEERUpsampling': self.eerSampling.get() + 1})
-    #         if gain:
-    #             ogDict['rlnMicrographGainName'] = gain
-    #         og.updateAll(**ogDict)
-    #         og.toImages(outputSet)
-    #
-    #     ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
-    #                                      state=state)
-    #     self._firstUpdate = False
+    def _registerMics(self,
+                      movieFName: str,
+                      inMovie: Movie, outputName: str,
+                      suffix: str = '') -> None:
+        outMicSet = self._getOutputMics(outputName, suffix=suffix)
+        outMic = Micrograph()
+        outMic.copyInfo(inMovie)
+        micFn = self._getResultMicFn(movieFName, suffix=suffix)
+        setMRCSamplingRate(micFn, self.sRate)
+        outMic.setFileName(micFn)
+        self.setMicPlotInfo(outMic, movieFName)
+        if suffix in [DW_SUFFIX, '']:
+            self.setMicsEvenOdd(movieFName, outMic)
+        # Data persistence
+        outMicSet.append(outMic)
+        outMicSet.update(outMic)
+        outMicSet.write()
+        self._store(outMicSet)
 
-    # def _createOutputMicrographs(self):
-    #     createWeighted = self._createOutputWeightedMicrographs()
-    #     # To create the unweighted average micrographs
-    #     # we only consider the 'doSaveUnweightedMic' flag if the
-    #     # weighted ones should be created.
-    #     return not createWeighted or self.doSaveUnweightedMic
+    def _getOutputMovies(self) -> SetOfMovies:
+        attrName = self._possibleOutputs.movies.name
+        outputMovies = getattr(self, attrName, None)
+        if outputMovies:
+            outputMovies.enableAppend()
+        else:
+            inputMoviesPointer = self.getInputMovies(asPointer=True)
+            outputMovies = SetOfMovies.create(self._getPath(), template='movies')
+            outputMovies.copyInfo(self.getInputMovies())
+            outputMovies.setStreamState(Set.STREAM_OPEN)
+            outputMovies.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
 
-    # def _doSaveUnweightedMic(self):
-    #     """ Wraps the logic for saving unweighted mics that needs to consider the doApplyDoseFilter to be true"""
-    #     return self._createOutputWeightedMicrographs() and self.doSaveUnweightedMic
+            self._defineOutputs(**{attrName: outputMovies})
+            self._defineSourceRelation(inputMoviesPointer, outputMovies)
+        return outputMovies
 
-    def _createOutputWeightedMicrographs(self):
-        return self.doApplyDoseFilter
+    def getMovieAlignment(self, inMovieFName: str, nFrames: int) -> MovieAlignment:
+        first, last = self._getFrameRange(nFrames, 'align')
 
-    # def _useWorkerThread(self):
-    #     return '--dont_use_worker_thread' not in self.extraProtocolParams.get()
+        if self.doSaveMovie.get():  # Interpolated movie
+            xShifts = np.zeros(nFrames).tolist()
+            yShifts = xShifts
+        else:
+            logFile = self._getMovieLogFile(inMovieFName)
+            xShifts, yShifts = parseMovieAlignment2(logFile)
 
-    def _getResultMicFn(self, movieFName: str):
-        return self._getExtraPath(f'{removeBaseExt(movieFName)}_aligned_mic.mrc')
+        alignment = MovieAlignment(first=first,
+                                   last=last,
+                                   xshifts=xShifts,
+                                   yshifts=yShifts)
+        roiList = [self.getAttributeValue(s, 0) for s in
+                   ['cropOffsetX', 'cropOffsetY', 'cropDimX', 'cropDimY']]
+        alignment.setRoi(roiList)
+        return alignment
 
+    def _getOutputMics(self, outputName: str, suffix: str = '') -> SetOfMicrographs:
+        outputMics = getattr(self, outputName, None)
+        if outputMics:
+            outputMics.enableAppend()
+        else:
+            inputMoviesPointer = self.getInputMovies(asPointer=True)
+            outputMics = SetOfMicrographs.create(self._getPath(), template='movies', suffix=suffix)
+            outputMics.copyInfo(self.getInputMovies())
+            outputMics.setStreamState(Set.STREAM_OPEN)
+            outputMics.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
 
-    def _useAlignToSum(self):
-        return self.getAttributeValue('useAlignToSum', False)
+            self._defineOutputs(**{outputName: outputMics})
+            self._defineSourceRelation(inputMoviesPointer, outputMics)
+        return outputMics
+
+    def _getOutputsToCheck(self) -> List[str]:
+        outputsToCheck = [
+            self._possibleOutputs.movies.name,
+        ]
+        if self.doApplyDoseFilter.get():
+            outputsToCheck.append(self._possibleOutputs.micrographsDW.name)
+        else:
+            outputsToCheck.append(self._possibleOutputs.micrographs.name)
+        if self.splitEvenOdd.get():
+            outputsToCheck.append(self._possibleOutputs.micrographsEven.name)
+            outputsToCheck.append(self._possibleOutputs.micrographsOdd.name)
+        return outputsToCheck
+
+    def closeOutputsForStreaming(self):
+        # Close explicitly the outputs (for streaming)
+        for outputName in self._possibleOutputs:
+            output = getattr(self, outputName.name, None)
+            if output:
+                output.close()
 
     def _getFrameRange(self, n: int, prefix: str) -> Tuple[int, int]:
         """
@@ -459,7 +507,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         """
         # In case that the user select the same range for ALIGN and SUM
         # we also use the 'align' prefix
-        if self._useAlignToSum():
+        if self.useAlignToSum.get():
             prefix = 'align'
 
         first = self.getAttributeValue('%sFrame0' % prefix)
@@ -473,8 +521,39 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         return first, last
 
+    def calcFrameMotion(self, movieFName: str) -> Optional[List[Any]]:
+        # based on relion 3.1 motioncorr_runner.cpp
+        shiftsX, shiftsY = self._getMovieShifts(movieFName)
+        a0, aN = self._getFramesRange()
+        nframes = aN - a0 + 1
+        preExp, dose = self._getCorrectedDose()
+        # when using EER, the hardware frames are grouped
+        if self.isEER:
+            dose *= self.eerGroup.get()
+        cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
+        total, early, late = 0., 0., 0.
+        x, y, xOld, yOld = 0., 0., 0., 0.
+        try:
+            for frame in range(2, nframes + 1):  # start from the 2nd frame
+                x, y = shiftsX[frame - 1], shiftsY[frame - 1]
+                d = sqrt((x - xOld) * (x - xOld) + (y - yOld) * (y - yOld))
+                total += d
+                if frame <= cutoff:
+                    early += d
+                else:
+                    late += d
+                xOld = x
+                yOld = y
+            return list(map(lambda x: self.sRate * x, [total, early, late]))
+        except IndexError:
+            logger.error(redStr(f"Expected {nframes} frames, found less. "
+                                f"Check movie {movieFName}"))
+
     @staticmethod
-    def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
+    def createGlobalAlignmentPlot(meanX: List[float],
+                                  meanY: List[float],
+                                  first: int,
+                                  pixSize: float) -> Plotter:
         """ Create a plotter with the shift per frame. """
         sumMeanX = []
         sumMeanY = []
@@ -529,5 +608,3 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         plotter.tightLayout()
 
         return plotter
-
-

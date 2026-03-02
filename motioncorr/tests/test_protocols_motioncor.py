@@ -94,7 +94,7 @@ class TestMotioncorAlignMovies(BaseTest):
         )
 
     def _checkOutput(self, protocol):
-        output = "outputMicrographsDoseWeighted"
+        output = protocol._possibleOutputs.micrographsDW.name
         self.assertIsNotNone(getattr(protocol, output),
                              "Output SetOfMicrographs was not created.")
 
@@ -130,12 +130,12 @@ class TestMotioncorAlignMovies(BaseTest):
                                 objLabel='tif - motioncor',
                                 patchX=0, patchY=0, binFactor=2,
                                 gainFlip=1) # flip upside down because of dm4
-        prot.inputMovies.set(self.protImport1.outputMovies)
+        prot.inputMovies.set(getattr(self.protImport1, self.protImport1._possibleOutputs.outputMovies.name, None))
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
-        self._checkAlignment(prot.outputMovies[1],
+        self._checkAlignment(getattr(prot, prot._possibleOutputs.movies.name)[1],
                              (1, 38), [0, 0, 0, 0])
 
     def test_tif2(self):
@@ -143,12 +143,12 @@ class TestMotioncorAlignMovies(BaseTest):
         prot = self.newProtocolMc(
                                 objLabel='tif - motioncor (2)',
                                 patchX=0, patchY=0)
-        prot.inputMovies.set(self.protImport3.outputMovies)
+        prot.inputMovies.set(getattr(self.protImport3, self.protImport3._possibleOutputs.outputMovies.name, None))
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
-        self._checkAlignment(prot.outputMovies[1],
+        self._checkAlignment(getattr(prot, prot._possibleOutputs.movies.name)[1],
                              (1, 24), [0, 0, 0, 0])
 
     def test_mrcs(self):
@@ -156,11 +156,11 @@ class TestMotioncorAlignMovies(BaseTest):
         prot = self.newProtocolMc(
                                 objLabel='mrcs - motioncor',
                                 patchX=0, patchY=0)
-        prot.inputMovies.set(self.protImport2.outputMovies)
+        prot.inputMovies.set(getattr(self.protImport2, self.protImport2._possibleOutputs.outputMovies.name, None))
         self.launchProtocol(prot)
 
         self._checkOutput(prot)
-        self._checkAlignment(prot.outputMovies[1],
+        self._checkAlignment(getattr(prot, prot._possibleOutputs.movies.name)[1],
                              (1, 16), [0, 0, 0, 0])
 
     def test_eer(self):

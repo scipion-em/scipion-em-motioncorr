@@ -55,7 +55,7 @@ class ProtMotionCorrBase(EMProtocol):
 
     # -------------------------- DEFINE param functions -----------------------
     @staticmethod
-    def _defineCommonParams(form, allowDW=True):
+    def _defineCommonParams(form):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -66,12 +66,11 @@ class ProtMotionCorrBase(EMProtocol):
                             " set to i.e. *0 1 2*.")
 
         form.addSection(label="Motioncor params")
-        if allowDW:
-            form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
-                          label='Apply dose filter',
-                          help='Apply a dose-dependent filter to frames before '
-                               'summing them. Pre-exposure and dose per frame '
-                               'should be specified during movies import.')
+        form.addParam('doApplyDoseFilter', params.BooleanParam, default=True,
+                      label='Apply dose filter',
+                      help='Apply a dose-dependent filter to frames before '
+                           'summing them. Pre-exposure and dose per frame '
+                           'should be specified during movies import.')
 
         line = form.addLine('Number of patches',
                             help='Number of patches to be used for patch based '
@@ -102,13 +101,12 @@ class ProtMotionCorrBase(EMProtocol):
                       label='Tolerance (px)',
                       help='Tolerance for iterative alignment, default *0.2px*.')
 
-        if allowDW:
-            form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
-                          condition='doApplyDoseFilter',
-                          label="Save unweighted images?",
-                          help="Aligned but non-dose weighted images are sometimes "
-                               "useful in CTF estimation, although there is no "
-                               "difference in most cases.")
+        form.addParam('doSaveUnweightedMic', params.BooleanParam, default=False,
+                      condition='doApplyDoseFilter',
+                      label="Save unweighted images?",
+                      help="Aligned but non-dose weighted images are sometimes "
+                           "useful in CTF estimation, although there is no "
+                           "difference in most cases.")
 
         form.addParam('extraParams2', params.StringParam, default='',
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -188,6 +186,7 @@ class ProtMotionCorrBase(EMProtocol):
 
     # --------------------------- STEPS functions -----------------------------
     def _convertInputStep(self):
+        logger.info(cyanStr('Converting the inputs (gain, dark and /or EER)...'))
         inputMovies = self.getInputMovies()
         self._prepareEERFiles()
         pwutils.makePath(self._getExtraPath('DONE'))
@@ -338,7 +337,7 @@ class ProtMotionCorrBase(EMProtocol):
         }
         if self.isEER:
             argsDict.update({'-EerSampling': self.eerSampling.get() + 1,
-                             '-FmIntFile': "../../extra/FmIntFile.txt"})
+                             '-FmIntFile': self._getExtraPath("FmIntFile.txt")})
 
         if self.doApplyDoseFilter:
             preExp, dose = self._getCorrectedDose(acqOrder)
@@ -355,7 +354,7 @@ class ProtMotionCorrBase(EMProtocol):
         elif self.defectMap.get():
             argsDict['-DefectMap'] = self.defectMap.get()
         elif exists(self._getExtraPath("defects_eer.txt")):
-            argsDict['-DefectFile'] = "../../extra/defects_eer.txt"
+            argsDict['-DefectFile'] = self._getExtraPath("defects_eer.txt")
 
         if inputMovies.getGain():
             argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',
@@ -374,7 +373,8 @@ class ProtMotionCorrBase(EMProtocol):
 
         return argsDict
 
-    def _getInputFormat(self, inputFn, absPath=False):
+    @staticmethod
+    def _getInputFormat(inputFn, absPath=False):
         if absPath:
             inputFn = abspath(inputFn)
         else:
