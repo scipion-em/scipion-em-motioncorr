@@ -1,6 +1,7 @@
 3.17.0:
  Users:
   - Tilt-series Movies motioncorr is now parallellized.
+  - Motioncorr protocol (new streaming) added.
  Developers:
   - Tilt-series Movies motioncorr does not depend on old motion_correction protocol.
   - Tests updated using the TCL.

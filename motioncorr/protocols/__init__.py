@@ -25,8 +25,8 @@
 # **************************************************************************
 
 from pyworkflow.utils import weakImport
-from .protocol_motioncorr import ProtMotionCorrNewStreaming
-from .protocol_motioncorr_old_streaming import ProtMotionCorr
+from .protocol_motioncorr_ns import ProtMotionCorrNewStreaming
+from .protocol_motioncorr import ProtMotionCorr
 from .protocol_motioncorr_tasks import ProtMotionCorrTasks
 with weakImport('tomo'):
     from .protocol_ts_motioncor import ProtTsMotionCorr
