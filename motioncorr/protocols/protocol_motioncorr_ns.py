@@ -383,8 +383,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if self.splitEvenOdd.get():
             setattr(alignedMic, MC_EVEN_ODD_ATTRIBUTE, CsvList(pType=str))
             alignedMic._mcEvenOddMics.set([
-                self._getResultMicFn(inMovieFName, suffix=EVEN_SUFFIX),
                 self._getResultMicFn(inMovieFName, suffix=ODD_SUFFIX),
+                self._getResultMicFn(inMovieFName, suffix=EVEN_SUFFIX),
             ])
 
     def _getMovieLogFile(self, movieFName: str) -> str:
