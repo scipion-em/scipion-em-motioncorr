@@ -168,7 +168,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         closeSetStepDeps = []
         self._initialize()
         inMoviesSet = self.getInputMovies()
-        self.sRate = inMoviesSet.getSamplingRate()
         self.readingOutput()
         outputsToCheck = self._getOutputsToCheck()
 
@@ -218,7 +217,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         inputMovies = self.getInputMovies()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
-        self.sRate = inputMovies.getSamplingRate()
+        self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
         self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
 
     def convertInputStep(self, movieFName: str):
@@ -423,6 +422,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         micFn = self._getResultMicFn(movieFName, suffix=suffix)
         setMRCSamplingRate(micFn, self.sRate)
         outMic.setFileName(micFn)
+        outMic.setSamplingRate(self.sRate)
         self.setMicPlotInfo(outMic, movieFName)
         if suffix in [DW_SUFFIX, '']:
             self.setMicsEvenOdd(movieFName, outMic)
@@ -441,6 +441,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             inputMoviesPointer = self.getInputMovies(asPointer=True)
             outputMovies = SetOfMovies.create(self._getPath(), template='movies')
             outputMovies.copyInfo(self.getInputMovies())
+            outputMovies.setSamplingRate(self.sRate)
             with weakImport("relion"):
                 from relion.convert import OpticsGroups
                 og = OpticsGroups.fromImages(outputMovies)
@@ -487,6 +488,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             inputMoviesPointer = self.getInputMovies(asPointer=True)
             outputMics = SetOfMicrographs.create(self._getPath(), template='movies', suffix=suffix)
             outputMics.copyInfo(self.getInputMovies())
+            outputMics.setSamplingRate(self.sRate)
             outputMics.setStreamState(Set.STREAM_OPEN)
             outputMics.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
 
