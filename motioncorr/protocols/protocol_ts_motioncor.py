@@ -302,11 +302,12 @@ class ProtTsMotionCorr(ProtMotionCorrBase):
             newTs.copyInfo(inTsM)
             outTsSet.append(newTs)
 
-            for inTi in inTsM.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD):
+            for index, inTi in enumerate(inTsM.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD)):
                 newTi = TiltImage()
                 newTi.copyInfo(inTi)
                 newTi.setAcquisition(inTi.getAcquisition())
                 newTi.setFileName(tsFName)
+                newTi.setIndex(index + 1)
                 if self.splitEvenOdd.get():
                     newTi.setOddEven([tsFnameOdd, tsFnameEven])
                 newTs.append(newTi)
