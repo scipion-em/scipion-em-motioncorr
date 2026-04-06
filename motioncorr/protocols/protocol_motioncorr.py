@@ -33,6 +33,7 @@
 import os
 import time
 from math import ceil, sqrt
+from os.path import exists
 from threading import Thread
 
 import pyworkflow.protocol.constants as cons
@@ -42,11 +43,10 @@ import pyworkflow.utils as pwutils
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
+from pyworkflow.utils import weakImport
 
-from .. import Plugin
+from .. import Plugin, DEFECTS_FILE_EER
 from .protocol_base import ProtMotionCorrBase
-
-from relion.convert.convert31 import OpticsGroups
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
@@ -156,7 +156,15 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
         argsDict = self._getMcArgs()
         argsDict['-OutMrc'] = f'"{outputMicFn}"'
-
+        argsDict['-LogDir'] = './'
+        if self.isEER:
+            argsDict.update({'-FmIntFile': "../../extra/FmIntFile.txt"})
+        if self.defectFile.get():
+            argsDict['-DefectFile'] = self.defectFile.get()
+        elif self.defectMap.get():
+            argsDict['-DefectMap'] = self.defectMap.get()
+        elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
+            argsDict['-DefectFile'] = f"../../extra/{DEFECTS_FILE_EER}"
         args = self._getInputFormat(movie.getFileName())
         args += ' '.join(['%s %s' % (k, v)
                           for k, v in argsDict.items()])
@@ -334,16 +342,18 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         first = getattr(self, '_firstUpdate', True)
 
         if first and outputName == 'outputMovies':
-            og = OpticsGroups.fromImages(outputSet)
-            gain = self.getInputMovies().getGain()
-            ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
-            if self.isEER:
-                ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
-                               'rlnEERUpsampling': self.eerSampling.get() + 1})
-            if gain:
-                ogDict['rlnMicrographGainName'] = gain
-            og.updateAll(**ogDict)
-            og.toImages(outputSet)
+            with weakImport('relion'):
+                from relion.convert.convert31 import OpticsGroups
+                og = OpticsGroups.fromImages(outputSet)
+                gain = self.getInputMovies().getGain()
+                ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
+                if self.isEER:
+                    ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
+                                   'rlnEERUpsampling': self.eerSampling.get() + 1})
+                if gain:
+                    ogDict['rlnMicrographGainName'] = gain
+                og.updateAll(**ogDict)
+                og.toImages(outputSet)
 
         ProtAlignMovies._updateOutputSet(self, outputName, outputSet,
                                          state=state)
