@@ -230,14 +230,6 @@ class ProtTsMotionCorr(ProtMotionCorrBase):
     def getInputMovies(self, asPointer=False):
         return self.inputTiltSeriesM if asPointer else self.inputTiltSeriesM.get()
 
-    # @staticmethod
-    # def _createOutputWeightedTS():
-    #     return False
-    #
-    # @staticmethod
-    # def _getOutputName():
-    #     return 'TiltSeries'
-
     def _getTsResultsPath(self, tsId: str) -> str:
         return self._getExtraPath(tsId)
 

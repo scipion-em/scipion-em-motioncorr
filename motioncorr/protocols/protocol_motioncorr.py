@@ -45,7 +45,7 @@ from pwem.objects import Image, Float
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.utils import weakImport
 
-from .. import Plugin
+from .. import Plugin, DEFECTS_FILE_EER
 from .protocol_base import ProtMotionCorrBase
 
 
@@ -163,8 +163,8 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
             argsDict['-DefectFile'] = self.defectFile.get()
         elif self.defectMap.get():
             argsDict['-DefectMap'] = self.defectMap.get()
-        elif exists(self._getExtraPath("defects_eer.txt")):
-            argsDict['-DefectFile'] = "../../extra/defects_eer.txt"
+        elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
+            argsDict['-DefectFile'] = f"../../extra/{DEFECTS_FILE_EER}"
         args = self._getInputFormat(movie.getFileName())
         args += ' '.join(['%s %s' % (k, v)
                           for k, v in argsDict.items()])

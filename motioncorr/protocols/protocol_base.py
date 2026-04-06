@@ -35,7 +35,7 @@ from pwem.protocols import EMProtocol
 from pwem.emlib.image import ImageHandler
 from pwem.objects import Movie
 from pyworkflow.utils import cyanStr
-from .. import Plugin
+from .. import Plugin, DEFECTS_FILE_EER
 
 from ..constants import NO_FLIP, NO_ROTATION
 from ..convert import parseMovieAlignment2, parseEERDefects
@@ -207,7 +207,7 @@ class ProtMotionCorrBase(EMProtocol):
         if self.isEER and gainFile:
             defects = parseEERDefects(gainFile)
             if defects:
-                with open(self._getExtraPath("defects_eer.txt"), "w") as f:
+                with open(self._getExtraPath(DEFECTS_FILE_EER), "w") as f:
                     for d in defects:
                         f.write(" ".join(str(i) for i in d) + "\n")
         if self.isEER:
@@ -354,8 +354,8 @@ class ProtMotionCorrBase(EMProtocol):
             argsDict['-DefectFile'] = self.defectFile.get()
         elif self.defectMap.get():
             argsDict['-DefectMap'] = self.defectMap.get()
-        elif exists(self._getExtraPath("defects_eer.txt")):
-            argsDict['-DefectFile'] = self._getExtraPath("defects_eer.txt")
+        elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
+            argsDict['-DefectFile'] = self._getExtraPath(DEFECTS_FILE_EER)
 
         if inputMovies.getGain():
             argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',

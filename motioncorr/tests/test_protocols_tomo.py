@@ -114,37 +114,3 @@ class TestMotioncorTiltSeriesM(TestBaseCentralizedLayer):
 
     def testTsMotionCorr_02(self):
         self._runTiltSeriesMotionCorr(splitEvenOdd=True)
-
-    # def test_tiltseries_motioncor(self):
-    #     print(magentaStr("\n==> Importing data - tilt-series movies:"))
-    #     protImport = self._runImportTiltSeriesM()
-    #     print(magentaStr("\n==> Testing motioncor:"))
-    #     protMc = self.newProtocol(ProtTsMotionCorr)
-    #     protMc.inputTiltSeriesM.set(getattr(protImport, protImport.OUTPUT_NAME))
-    #     self.launchProtocol(protMc)
-    #     outTsSet = getattr(protMc, protMc._possibleOutputs.tiltSeries.name, None)
-    #     self.checkTSSet(outTsSet, 2, 3, checkIds=True)
-    #
-    # def checkTSSet(self, set, size, anglesCount, checkIds=False):
-    #     """
-    #     Check basic attributes of a TS set
-    #     :param set: TiltSeries set (Movies or Images)
-    #     :param size: Expected size
-    #     :param anglesCount: Expected number of tilts
-    #     :param checkIds: check if ids start with 1 and increments by one
-    #     :return: None
-    #     """
-    #     self.assertSetSize(set, size)
-    #     for ts in set:
-    #         self.assertEquals(ts.getSize(), anglesCount,
-    #                           "Size of tilt images is wrong.")
-    #         for i, ti in enumerate(ts):
-    #             if checkIds:
-    #                 self.assertEqual(i + 1, ti.getObjId(),
-    #                                  "Tilt image Movie objId is incorrect")
-    #
-    #             self.assertEqual(ts.getTsId(), ti.getTsId(),
-    #                              "Tilt image id is incorrect")
-    #             self.assertEqual(ti.getSamplingRate(), ts.getSamplingRate(),
-    #                              'Tilt image sampling rate must be equal to '
-    #                              'tilt series')
