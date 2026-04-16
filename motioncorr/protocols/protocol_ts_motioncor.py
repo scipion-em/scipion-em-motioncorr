@@ -290,13 +290,16 @@ class ProtTsMotionCorr(ProtMotionCorrBase):
         with self._lock:
             # Mount the resulting tilt-series
             outTsSet = self._getOutputTsSet()
+            binFactor = self.binFactor.get()
             newTs = TiltSeries()
             newTs.copyInfo(inTsM)
+            newTs.setSamplingRate(inTsM.getSamplingRate() * binFactor)
             outTsSet.append(newTs)
 
             for index, inTi in enumerate(inTsM.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD)):
                 newTi = TiltImage()
                 newTi.copyInfo(inTi)
+                newTi.setSamplingRate(inTi.getSamplingRate()*binFactor)
                 newTi.setAcquisition(inTi.getAcquisition())
                 newTi.setFileName(tsFName)
                 newTi.setIndex(index + 1)
@@ -320,7 +323,9 @@ class ProtTsMotionCorr(ProtMotionCorrBase):
             outTsSet.enableAppend()
         else:
             outTsSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries')
-            outTsSet.copyInfo(self.getInputMovies())
+            inM = self.getInputMovies()
+            outTsSet.copyInfo(inM)
+            outTsSet.setSamplingRate(inM.getSamplingRate()*self.binFactor.get())
             outTsSet.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{outSetSetAttrib: outTsSet})
             self._defineSourceRelation(self.getInputMovies(asPointer=True), outTsSet)
