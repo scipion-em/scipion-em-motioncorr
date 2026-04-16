@@ -1,3 +1,6 @@
+3.17.1:
+ Users:
+  - A bug is fixed, when binning is applied the pixel size must be updated
 3.17.0:
  Users:
   - Tilt-series Movies motioncorr is now parallellized.
