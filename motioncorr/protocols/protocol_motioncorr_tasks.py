@@ -46,10 +46,140 @@ from .. import Plugin
 
 
 class ProtMotionCorrTasks(ProtMotionCorr):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs movie alignment for cryo-EM frame series using MotionCor
+    in a streaming task-oriented environment. The protocol corrects
+    beam-induced motion and produces aligned micrographs suitable for
+    downstream reconstruction and particle analysis.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Motion Correction Tasks (ProtMotionCorrTasks) - User Manual
+        Overview
+
+        The Motion Correction Tasks protocol provides automated alignment
+        of cryo-electron microscopy movie frames as they become available.
+        Its main purpose is to compensate for beam-induced specimen drift
+        and stage motion during acquisition so that the final micrographs
+        preserve the highest possible high-resolution information.
+
+        In modern cryo-EM workflows, raw movies contain multiple frames
+        acquired over the exposure time rather than a single static image.
+        Although this improves radiation damage management, it also means
+        that individual frames may be slightly displaced relative to one
+        another. Motion correction is therefore one of the earliest and
+        most biologically important preprocessing steps because it strongly
+        influences the quality of every downstream analysis.
+
+        Streaming Workflow and Facility Integration
+
+        This protocol is particularly suited for streaming environments in
+        which movies arrive continuously during microscope acquisition.
+        Instead of waiting for the full dataset, newly acquired movies are
+        processed as soon as they become available.
+
+        For biological users working at microscope facilities or automated
+        collection pipelines, this behavior enables immediate feedback on
+        acquisition quality. Poor ice, unstable grids, charging effects,
+        excessive drift, or acquisition problems can often be detected
+        early enough to influence data collection decisions before the
+        session is completed.
+
+        Parallel Task Execution
+
+        The protocol is optimized for task-based processing across one or
+        more available GPUs. This allows multiple batches of movies to be
+        aligned efficiently while maintaining a continuous processing flow.
+
+        From a practical perspective, this is especially useful in high-
+        throughput experiments where movie production may outpace serial
+        processing. Efficient GPU distribution helps maintain stable
+        throughput and reduces delays between acquisition and quality
+        assessment.
+
+        Biological Purpose of Motion Correction
+
+        Beam-induced motion introduces blurring that disproportionately
+        affects high-resolution structural information. Correcting this
+        drift increases image sharpness, improves contrast transfer
+        reliability, and enhances the quality of particle extraction and
+        subsequent three-dimensional refinement.
+
+        In biological terms, accurate motion correction often determines
+        whether flexible domains, ligand densities, side-chain features,
+        or small conformational differences remain interpretable in later
+        stages of the workflow.
+
+        Dose Weighting and Exposure Interpretation
+
+        The protocol can produce dose-weighted outputs, which are usually
+        preferred for most biological analyses. Dose weighting accounts
+        for the progressive radiation damage accumulated during exposure,
+        giving relatively higher influence to the less damaged early
+        frames while reducing the contribution of later frames.
+
+        This is particularly important when the final objective is high-
+        resolution reconstruction, because radiation damage does not affect
+        all spatial frequencies equally. For exploratory inspection,
+        however, unweighted outputs may still remain useful depending on
+        the imaging conditions.
+
+        Even and Odd Frame Separation
+
+        The protocol can also preserve independent information from even
+        and odd frame subsets. This is valuable in workflows where users
+        wish to assess consistency, estimate independent signal behavior,
+        or prepare data for denoising and validation procedures.
+
+        From a biological standpoint, these complementary outputs can help
+        evaluate whether subtle features remain reproducible rather than
+        being dominated by stochastic noise.
+
+        Batch-Based Robustness
+
+        Movies are processed in batches, which provides operational
+        robustness in streaming conditions. This approach is especially
+        useful in long acquisition sessions where temporary storage,
+        transfer delays, or intermittent computational issues may occur.
+
+        The practical consequence for the user is greater resilience
+        during unattended processing. Temporary failures are less likely
+        to interrupt the full preprocessing workflow, which is valuable in
+        overnight or facility-scale automated acquisition.
+
+        Outputs and Their Interpretation
+
+        The main outputs are aligned micrographs suitable for particle
+        picking, CTF estimation, and downstream reconstruction. Depending
+        on acquisition strategy and user choices, the protocol may also
+        provide dose-weighted micrographs, unweighted micrographs, and
+        separated frame subsets.
+
+        These outputs should be interpreted as corrected experimental
+        observations rather than merely technical derivatives. Their
+        quality directly influences the biological reliability of every
+        subsequent inference.
+
+        Practical Recommendations
+
+        In routine cryo-EM practice, it is generally advisable to use
+        motion correction in streaming mode whenever acquisition is
+        continuous and computational resources are available. Early
+        inspection of aligned micrographs often reveals whether data
+        collection conditions remain biologically productive.
+
+        Dose-weighted outputs are usually the preferred choice for high-
+        resolution structural analysis, while additional output variants
+        can be useful for troubleshooting, validation, or specialized
+        downstream processing.
+
+        Final Perspective
+
+        For most cryo-EM users, motion correction is not simply an image
+        cleanup procedure but a foundational biological preparation step.
+        Reliable correction of beam-induced motion preserves structural
+        detail, improves interpretability, and establishes the quality
+        ceiling for the entire reconstruction workflow.
     """
 
     _label = 'tasks'
