@@ -50,10 +50,217 @@ from .protocol_base import ProtMotionCorrBase
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs movie-frame alignment, drift correction, and dose weighting
+    for cryo-EM movies using the MotionCor program.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Motion Correction (ProtMotionCorr) — User Manual
+        Overview
+
+        The Motion Correction protocol aligns raw cryo-EM movies by correcting
+        beam-induced specimen motion across frames. During electron exposure,
+        particles tend to drift because of stage instability, charging, and
+        radiation damage. If this motion is not corrected, the resulting
+        micrographs become blurred and lose high-resolution information.
+
+        This protocol wraps the UCSF MotionCor program and is typically one of
+        the earliest processing steps after movie import. Its biological goal is
+        to produce corrected micrographs that preserve as much structural signal
+        as possible for downstream tasks such as CTF estimation, particle
+        picking, classification, and high-resolution refinement.
+
+        General Workflow
+
+        The protocol takes as input a set of movies and aligns the individual
+        frames to compensate for motion. For each movie, MotionCor estimates
+        translational shifts across the frame series and generates an aligned
+        summed micrograph.
+
+        Depending on the selected options, the protocol may also:
+
+            - apply dose weighting,
+            - save aligned movie stacks,
+            - generate odd/even frame sums,
+            - compute power spectrum density (PSD),
+            - generate micrograph thumbnails,
+            - compute motion statistics,
+            - generate alignment plots.
+
+        Input Requirements
+
+        The protocol supports common movie formats including MRC, MRCS, TIFF,
+        and EER.
+
+        The input movies should contain valid acquisition metadata,
+        particularly:
+
+            - sampling rate,
+            - acceleration voltage,
+            - dose per frame (required for dose weighting).
+
+        If gain reference or dark reference images are provided, their
+        dimensions must match the movie dimensions. Gain references in DM4
+        format are automatically converted when necessary.
+
+        Frame Alignment
+
+        The user specifies the frame range used for alignment and summation.
+
+        For conventional movies, any valid frame subset may be selected.
+        For EER movies, MotionCor uses grouped hardware frames, and frame
+        handling follows EER-specific internal logic.
+
+        In biological practice, excluding very early unstable frames can
+        sometimes improve final alignment quality. However, discarding too
+        many frames reduces signal.
+
+        Global and Local Motion Correction
+
+        MotionCor supports both global and patch-based local alignment.
+
+        Global alignment estimates a single rigid translation for the entire
+        micrograph. This is often sufficient for stable datasets or small
+        particles.
+
+        Patch-based alignment divides the micrograph into smaller regions
+        and estimates local motion independently. This is especially useful
+        when the ice deforms non-uniformly or when larger particles exhibit
+        local drift differences.
+
+        The number of patches and patch overlap determine how finely local
+        motion is modeled.
+
+        Dose Weighting
+
+        Dose weighting compensates for radiation damage accumulated during
+        exposure. Early frames generally preserve higher-resolution signal,
+        while later frames become progressively more damaged.
+
+        When enabled, the protocol uses dose-per-frame metadata and exposure
+        history to compute dose-corrected sums.
+
+        For biological interpretation, dose-weighted micrographs are usually
+        preferred for refinement, whereas unweighted sums may still be useful
+        for CTF estimation or visual inspection.
+
+        EER-Specific Processing
+
+        Falcon EER movies require additional handling.
+
+        The protocol supports:
+
+            - EER frame grouping (fractionation),
+            - EER upsampling,
+            - EER defect parsing.
+
+        During preprocessing, the protocol generates internal EER metadata
+        files that define grouped frame structure and effective dose
+        distribution.
+
+        EER movies typically offer finer temporal sampling and can improve
+        motion correction performance when grouped appropriately.
+
+        Gain, Dark, and Defect Correction
+
+        Detector imperfections can introduce fixed-pattern artifacts.
+        MotionCor allows correction using:
+
+            - gain reference,
+            - dark reference,
+            - defect list files,
+            - defect maps.
+
+        These corrections are applied before alignment.
+
+        In biological workflows, proper gain handling is critical because
+        detector artifacts can strongly affect downstream CTF estimation
+        and particle extraction.
+
+        Magnification Anisotropy Correction
+
+        The protocol optionally supports anisotropic magnification correction.
+
+        This compensates for small directional magnification distortions by
+        applying scaling along major and minor axes.
+
+        This is particularly relevant in high-resolution projects where
+        subtle geometric distortions may otherwise limit refinement quality.
+
+        Output Products
+
+        Depending on selected options, the protocol may generate:
+
+            - aligned summed micrographs,
+            - dose-weighted micrographs,
+            - unweighted micrographs,
+            - aligned movie stacks,
+            - odd/even sums,
+            - alignment log files,
+            - global motion plots,
+            - PSD images,
+            - thumbnails.
+
+        Motion statistics are also stored, including:
+
+            - total accumulated motion,
+            - early-frame motion,
+            - late-frame motion.
+
+        These metrics help identify unstable acquisitions or problematic movies.
+
+        Validation and Safety Checks
+
+        Before execution, the protocol validates:
+
+            - existence of input movie files,
+            - valid alignment frame ranges,
+            - dose metadata availability,
+            - gain-reference dimensional compatibility,
+            - EER frame constraints.
+
+        These checks are especially important in streaming or large facility
+        pipelines where missing metadata or broken symbolic links can easily
+        cause failures.
+
+        Parallel Execution and Performance
+
+        Movie processing is performed independently per input movie, which
+        makes the protocol naturally scalable for GPU-based processing.
+
+        Additional post-processing tasks such as PSD and thumbnail generation
+        can optionally run in a worker thread so GPU execution remains the
+        main computational bottleneck rather than CPU-side post-processing.
+
+        Practical Recommendations
+
+        For routine cryo-EM datasets:
+
+            - use dose weighting,
+            - start with patch-based alignment,
+            - inspect motion plots,
+            - compute PSD when evaluating acquisition quality.
+
+        For high-resolution datasets, careful tuning of patch size,
+        EER grouping, and magnification correction can noticeably improve
+        downstream refinement.
+
+        For screening or rapid facility workflows, default parameters are
+        often sufficient.
+
+        Final Perspective
+
+        Motion correction is one of the most biologically important early
+        preprocessing steps in cryo-EM.
+
+        Good motion correction preserves high-resolution information,
+        stabilizes downstream image processing, and improves structural
+        interpretability.
+
+        In practical cryo-EM analysis, the quality of motion correction often
+        determines the ceiling of the final reconstruction much more strongly
+        than later refinement parameters.
     """
 
     _label = 'movie alignment'

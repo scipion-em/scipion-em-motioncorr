@@ -68,14 +68,187 @@ class MotionCorrOutputs(Enum):
 
 
 class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs streaming movie alignment and motion correction using MotionCor
+    in a next-generation Scipion streaming workflow.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
 
-    New Streaming refers to the next-generation engine developed by the Scipion Team.
-    While both the new and legacy streaming protocols will coexist for a transitional
-    period, they remain fully compatible with each other.
+    Motion Correction New Streaming (ProtMotionCorrNewStreaming) — User Manual
+        Overview
+
+        The Motion Correction New Streaming protocol aligns cryo-EM movies
+        continuously as they arrive during acquisition or during streaming
+        processing. It wraps the MotionCor engine to correct beam-induced
+        specimen motion, optionally applies dose weighting, and generates
+        aligned movies and micrographs in real time.
+
+        This protocol represents the new-generation streaming architecture
+        developed by the Scipion Team. It is designed for high-throughput,
+        automated workflows where processing begins before data collection
+        has finished.
+
+        Biological Purpose
+
+        In cryo-EM, each movie consists of multiple frames acquired over time.
+        During exposure, the specimen moves because of beam-induced drift.
+        If not corrected, this motion reduces high-resolution signal and
+        degrades downstream reconstruction.
+
+        This protocol estimates frame-to-frame shifts and compensates for them,
+        producing motion-corrected micrographs that are more suitable for
+        CTF estimation, particle picking, classification, and refinement.
+
+        Streaming Workflow
+
+        Unlike batch protocols, this protocol continuously monitors the input
+        movie set. Newly arriving movies are detected automatically and
+        processed one by one.
+
+        For each incoming movie, the workflow follows three main steps:
+
+            1. Input preparation
+               Gain and dark references are converted if necessary.
+
+            2. Motion correction
+               MotionCor is executed with the selected alignment parameters.
+
+            3. Output registration
+               Aligned movies, micrographs, and metadata are immediately added
+               to the output streaming sets.
+
+        The protocol keeps running until the input stream closes and all
+        movies have been processed.
+
+        Input Data
+
+        The required input is a SetOfMovies.
+
+        The protocol inherits all common motion correction settings from
+        ProtMotionCorrBase, including:
+
+            - frame range selection
+            - patch-based local alignment
+            - dose filtering
+            - gain and dark correction
+            - EER handling
+            - anisotropic magnification correction
+
+        Alignment Parameters
+
+        Users can define the frame interval used for alignment and summation.
+
+        For standard movie formats, alignment is performed over the selected
+        frame range.
+
+        For EER movies, hardware frames are grouped according to the selected
+        EER fractionation, and alignment uses the grouped frames.
+
+        Additional alignment options include:
+
+            - binning before processing
+            - cropping offsets
+            - cropping dimensions
+            - odd/even frame splitting
+            - optional saving of aligned movie stacks
+
+        Dose Weighting
+
+        When enabled, dose weighting applies a dose-dependent filter before
+        summation.
+
+        This is biologically important because later frames accumulate more
+        radiation damage than early frames. Dose weighting helps preserve
+        high-resolution signal and improves downstream refinement quality.
+
+        Output Data
+
+        Depending on the selected options, the protocol may generate:
+
+            - aligned movies
+            - aligned micrographs
+            - dose-weighted micrographs
+            - even-frame micrographs
+            - odd-frame micrographs
+
+        Output objects are appended incrementally during streaming.
+
+        Motion Metadata
+
+        Each aligned movie stores frame alignment information.
+
+        Each aligned micrograph may include:
+
+            - global alignment plot
+            - accumulated total motion
+            - early-frame motion
+            - late-frame motion
+
+        These values are useful for data quality assessment and for
+        identifying unstable acquisitions.
+
+        EER Support
+
+        The protocol supports EER movies.
+
+        When EER input is detected:
+
+            - grouped frame ranges are used
+            - EER grouping metadata are stored
+            - EER upsampling metadata are stored
+            - dose calculations are adapted to grouped hardware frames
+
+        Streaming Output Management
+
+        Output sets are created lazily when the first movie is processed.
+
+        During streaming:
+
+            - output sets remain open
+            - new items are appended incrementally
+            - sets are closed explicitly to guarantee safe synchronization
+
+        At the end of processing, the protocol verifies that expected outputs
+        were produced. If none were generated, execution is considered failed.
+
+        Alignment Plots
+
+        For each successfully processed movie, a global alignment plot can
+        be generated.
+
+        These plots show frame-to-frame drift trajectories in both:
+
+            - pixels
+            - Angstroms
+
+        This provides a quick visual assessment of beam-induced motion
+        stability.
+
+        Practical Recommendations
+
+        In most biological workflows:
+
+            - start with default parameters
+            - use dose weighting for high-resolution refinement
+            - inspect global drift plots for unstable movies
+            - enable odd/even outputs when downstream validation requires them
+
+        For streaming acquisition environments, this protocol is especially
+        useful because it provides near real-time feedback during microscope
+        sessions.
+
+        Final Perspective
+
+        ProtMotionCorrNewStreaming is intended for automated and modern
+        cryo-EM streaming pipelines.
+
+        It combines continuous movie ingestion, immediate motion correction,
+        and progressive output generation, allowing users to evaluate data
+        quality while acquisition is still ongoing.
+
+        From a biological perspective, this means earlier detection of
+        acquisition problems, faster feedback at the microscope, and more
+        efficient downstream processing.
     """
 
     _label = 'movie alignment New Streaming'
