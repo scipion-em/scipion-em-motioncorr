@@ -50,10 +50,149 @@ from .protocol_base import ProtMotionCorrBase
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Corrects beam-induced motion in cryo-EM movies and produces aligned
+    micrographs suitable for downstream image processing. The protocol
+    improves image quality by compensating for frame-to-frame specimen
+    drift and by preparing consistent micrograph outputs for further
+    structural analysis.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Motion Correction (ProtMotionCorr) - User Manual
+        Overview
+
+        The Motion Correction protocol is designed to process cryo-EM movie
+        stacks acquired as sequences of individual frames. During electron
+        exposure, particles often experience beam-induced movement that
+        causes blurring and reduces high-resolution information. The main
+        objective of this protocol is to compensate for that movement so
+        that the final micrographs better represent the underlying
+        biological specimen.
+
+        For biological users, this step is one of the earliest and most
+        important stages of single-particle and tomography workflows.
+        Correcting motion before contrast transfer function estimation,
+        particle picking, or reconstruction improves the reliability of all
+        downstream measurements. In practical terms, motion correction often
+        determines how much structural detail can ultimately be recovered.
+
+        Inputs and Biological Context
+
+        The protocol operates on imported movies rather than on already
+        averaged micrographs. Each movie contains multiple frames that
+        capture the progressive electron exposure of the sample. The input
+        data are expected to include acquisition metadata such as sampling
+        rate, electron dose, and frame organization, since these values are
+        biologically important for accurate correction and proper exposure
+        interpretation.
+
+        In many experiments, movies may also include detector gain
+        references or defect information. These auxiliary inputs help
+        preserve image fidelity by compensating for detector-specific
+        imperfections. For biological interpretation, reliable detector
+        correction is essential because fixed artifacts can otherwise mimic
+        structural features or bias downstream analysis.
+
+        Dose Weighting and Radiation Damage
+
+        A central biological feature of this protocol is dose weighting.
+        During electron exposure, later frames accumulate more radiation
+        damage than earlier ones. Dose weighting accounts for this effect
+        by giving stronger emphasis to the less damaged signal.
+
+        In practical cryo-EM workflows, dose weighting usually improves the
+        preservation of high-resolution structural information. This is
+        particularly valuable when studying macromolecular assemblies where
+        fine conformational details matter. When dose information is not
+        available or not reliable, this feature should be used with caution
+        because biologically meaningful weighting depends directly on
+        accurate exposure metadata.
+
+        Global and Local Motion Correction
+
+        Biological specimens do not always move as rigid bodies. Some
+        micrographs exhibit approximately uniform drift, while others show
+        local deformations caused by beam-induced bending of ice or sample
+        support instability.
+
+        This protocol supports both global and local correction strategies.
+        Global correction is generally sufficient for stable samples with
+        limited deformation. Local correction becomes especially important
+        for larger fields of view, thinner ice, or highly flexible samples
+        where different regions may move differently during exposure.
+
+        For biological users, local correction often improves the quality
+        of particles located near the edges of the image or in regions
+        affected by anisotropic drift. However, overly aggressive local
+        correction can become unstable when signal is weak, so moderate
+        settings are often preferable for exploratory analyses.
+
+        Frame Grouping and EER Data
+
+        The protocol can combine frames into larger fractions before
+        alignment. This is often useful when very high frame rates produce
+        extremely low signal per frame. Grouping can stabilize alignment
+        while keeping the overall exposure structure biologically
+        meaningful.
+
+        Modern detectors may also produce EER movies, which represent a
+        different acquisition strategy based on very fine temporal
+        sampling. For biological applications, EER handling is especially
+        useful when precise dose fractionation is required, such as in
+        high-resolution single-particle work where exposure modeling
+        strongly influences the final map quality.
+
+        Output Products and Interpretation
+
+        The primary result of the protocol is a set of aligned micrographs
+        that can be used directly for downstream cryo-EM processing.
+        Depending on the selected options, the protocol may also generate
+        dose-weighted micrographs, non-weighted micrographs, aligned movie
+        stacks, and separated odd-even outputs.
+
+        These alternative outputs serve different biological purposes.
+        Dose-weighted micrographs are usually preferred for reconstruction,
+        while non-weighted micrographs can be useful for contrast transfer
+        function estimation. Odd-even outputs are valuable when validating
+        data consistency or preparing independent half-data analyses.
+
+        Motion Diagnostics and Quality Assessment
+
+        Beyond producing corrected micrographs, the protocol also provides
+        motion-related diagnostic information. This includes global motion
+        trajectories, accumulated displacement estimates, and optional
+        power spectrum or thumbnail visualizations.
+
+        For biological interpretation, these diagnostics are highly
+        informative. Excessive motion may indicate poor ice quality,
+        unstable support films, charging effects, or problematic exposure
+        conditions. Reviewing motion behavior early can prevent large
+        downstream processing efforts on low-quality datasets.
+
+        Practical Recommendations
+
+        In routine cryo-EM practice, it is usually advisable to begin with
+        dose weighting enabled and moderate local correction. For stable
+        samples, default settings are often sufficient. For very noisy
+        datasets or unusually high frame-rate acquisitions, modest frame
+        grouping can improve robustness.
+
+        If local motion appears unstable, reducing correction complexity
+        often provides more reliable biological results than attempting
+        highly aggressive refinement. When preparing data for high-
+        resolution reconstruction, visual inspection of corrected
+        micrographs and motion trajectories remains an essential quality
+        control step.
+
+        Final Perspective
+
+        For most cryo-EM users, motion correction is not simply a technical
+        preprocessing operation. It is the stage where raw detector movies
+        are transformed into biologically interpretable images. Accurate
+        correction of drift, careful treatment of dose effects, and
+        thoughtful evaluation of motion behavior together establish the
+        foundation for reliable structural analysis.
     """
 
     _label = 'movie alignment'

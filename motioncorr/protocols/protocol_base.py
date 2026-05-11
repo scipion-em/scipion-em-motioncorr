@@ -45,6 +45,184 @@ logger = logging.getLogger(__name__)
 
 
 class ProtMotionCorrBase(EMProtocol):
+    """
+    Performs motion correction of electron microscopy movie frames in order to
+    compensate for beam-induced specimen movement and produce stable,
+    high-quality micrographs suitable for downstream analysis.
+
+    AI Generated:
+
+    Motion Correction Base (ProtMotionCorrBase) - User Manual
+        Overview
+
+        The Motion Correction Base protocol provides the common framework for
+        correcting beam-induced motion in dose-fractionated electron microscopy
+        movies. Its main objective is to estimate and compensate for the
+        physical displacement that occurs during image acquisition, allowing
+        the individual frames of a movie to be combined into a sharper and
+        more interpretable image.
+
+        In cryo-EM workflows, this step is one of the earliest and most
+        influential stages of processing. Even small specimen movements during
+        exposure can reduce high-resolution information and compromise all
+        later steps such as CTF estimation, particle picking, subtomogram
+        analysis, or three-dimensional reconstruction. By stabilizing the
+        image before further interpretation, the protocol helps preserve the
+        structural signal that is most relevant biologically.
+
+        Inputs and General Workflow
+
+        The protocol is intended for dose-fractionated movies acquired during
+        electron microscopy experiments. Each movie consists of multiple
+        sequential frames that capture the same field of view during exposure.
+        Rather than treating the movie as a single image, the protocol uses
+        the temporal information across frames to estimate motion and recover
+        a corrected sum.
+
+        The most common practical use is to align the full movie, compensate
+        for drift, and produce a corrected micrograph that can be used for
+        downstream processing. The protocol also supports workflows in which
+        the aligned movie itself is preserved for later inspection or further
+        computational analysis.
+
+        Dose Weighting and Biological Signal Preservation
+
+        One of the most important biological considerations during motion
+        correction is radiation damage. As exposure progresses, later frames
+        retain progressively less high-resolution information. For this
+        reason, the protocol can apply dose weighting so that early frames
+        contribute more strongly to high-resolution signal while later frames
+        contribute mainly to low-resolution contrast.
+
+        In practical cryo-EM analysis, dose weighting is often beneficial for
+        single-particle reconstruction and tomographic workflows where the
+        preservation of high-frequency information is important. In some
+        situations, users may also wish to preserve non-dose-weighted sums,
+        especially for procedures such as CTF estimation or for comparison
+        between different processing strategies.
+
+        Global and Local Motion Correction
+
+        Motion in electron microscopy movies is not always uniform across the
+        field of view. Entire images may drift globally, but local regions may
+        also deform independently because of beam-induced specimen bending.
+
+        To address this, the protocol supports both global correction and
+        patch-based local correction. Global correction is often sufficient
+        for stable specimens, thick support films, or relatively small fields
+        of view. Local correction becomes especially important for large
+        micrographs, flexible ice regions, or datasets where beam-induced
+        deformation is spatially heterogeneous.
+
+        From a biological perspective, local correction often improves the
+        preservation of fine structural features, particularly for high-
+        resolution single-particle work. However, overly aggressive local
+        subdivision may become unstable when the signal in each region is too
+        weak.
+
+        Frame Grouping and Alignment Stability
+
+        The protocol allows neighboring frames to be grouped before alignment.
+        This can improve robustness when individual frames are noisy and carry
+        limited signal. Grouping is particularly useful for low-dose data,
+        small particles, or difficult ice conditions.
+
+        The biological trade-off is temporal precision. Strong grouping may
+        stabilize alignment but can reduce the ability to capture very rapid
+        frame-to-frame movement. For most datasets, moderate grouping provides
+        a practical balance between alignment stability and preservation of
+        motion information.
+
+        Gain Reference and Detector Defects
+
+        Accurate detector correction is essential before reliable motion
+        estimation can be achieved. The protocol supports gain normalization
+        and detector defect handling so that systematic detector artifacts do
+        not bias the motion estimates.
+
+        In biological terms, this preprocessing step helps ensure that
+        apparent intensity variation reflects specimen signal rather than
+        camera imperfections. This is especially important in low-contrast
+        cryo-EM data, where subtle detector artifacts may otherwise interfere
+        with alignment quality or later CTF interpretation.
+
+        EER Movie Support
+
+        The protocol also supports Electron Event Representation data. EER
+        acquisition records detector events at very high temporal resolution,
+        which provides greater flexibility in frame fractionation during
+        processing.
+
+        For biological users, EER can be particularly valuable when very fine
+        control of dose partitioning is desired. Proper fractionation allows
+        the corrected images to preserve useful signal while maintaining
+        enough frame-level information for reliable alignment. This becomes
+        especially relevant in high-resolution workflows or dose-sensitive
+        specimens.
+
+        Magnification Distortion Correction
+
+        Some datasets are affected by anisotropic magnification, where scale
+        differs slightly depending on direction. The protocol includes the
+        possibility of correcting this effect.
+
+        Although often subtle, anisotropic distortion can become relevant in
+        high-resolution structural studies where small geometric inaccuracies
+        may propagate into downstream alignment or reconstruction. Correcting
+        these distortions improves geometric consistency across the dataset.
+
+        Validation and Practical Reliability
+
+        Before processing begins, the protocol is intended to verify that the
+        movies, frame ranges, detector corrections, and dose information are
+        consistent and biologically meaningful. This protects users from
+        common acquisition or metadata problems that could otherwise lead to
+        misleading results.
+
+        In routine cryo-EM practice, ensuring that dose values are accurate,
+        gain references match detector dimensions, and frame ranges reflect
+        the intended exposure interval is often as important as the alignment
+        itself.
+
+        Outputs and Interpretation
+
+        The principal output of the protocol is a motion-corrected image in
+        which the frames have been aligned into a stable representation of the
+        recorded field of view. Depending on workflow choices, additional
+        aligned movie products may also be retained.
+
+        These outputs form the basis for many downstream analyses. Better
+        motion correction generally leads to improved CTF estimation, more
+        reliable particle extraction, better tomographic interpretability, and
+        ultimately higher-quality structural reconstructions.
+
+        Practical Recommendations
+
+        For most biological applications, a sensible starting point is to use
+        dose weighting together with moderate patch-based local correction.
+        This usually provides a good balance between robustness and
+        preservation of high-resolution information.
+
+        When working with noisy data, moderate frame grouping often improves
+        stability. When processing high-resolution datasets, careful detector
+        correction and magnification correction may become increasingly
+        important. For EER datasets, choosing fractionation that reflects the
+        expected dose per fraction is usually one of the most important
+        practical considerations.
+
+        Final Perspective
+
+        Motion correction is not simply a technical preprocessing operation.
+        It is the step that transforms raw detector movies into biologically
+        interpretable images that preserve structural information as
+        faithfully as possible.
+
+        In most cryo-EM workflows, the quality of motion correction strongly
+        influences everything that follows. Thoughtful selection of dose
+        weighting, local alignment behavior, detector correction, and frame
+        handling is therefore essential for obtaining reliable structural
+        conclusions.
+    """
     _label = None
     stepsExecutionMode = STEPS_PARALLEL
     program = Plugin.getProgram()
