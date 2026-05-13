@@ -123,4 +123,4 @@ class Plugin(pwem.Plugin):
                         neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
                         commands = cmd,
                         updateCuda = True,
-                        default = (v == VSOURCE))
+                        default = True)
