@@ -43,4 +43,4 @@ FLIP_LEFTRIGHT = 2
 # Defects file
 DEFECTS_FILE_EER = "defects_eer.txt"
 
-VSOURCE = "git"
+V1_2_4 = "1.2.4"

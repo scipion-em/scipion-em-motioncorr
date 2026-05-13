@@ -40,20 +40,20 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_2_4, VSOURCE]
+    _supportedVersions = [V1_2_4]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
     _processingField = [SPA, TOMO]
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{VSOURCE}')
+        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
         cls._defineVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
                                            default="12.8")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3-%s.%s' % (
-            cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3-%s-%s.%s' % (
+            V1_2_4, cudaVersion.major, cudaVersion.minor))
 
     @classmethod
     def getProgram(cls):
@@ -103,22 +103,31 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
+
+        for v in cls._supportedVersions:
+            if v == V1_2_4:
+                commit = "dd8b683"
+            else:
+                commit = "main"
+
+        binary = cls.getVar(MOTIONCOR_BIN)
         cudalib = cls.getVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         MOTIONCOR_INSTALLED = f'{MOTIONCOR_BIN}_installed'
 
         cmd = [
-            'cd .. && rmdir motioncor3-git && '
-            'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git && '
-            'cd motioncor3-git && '
+            'cd .. && rmdir motioncor3-{v} && '
+            f'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-{v} && '
+            f'cd motioncor3-{v} && '
+            f'git checkout {commit} && '
             'mkdir bin && '
             r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
             r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 && " 
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
             f' make exe -f makefile11 BINARY={binary} CUDAHOME={cudalib} -j 16 && '
-            f'cp {binary} bin/ '
+            f'cp {binary} bin/ && '
+            f'touch {MOTIONCOR_INSTALLED}'
             ]
         
         installationCmds = [
