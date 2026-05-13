@@ -116,7 +116,7 @@ class Plugin(pwem.Plugin):
         MOTIONCOR_INSTALLED = f'{MOTIONCOR_BIN}_installed'
 
         cmd = [
-            'cd .. && rmdir motioncor3-{v} && '
+            f'cd .. && rmdir motioncor3-{v} && '
             f'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-{v} && '
             f'cd motioncor3-{v} && '
             f'git checkout {commit} && '
