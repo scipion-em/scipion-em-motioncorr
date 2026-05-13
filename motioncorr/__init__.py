@@ -104,6 +104,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def defineBinaries(cls, env):
         binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
+        cudalib = cls.getVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         cmd = [
             'cd .. && rmdir motioncor3-git && '
@@ -114,7 +115,7 @@ class Plugin(pwem.Plugin):
             r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 && " 
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
-            f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j 16 && '
+            f' make exe -f makefile11 BINARY={binary} CUDAHOME={cudalib} -j 16 && '
             f'cp {binary} bin/ '
             ]
 
