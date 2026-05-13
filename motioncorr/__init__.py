@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+from os.path import dirname
 
 import pwem
 import pyworkflow.utils as pwutils
@@ -33,27 +34,23 @@ from pyworkflow import SPA, TOMO
 from .constants import *
 
 
-__version__ = '3.17.1'
+__version__ = '3.17.2'
 _references = ['Zheng2017']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_1_1, V1_1_2]
+    _supportedVersions = [V1_2_4]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
     _processingField = [SPA, TOMO]
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_1_2}')
+        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
         cls._defineVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
-
         # Define the variable default value based on the guessed cuda version
-        cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
-                                           default="12.1")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3_1.1.2_Cuda%s%s_06-11-2024' % (
-            cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3')
 
     @classmethod
     def getProgram(cls):
@@ -78,20 +75,6 @@ class Plugin(pwem.Plugin):
             return [f"validateInstallation fails: {str(e)}"]
 
     @classmethod
-    def versionGE(cls, version):
-        """ Return True if current version of motioncor is greater
-         or equal than the input argument.
-         Params:
-            version: string version (semantic version, e.g 1.0.1)
-        """
-        v1 = int(Plugin.getActiveVersion().replace('.', ''))
-        v2 = int(version.replace('.', ''))
-
-        if v1 < v2:
-            return False
-        return True
-
-    @classmethod
     def getEnviron(cls):
         """ Return the environment to run motioncor. """
         environ = pwutils.Environ(os.environ)
@@ -103,10 +86,38 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        for v in cls._supportedVersions:
-            env.addPackage('motioncor3', version=v,
-                           tar='motioncor3-%s.tgz' % v,
-                           default=v == V1_1_2)
 
-        env.addPackage('motioncor2', version="1.6.4",
-                       tar='motioncor2-1.6.4.tgz')
+        for v in cls._supportedVersions:
+            if v == V1_2_4:
+                commit = "dd8b683"
+            else:
+                commit = "main"
+
+        binary = cls.getVar(MOTIONCOR_BIN)
+        MOTIONCOR_INSTALLED = f'{MOTIONCOR_BIN}_installed'
+
+        cmd = [
+            f'cd .. && rm -rf motioncor3-{v} && '
+            f'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-{v} && '
+            f'cd motioncor3-{v} && '
+            f'git checkout {commit} && '
+            'mkdir bin && '
+            r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
+            r"sed -i '/-L\/usr\/lib64 \\/a\    -Xcompiler -no-pie \\' makefile11 && "
+            r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
+            r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
+            f' make exe -f makefile11 BINARY={binary} CUDAHOME={dirname(pwem.Config.CUDA_LIB)} -j 16 && '
+            f'cp {binary} bin/ && '
+            f'touch {MOTIONCOR_INSTALLED}'
+            ]
+        
+        installationCmds = [
+            (cmd, MOTIONCOR_INSTALLED)
+        ]
+
+        env.addPackage('motioncor3', version=v,
+                        tar = 'void.tgz',
+                        neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
+                        commands = installationCmds,
+                        updateCuda = True,
+                        default = True)
