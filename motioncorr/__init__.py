@@ -106,6 +106,8 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             if v == VSOURCE:
                 motioncorHome = cls.getVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
+                binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
+
                 cmd = [
                     'cd .. && rmdir motioncor3-git &&',
                     'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git &&',
@@ -116,14 +118,13 @@ class Plugin(pwem.Plugin):
                     r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 &&",
                     r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 &&",
                     ]
-                
+
                 installCmds = [
                     " ".join(cmd),
-                    binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}",
                     f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j {env.getProcessors()} &&',
                     'cp {binary} bin/'
                 ]
-                
+
                 env.addPackage('motioncor3', version=v,
                                tar='void.tgz',
                                commands=installCmds,
