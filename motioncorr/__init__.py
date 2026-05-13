@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+from os.path import dirname
 
 import pwem
 import pyworkflow.utils as pwutils
@@ -48,10 +49,7 @@ class Plugin(pwem.Plugin):
     def _defineVariables(cls):
         cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
         cls._defineVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
-
         # Define the variable default value based on the guessed cuda version
-        cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
-                                           default="12.8")
         cls._defineVar(MOTIONCOR_BIN, 'MotionCor3')
 
     @classmethod
@@ -77,20 +75,6 @@ class Plugin(pwem.Plugin):
             return [f"validateInstallation fails: {str(e)}"]
 
     @classmethod
-    def versionGE(cls, version):
-        """ Return True if current version of motioncor is greater
-         or equal than the input argument.
-         Params:
-            version: string version (semantic version, e.g 1.0.1)
-        """
-        v1 = int(Plugin.getActiveVersion().replace('.', ''))
-        v2 = int(version.replace('.', ''))
-
-        if v1 < v2:
-            return False
-        return True
-
-    @classmethod
     def getEnviron(cls):
         """ Return the environment to run motioncor. """
         environ = pwutils.Environ(os.environ)
@@ -110,8 +94,6 @@ class Plugin(pwem.Plugin):
                 commit = "main"
 
         binary = cls.getVar(MOTIONCOR_BIN)
-        cudalib = cls.getVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
-
         MOTIONCOR_INSTALLED = f'{MOTIONCOR_BIN}_installed'
 
         cmd = [
@@ -124,7 +106,7 @@ class Plugin(pwem.Plugin):
             r"sed -i '/-L\/usr\/lib64 \\/a\    -Xcompiler -no-pie \\' makefile11 && "
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
-            f' make exe -f makefile11 BINARY={binary} CUDAHOME={cudalib} -j 16 && '
+            f' make exe -f makefile11 BINARY={binary} CUDAHOME={dirname(pwem.Config.CUDA_LIB)} -j 16 && '
             f'cp {binary} bin/ && '
             f'touch {MOTIONCOR_INSTALLED}'
             ]
