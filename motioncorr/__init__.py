@@ -119,7 +119,7 @@ class Plugin(pwem.Plugin):
             f'cp {binary} bin/ '
             ]
 
-        env.addPackage('motioncor3', version='bin',
+        env.addPackage('motioncor3', version='git',
                         tar = 'void.tgz',
                         neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
                         commands = cmd,
