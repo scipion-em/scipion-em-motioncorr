@@ -40,19 +40,19 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_1_1, V1_1_2, V1_2_4, VSOURCE]
+    _supportedVersions = [VSOURCE]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
     _processingField = [SPA, TOMO]
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
+        cls._defineEmVar(MOTIONCOR_HOME, f'motioncor3-{VSOURCE}')
         cls._defineVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
                                            default="12.8")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3' % (
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3-%s.%s' % (
             cudaVersion.major, cudaVersion.minor))
 
     @classmethod
@@ -103,36 +103,25 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        for v in cls._supportedVersions:
-            if v == VSOURCE:
-                motioncorHome = cls.getVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
-                binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
 
-                cmd = [
-                    'cd .. && rmdir motioncor3-git &&',
-                    'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git &&',
-                    'cd motioncor3-git &&',
-                    'mkdir bin &&'
-                    r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 &&",         
-                    r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 &&",
-                    r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 &&",
-                    r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 &&",
-                    ]
+        binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
 
-                installCmds = [
-                    " ".join(cmd),
-                    f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j {env.getProcessors()} &&',
-                    'cp {binary} bin/'
-                ]
+        cmd = [
+            'cd .. && rmdir motioncor3-git && '
+            'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git && '
+            'cd motioncor3-git && '
+            'mkdir bin && '
+            r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
+            r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 && " 
+            r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
+            r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
+            f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j {env.getProcessors()} && '
+            f'cp {binary} bin/ '
+            ]
 
-                env.addPackage('motioncor3', version=v,
-                               tar='void.tgz',
-                               commands=installCmds,
-                               default= True)
-            else:
-                # Download precompiled for older versions
-                env.addPackage('motioncor3', version=v,
-                            tar='motioncor3-%s.tgz' % v,
-                            default= False)
-                
-    
+        env.addPackage('motioncor3', version=VSOURCE,
+                        tar = 'void.tgz',
+                        neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
+                        commands = cmd,
+                        updateCuda = True,
+                        default = True)
