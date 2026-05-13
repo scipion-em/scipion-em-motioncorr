@@ -134,7 +134,7 @@ class Plugin(pwem.Plugin):
             (cmd, MOTIONCOR_INSTALLED)
         ]
 
-        env.addPackage('motioncor3', version='git',
+        env.addPackage('motioncor3', version=v,
                         tar = 'void.tgz',
                         neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
                         commands = installationCmds,
