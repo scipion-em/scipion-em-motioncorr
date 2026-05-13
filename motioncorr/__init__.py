@@ -52,8 +52,7 @@ class Plugin(pwem.Plugin):
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
                                            default="12.8")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3-%s-%s.%s' % (
-            V1_2_4, cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3')
 
     @classmethod
     def getProgram(cls):
