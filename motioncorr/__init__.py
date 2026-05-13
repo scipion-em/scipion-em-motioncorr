@@ -122,7 +122,7 @@ class Plugin(pwem.Plugin):
             f'git checkout {commit} && '
             'mkdir bin && '
             r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
-            r"sed -i $'/ -L\\/usr\\/lib64 \\\\/a\\\n\t-Xcompiler -no-pie \\\\' makefile11 &&"
+            r"sed -i '/-L\/usr\/lib64 \\/a\    -Xcompiler -no-pie \\' makefile11 && "
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
             f' make exe -f makefile11 BINARY={binary} CUDAHOME={cudalib} -j 16 && '
