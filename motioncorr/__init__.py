@@ -40,7 +40,7 @@ _references = ['Zheng2017']
 class Plugin(pwem.Plugin):
     _homeVar = MOTIONCOR_HOME
     _pathVars = [MOTIONCOR_CUDA_LIB]
-    _supportedVersions = [V1_1_1, V1_1_2, V1_2_4]
+    _supportedVersions = [V1_1_1, V1_1_2, V1_2_4, VSOURCE]
     _url = "https://github.com/scipion-em/scipion-em-motioncorr"
     _processingField = [SPA, TOMO]
 
@@ -52,7 +52,7 @@ class Plugin(pwem.Plugin):
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(MOTIONCOR_CUDA_LIB,
                                            default="12.8")
-        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3_1.2.4_Cuda%s%s_13-05-2026' % (
+        cls._defineVar(MOTIONCOR_BIN, 'MotionCor3' % (
             cudaVersion.major, cudaVersion.minor))
 
     @classmethod
@@ -104,6 +104,34 @@ class Plugin(pwem.Plugin):
     @classmethod
     def defineBinaries(cls, env):
         for v in cls._supportedVersions:
-            env.addPackage('motioncor3', version=v,
-                           tar='motioncor3-%s.tgz' % v,
-                           default=v == V1_2_4)
+            if v == VSOURCE:
+                motioncorHome = cls.getVar(MOTIONCOR_HOME, f'motioncor3-{V1_2_4}')
+                cmd = [
+                    'cd .. && rmdir motioncor3-git &&',
+                    'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git &&',
+                    'cd motioncor3-git &&',
+                    'mkdir bin &&'
+                    r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 &&",         
+                    r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 &&",
+                    r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 &&",
+                    r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 &&",
+                    ]
+                
+                installCmds = [
+                    " ".join(cmd),
+                    binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}",
+                    f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j {env.getProcessors()} &&',
+                    'cp {binary} bin/'
+                ]
+                
+                env.addPackage('motioncor3', version=v,
+                               tar='void.tgz',
+                               commands=installCmds,
+                               default= True)
+            else:
+                # Download precompiled for older versions
+                env.addPackage('motioncor3', version=v,
+                            tar='motioncor3-%s.tgz' % v,
+                            default= False)
+                
+    
