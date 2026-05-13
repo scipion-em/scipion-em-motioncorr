@@ -103,31 +103,24 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
+        binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
 
-        for v in cls._supportedVersions:
-            if v == VSOURCE:
-                binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
+        cmd = [
+            'cd .. && rmdir motioncor3-git && '
+            'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git && '
+            'cd motioncor3-git && '
+            'mkdir bin && '
+            r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
+            r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 && " 
+            r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
+            r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
+            f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j 16 && '
+            f'cp {binary} bin/ '
+            ]
 
-                cmd = [
-                    'cd .. && rmdir motioncor3-git && '
-                    'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git && '
-                    'cd motioncor3-git && '
-                    'mkdir bin && '
-                    r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
-                    r"sed -i '/-L\/usr\/lib64 \\/a\ -Xcompiler -no-pie ' makefile11 && " 
-                    r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
-                    r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
-                    f' make exe -f makefile11 BINARY={binary} CUDAHOME={MOTIONCOR_CUDA_LIB} -j {env.getProcessors()} && '
-                    f'cp {binary} bin/ '
-                    ]
-
-                env.addPackage('motioncor3', version=VSOURCE,
-                                tar = 'void.tgz',
-                                neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
-                                commands = cmd,
-                                updateCuda = True,
-                                default = True)
-            else:
-                env.addPackage('motioncor3', version=v,
-                                tar = f'motioncor3-{v}.tgz',
-                                default = (v == VSOURCE))
+        env.addPackage('motioncor3', version='bin',
+                        tar = 'void.tgz',
+                        neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
+                        commands = cmd,
+                        updateCuda = True,
+                        default = (v == VSOURCE))
