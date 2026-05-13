@@ -106,6 +106,8 @@ class Plugin(pwem.Plugin):
         binary = f"MotionCor3-{cls.getVar(MOTIONCOR_BIN)}"
         cudalib = cls.getVar(MOTIONCOR_CUDA_LIB, pwem.Config.CUDA_LIB)
 
+        MOTIONCOR_INSTALLED = f'{MOTIONCOR_BIN}_installed'
+
         cmd = [
             'cd .. && rmdir motioncor3-git && '
             'git clone https://github.com/CZImagingInstitute/MotionCor3.git motioncor3-git && '
@@ -118,10 +120,14 @@ class Plugin(pwem.Plugin):
             f' make exe -f makefile11 BINARY={binary} CUDAHOME={cudalib} -j 16 && '
             f'cp {binary} bin/ '
             ]
+        
+        installationCmds = [
+            (cmd, MOTIONCOR_INSTALLED)
+        ]
 
         env.addPackage('motioncor3', version='git',
                         tar = 'void.tgz',
                         neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
-                        commands = cmd,
+                        commands = installationCmds,
                         updateCuda = True,
                         default = True)
