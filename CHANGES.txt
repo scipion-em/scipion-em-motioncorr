@@ -1,7 +1,9 @@
-3.17.2:
-  - Deprecate mc2
-  - Add mc3 1.2.4 with Falcon-C EER support
-  - Add CUDA 12.8/Blackwell support
+4.0.0:
+  - The plugin installation now makes the compilation of the binaries instead of
+    download a pre-compiled version.
+  - Deprecate mc2.
+  - Add mc3 1.2.4 with Falcon-C EER support.
+  - Add CUDA 12.8/Blackwell support.
 3.17.1:
  Users:
   - A bug is fixed, when binning is applied the pixel size must be updated
