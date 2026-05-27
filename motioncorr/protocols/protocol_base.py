@@ -153,7 +153,7 @@ class ProtMotionCorrBase(EMProtocol):
         form.addSection("EER")
         form.addParam('EERtext', params.LabelParam,
                       label="These options are ignored for non-EER movies.")
-        form.addParam('eerGroup', params.IntParam, default=32,
+        form.addParam('eerGroup', params.IntParam, default=8,
                       label='EER fractionation',
                       help="The number of hardware frames to group into one "
                            "fraction. This option is relevant only for Falcon 4 "
