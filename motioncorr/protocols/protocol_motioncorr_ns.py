@@ -326,8 +326,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 outMicSet.write()
                 self._store(outMicSet)
 
-            self.closeOutputsForStreaming()
-
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
         attribList = [attrib] if type(attrib) is str else attrib
@@ -506,13 +504,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputsToCheck.append(self._possibleOutputs.micrographsEven.name)
             outputsToCheck.append(self._possibleOutputs.micrographsOdd.name)
         return outputsToCheck
-
-    def closeOutputsForStreaming(self):
-        # Close explicitly the outputs (for streaming)
-        for outputName in self._possibleOutputs:
-            output = getattr(self, outputName.name, None)
-            if output:
-                output.close()
 
     def _getFrameRange(self, n: int, prefix: str) -> Tuple[int, int]:
         """
