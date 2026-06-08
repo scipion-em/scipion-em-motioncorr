@@ -45,7 +45,7 @@ from pyworkflow.gui.plotter import Plotter
 from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport
+from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
@@ -172,46 +172,50 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         outputsToCheck = self._getOutputsToCheck()
 
         while True:
-            with self._lock:
+            try:
                 inIds = set(inMoviesSet.getUniqueValues('id'))
 
-            # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
-            # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
-            # ['id_a', 'id_b'] != ['id_b', 'id_a'], but they are the same with Counter.
-            if not inMoviesSet.isStreamOpen() and Counter(self.itemIdReadList) == Counter(inIds):
-                logger.info(cyanStr('Input set closed.\n'))
-                self._insertFunctionStep(self.closeOutputSetStep,
-                                         outputsToCheck,
-                                         prerequisites=closeSetStepDeps,
-                                         needsGPU=False)
-                break
+                # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
+                # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
+                # ['id_a', 'id_b'] != ['id_b', 'id_a'], but they are the same with Counter.
+                if not inMoviesSet.isStreamOpen() and Counter(self.itemIdReadList) == Counter(inIds):
+                    logger.info(cyanStr('Input set closed.\n'))
+                    self._insertFunctionStep(self.closeOutputSetStep,
+                                             outputsToCheck,
+                                             prerequisites=closeSetStepDeps,
+                                             needsGPU=False)
+                    break
 
-            nonProcessedIds = inIds - set(self.itemIdReadList)
-            moviesToProcessDict = {objId: movie.clone() for movie in inMoviesSet.iterItems()
-                                   if (objId := movie.getObjId()) in nonProcessedIds}
-            for objId, movie in moviesToProcessDict.items():
-                movieFName = movie.getFileName()
-                cInPId = self._insertFunctionStep(self.convertInputStep,
-                                                  movieFName,
-                                                  prerequisites=[],
-                                                  needsGPU=False)
-                pMovPid = self._insertFunctionStep(self.processMovieStep,
-                                                   movieFName,
-                                                   prerequisites=cInPId,
-                                                   needsGPU=True)
-                cOutId = self._insertFunctionStep(self.createOutputStep,
-                                                  movieFName,
-                                                  movie,
-                                                  prerequisites=pMovPid,
-                                                  needsGPU=False)
-                closeSetStepDeps.append(cOutId)
-                logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
-                self.itemIdReadList.append(objId)
+                nonProcessedIds = inIds - set(self.itemIdReadList)
+                moviesToProcessDict = {objId: movie.clone() for movie in inMoviesSet.iterItems()
+                                       if (objId := movie.getObjId()) in nonProcessedIds}
+                for objId, movie in moviesToProcessDict.items():
+                    movieFName = movie.getFileName()
+                    cInPId = self._insertFunctionStep(self.convertInputStep,
+                                                      movieFName,
+                                                      prerequisites=[],
+                                                      needsGPU=False)
+                    pMovPid = self._insertFunctionStep(self.processMovieStep,
+                                                       movieFName,
+                                                       prerequisites=cInPId,
+                                                       needsGPU=True)
+                    cOutId = self._insertFunctionStep(self.createOutputStep,
+                                                      movieFName,
+                                                      movie,
+                                                      prerequisites=pMovPid,
+                                                      needsGPU=False)
+                    closeSetStepDeps.append(cOutId)
+                    logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
+                    self.itemIdReadList.append(objId)
 
-            time.sleep(10)
-            if inMoviesSet.isStreamOpen():
-                with self._lock:
+                time.sleep(10)
+                if inMoviesSet.isStreamOpen():
                     inMoviesSet.loadAllProperties()  # refresh status for the streaming
+            except Exception as e:
+                logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}. '
+                                         f'Sleeping for 10 seconds...'))
+                time.sleep(10)
+                continue
 
     def _initialize(self):
         inputMovies = self.getInputMovies()
@@ -263,46 +267,52 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
             return
+
         try:
+            # Build objects outside the lock
             if self.doSaveMovie.get():
                 outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
                 setMRCSamplingRate(outMovieFn, self.sRate)
             else:
                 outMovieFn = movieFName
+
+            outMovie = Movie()
+            outMovie.copyInfo(inMovie)
+            outMovie.setFileName(outMovieFn)
+            outMovie.setMicName(basename(outMovieFn))
+            n = outMovie.getNumberOfFrames()
+            alignment = self.getMovieAlignment(movieFName, n)
+            outMovie.setAlignment(alignment)
+
+            micsToRegister = []
+            if self.doApplyDoseFilter.get():
+                suffix = DW_SUFFIX
+                outputName = self._possibleOutputs.micrographsDW.name
+            else:
+                suffix = ''
+                outputName = self._possibleOutputs.micrographs.name
+            micsToRegister.append((outputName, suffix, self._buildMic(movieFName, inMovie, suffix)))
+            if self.splitEvenOdd.get():
+                outputName = self._possibleOutputs.micrographsEven.name
+                micsToRegister.append((outputName, EVEN_SUFFIX, self._buildMic(movieFName, inMovie, EVEN_SUFFIX)))
+                outputName = self._possibleOutputs.micrographsOdd.name
+                micsToRegister.append((outputName, ODD_SUFFIX, self._buildMic(movieFName, inMovie, ODD_SUFFIX)))
+
+            # Minimal lock scope: only DB writes
             with self._lock:
-                # SET OF MOVIES ----------------------------------------------------------------
                 outputMovies = self._getOutputMovies()
-                outMovie = Movie()
-                outMovie.copyInfo(inMovie)
-                outMovie.setFileName(outMovieFn)
-                outMovie.setMicName(basename(outMovieFn))
-                # Movie alignment
-                n = outMovie.getNumberOfFrames()
-                alignment = self.getMovieAlignment(movieFName, n)
-                outMovie.setAlignment(alignment)
-                # Data persistence
                 outputMovies.append(outMovie)
                 outputMovies.update(outMovie)
                 outputMovies.write()
                 self._store(outputMovies)
 
-                # SET OF MICROGRAPHS ----------------------------------------------------------
-                if self.doApplyDoseFilter.get():
-                    suffix = DW_SUFFIX
-                    outputName = self._possibleOutputs.micrographsDW.name
-                else:
-                    suffix = ''
-                    outputName = self._possibleOutputs.micrographs.name
-                self._registerMics(movieFName, inMovie, outputName, suffix=suffix)
-                if self.splitEvenOdd.get():
-                    # Even
-                    outputName = self._possibleOutputs.micrographsEven.name
-                    self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX)
-                    # Odd
-                    outputName = self._possibleOutputs.micrographsOdd.name
-                    self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX)
+                for outputName, suffix, outMic in micsToRegister:
+                    outMicSet = self._getOutputMics(outputName, suffix=suffix)
+                    outMicSet.append(outMic)
+                    outMicSet.update(outMic)
+                    outMicSet.write()
+                    self._store(outMicSet)
 
-                # Close explicitly the outputs (for streaming)
                 self.closeOutputsForStreaming()
 
         except Exception as e:
@@ -538,6 +548,18 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             last = n
 
         return first, last
+
+    def _buildMic(self, movieFName: str, inMovie: Movie, suffix: str = '') -> Micrograph:
+        outMic = Micrograph()
+        outMic.copyInfo(inMovie)
+        micFn = self._getResultMicFn(movieFName, suffix=suffix)
+        setMRCSamplingRate(micFn, self.sRate)
+        outMic.setFileName(micFn)
+        outMic.setSamplingRate(self.sRate)
+        self.setMicPlotInfo(outMic, movieFName)
+        if suffix in [DW_SUFFIX, '']:
+            self.setMicsEvenOdd(movieFName, outMic)
+        return outMic
 
     def calcFrameMotion(self, movieFName: str) -> Optional[List[Any]]:
         # based on relion 3.1 motioncorr_runner.cpp
