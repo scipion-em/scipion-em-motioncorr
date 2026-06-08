@@ -30,6 +30,7 @@
 # *
 # ******************************************************************************
 import logging
+import sqlite3
 import time
 import traceback
 from collections import Counter
@@ -302,9 +303,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             self.registerOutputs(outMovie, micsToRegister)
 
         except Exception as e:
-            logger.error(
-                redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
-            logger.error(traceback.format_exc())
+            if isinstance(e, sqlite3.OperationalError):
+                raise e
+            else:
+                logger.error(
+                    redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
+                logger.error(traceback.format_exc())
 
     @retry_on_sqlite_lock(log=logger)
     def registerOutputs(self, outMovie: Movie, micsToRegister: list) -> None:
