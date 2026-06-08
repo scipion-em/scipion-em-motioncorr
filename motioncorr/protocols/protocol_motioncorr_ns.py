@@ -263,7 +263,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                 f"with the exception {e}"))
             traceback.print_exc()
 
-    @retry_on_sqlite_lock(log=logger)
     def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
             return
@@ -299,26 +298,30 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 micsToRegister.append((outputName, ODD_SUFFIX, self._buildMic(movieFName, inMovie, ODD_SUFFIX)))
 
             # Minimal lock scope: only DB writes
-            with self._lock:
-                outputMovies = self._getOutputMovies()
-                outputMovies.append(outMovie)
-                outputMovies.update(outMovie)
-                outputMovies.write()
-                self._store(outputMovies)
-
-                for outputName, suffix, outMic in micsToRegister:
-                    outMicSet = self._getOutputMics(outputName, suffix=suffix)
-                    outMicSet.append(outMic)
-                    outMicSet.update(outMic)
-                    outMicSet.write()
-                    self._store(outMicSet)
-
-                self.closeOutputsForStreaming()
+            self.registerOutputs(outMovie, micsToRegister)
 
         except Exception as e:
             logger.error(
                 redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
             logger.error(traceback.format_exc())
+
+    @retry_on_sqlite_lock(log=logger)
+    def registerOutputs(self, outMovie: Movie, micsToRegister: list) -> None:
+        with self._lock:
+            outputMovies = self._getOutputMovies()
+            outputMovies.append(outMovie)
+            outputMovies.update(outMovie)
+            outputMovies.write()
+            self._store(outputMovies)
+
+            for outputName, suffix, outMic in micsToRegister:
+                outMicSet = self._getOutputMics(outputName, suffix=suffix)
+                outMicSet.append(outMic)
+                outMicSet.update(outMic)
+                outMicSet.write()
+                self._store(outMicSet)
+
+            self.closeOutputsForStreaming()
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
@@ -421,26 +424,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         xShifts, yShifts = parseMovieAlignment2(logPath)
 
         return xShifts, yShifts
-
-    def _registerMics(self,
-                      movieFName: str,
-                      inMovie: Movie, outputName: str,
-                      suffix: str = '') -> None:
-        outMicSet = self._getOutputMics(outputName, suffix=suffix)
-        outMic = Micrograph()
-        outMic.copyInfo(inMovie)
-        micFn = self._getResultMicFn(movieFName, suffix=suffix)
-        setMRCSamplingRate(micFn, self.sRate)
-        outMic.setFileName(micFn)
-        outMic.setSamplingRate(self.sRate)
-        self.setMicPlotInfo(outMic, movieFName)
-        if suffix in [DW_SUFFIX, '']:
-            self.setMicsEvenOdd(movieFName, outMic)
-        # Data persistence
-        outMicSet.append(outMic)
-        outMicSet.update(outMic)
-        outMicSet.write()
-        self._store(outMicSet)
 
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name
