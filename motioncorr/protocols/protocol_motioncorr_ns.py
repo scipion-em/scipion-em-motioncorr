@@ -211,6 +211,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 time.sleep(10)
                 if inMoviesSet.isStreamOpen():
                     inMoviesSet.loadAllProperties()  # refresh status for the streaming
+
             except Exception as e:
                 logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}. '
                                          f'Sleeping for 10 seconds...'))
