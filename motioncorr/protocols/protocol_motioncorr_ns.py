@@ -321,12 +321,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     @retry_on_sqlite_lock(log=logger)
     def registerOutputs(self, outMovie: Movie, micsToRegister: list) -> None:
+        setsToClose = []
         with self._lock:
             outputMovies = self._getOutputMovies()
             outputMovies.append(outMovie)
             outputMovies.update(outMovie)
             outputMovies.write()
             self._store(outputMovies)
+            setsToClose.append(outputMovies)
 
             for outputName, suffix, outMic in micsToRegister:
                 outMicSet = self._getOutputMics(outputName, suffix=suffix)
@@ -334,6 +336,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 outMicSet.update(outMic)
                 outMicSet.write()
                 self._store(outMicSet)
+                setsToClose.append(outMicSet)
+
+        for s in setsToClose:
+            s.close()
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
