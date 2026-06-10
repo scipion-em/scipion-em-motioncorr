@@ -31,8 +31,8 @@
 # ******************************************************************************
 import logging
 import sqlite3
-import time
 import traceback
+import typing
 from collections import Counter
 from enum import Enum
 from math import ceil, sqrt
@@ -48,6 +48,7 @@ from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
+from tomo.utils import refreshStreaming, sleepRandomly
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
@@ -188,35 +189,32 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     break
 
                 nonProcessedIds = inIds - set(self.itemIdReadList)
-                moviesToProcessDict = {objId: movie.clone() for movie in inMoviesSet.iterItems()
-                                       if (objId := movie.getObjId()) in nonProcessedIds}
-                for objId, movie in moviesToProcessDict.items():
-                    movieFName = movie.getFileName()
-                    cInPId = self._insertFunctionStep(self.convertInputStep,
-                                                      movieFName,
-                                                      prerequisites=[],
-                                                      needsGPU=False)
-                    pMovPid = self._insertFunctionStep(self.processMovieStep,
-                                                       movieFName,
-                                                       prerequisites=cInPId,
-                                                       needsGPU=True)
-                    cOutId = self._insertFunctionStep(self.createOutputStep,
-                                                      movieFName,
-                                                      movie,
-                                                      prerequisites=pMovPid,
-                                                      needsGPU=False)
-                    closeSetStepDeps.append(cOutId)
-                    logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
-                    self.itemIdReadList.append(objId)
+                if nonProcessedIds:
+                    moviesToProcessDict = self.fetchNewMics(inMoviesSet, nonProcessedIds)
+                    for objId, movie in moviesToProcessDict.items():
+                        movieFName = movie.getFileName()
+                        cInPId = self._insertFunctionStep(self.convertInputStep,
+                                                          movieFName,
+                                                          prerequisites=[],
+                                                          needsGPU=False)
+                        pMovPid = self._insertFunctionStep(self.processMovieStep,
+                                                           movieFName,
+                                                           prerequisites=cInPId,
+                                                           needsGPU=True)
+                        cOutId = self._insertFunctionStep(self.createOutputStep,
+                                                          movieFName,
+                                                          movie,
+                                                          prerequisites=pMovPid,
+                                                          needsGPU=False)
+                        closeSetStepDeps.append(cOutId)
+                        logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
+                        self.itemIdReadList.append(objId)
 
-                time.sleep(10)
-                if inMoviesSet.isStreamOpen():
-                    inMoviesSet.loadAllProperties()  # refresh status for the streaming
+                refreshStreaming(inMoviesSet)
 
             except Exception as e:
-                logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}. '
-                                         f'Sleeping for 10 seconds...'))
-                time.sleep(10)
+                logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
+                sleepRandomly()
                 continue
 
     def _initialize(self):
@@ -225,6 +223,17 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
         self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
+
+    @retry_on_sqlite_lock(log=logger)
+    def fetchNewMics(self,
+                     inMoviesSet: SetOfMovies,
+                     objIds: typing.Set[int]) -> typing.Dict[int, Movie]:
+        """
+        Extract exclusively the new movies using native SQL.
+        By avoiding a general SELECT, it drastically  minimizes the locking time (SHARED lock).
+        """
+        whereClause = " OR ".join([f"id='{objId}'" for objId in objIds])
+        return {movie.getObjId(): movie.clone() for movie in inMoviesSet.iterItems(where=whereClause)}
 
     def convertInputStep(self, movieFName: str):
         try:
