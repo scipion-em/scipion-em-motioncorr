@@ -37,6 +37,7 @@ from collections import Counter
 from enum import Enum
 from math import ceil, sqrt
 from os.path import exists, abspath, basename
+from pathlib import Path
 from typing import Tuple, List, Union, Optional, Any
 import numpy as np
 import pyworkflow.protocol.constants as cons
@@ -48,7 +49,8 @@ from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
-from tomo.utils import refreshStreaming, sleepRandomly, genDoneFile, genStreamingDir
+from tomo.constants import READY_EXT
+from tomo.utils import refreshStreaming, sleepRandomly, genDoneFile, genStreamingDir, getStreamingDir
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
@@ -312,6 +314,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             # Minimal lock scope: only DB writes
             self.registerOutputs(outMovie, micsToRegister)
 
+            # Save ready file
+            self._genReadyStreamingFile(movieFName)
+
         except Exception as e:
             if isinstance(e, sqlite3.OperationalError):
                 raise e
@@ -396,6 +401,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
         return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
+
+    def _genReadyStreamingFile(self, movieFName: str) -> None:
+        bName = removeBaseExt(movieFName).replace('.mrc', '')
+        readyFile = Path(getStreamingDir(self)) / f'{bName}_aligned_mic{READY_EXT}'
+        Path(readyFile).touch()
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
