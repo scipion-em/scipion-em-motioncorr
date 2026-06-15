@@ -48,7 +48,7 @@ from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
-from tomo.utils import refreshStreaming, sleepRandomly
+from tomo.utils import refreshStreaming, sleepRandomly, genDoneFile, genStreamingDir
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
@@ -218,6 +218,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 continue
 
     def _initialize(self):
+        genStreamingDir(self)
         inputMovies = self.getInputMovies()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
@@ -346,6 +347,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if failedOutputList:
             raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
                             f'Output Log > run.stdout and run.stderr')
+        genDoneFile(self)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
