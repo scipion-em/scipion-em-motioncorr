@@ -252,15 +252,13 @@ class ProtMotionCorrBase(EMProtocol):
                               f"from 1 to 0 (or 1 to {lastFrame}).")
 
         msg = f"Frames range must be within 1 - {lastFrame}"
-        if self.alignFrameN.get() == 0:
-            self.alignFrameN.set(lastFrame)
-
-        if not (1 <= self.alignFrame0 < lastFrame):
-            errors.append(msg)
-        elif not (self.alignFrameN <= lastFrame):
-            errors.append(msg)
-        elif not (self.alignFrame0 < self.alignFrameN):
-            errors.append(msg)
+        if self.alignFrameN.get() > 0:
+            if not (1 <= self.alignFrame0 < lastFrame):
+                errors.append(msg)
+            if self.alignFrameN > lastFrame:
+                errors.append(msg)
+            if self.alignFrame0 >= self.alignFrameN:
+                errors.append(msg)
 
         # check dose for DW
         acq = inputMovies.getAcquisition()
