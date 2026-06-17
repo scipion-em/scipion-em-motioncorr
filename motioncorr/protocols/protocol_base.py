@@ -153,7 +153,7 @@ class ProtMotionCorrBase(EMProtocol):
         form.addSection("EER")
         form.addParam('EERtext', params.LabelParam,
                       label="These options are ignored for non-EER movies.")
-        form.addParam('eerGroup', params.IntParam, default=32,
+        form.addParam('eerGroup', params.IntParam, default=8,
                       label='EER fractionation',
                       help="The number of hardware frames to group into one "
                            "fraction. This option is relevant only for Falcon 4 "
@@ -252,15 +252,13 @@ class ProtMotionCorrBase(EMProtocol):
                               f"from 1 to 0 (or 1 to {lastFrame}).")
 
         msg = f"Frames range must be within 1 - {lastFrame}"
-        if self.alignFrameN.get() == 0:
-            self.alignFrameN.set(lastFrame)
-
-        if not (1 <= self.alignFrame0 < lastFrame):
-            errors.append(msg)
-        elif not (self.alignFrameN <= lastFrame):
-            errors.append(msg)
-        elif not (self.alignFrame0 < self.alignFrameN):
-            errors.append(msg)
+        if self.alignFrameN.get() > 0:
+            if not (1 <= self.alignFrame0 < lastFrame):
+                errors.append(msg)
+            if self.alignFrameN > lastFrame:
+                errors.append(msg)
+            if self.alignFrame0 >= self.alignFrameN:
+                errors.append(msg)
 
         # check dose for DW
         acq = inputMovies.getAcquisition()

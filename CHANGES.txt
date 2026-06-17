@@ -1,3 +1,13 @@
+4.0.0:
+  Users:
+  - The plugin installation now makes the compilation of the binaries instead of
+    download a pre-compiled version.
+  - Deprecate mc2.
+  - Add mc3 1.2.4 with Falcon-C EER support.
+  - Add CUDA 12.8/Blackwell support.
+ Developers:
+  - Prevent validation from setting alignFrameN, which may cause serious trouble when making copies of the
+    protocols involved.
 3.17.1:
  Users:
   - A bug is fixed, when binning is applied the pixel size must be updated
