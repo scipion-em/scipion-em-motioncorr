@@ -36,12 +36,13 @@ import typing
 from collections import Counter
 from enum import Enum
 from math import ceil, sqrt
-from os.path import exists, abspath, basename
+from os.path import exists, abspath, basename, dirname, join
 from pathlib import Path
 from typing import Tuple, List, Union, Optional, Any
 import numpy as np
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
+from pwem import genExecStatusDir, genDoneFile, getExecStatusDir, READY_EXT
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
@@ -49,8 +50,7 @@ from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
-from tomo.constants import READY_EXT
-from tomo.utils import refreshStreaming, sleepRandomly, genDoneFile, genStreamingDir, getStreamingDir
+from tomo.utils import sleepRandomly
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
@@ -88,11 +88,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.itemIdReadList = []
+        self.processedMovies = []
         self.sRate = None
         self.gain = None
         self.dark = None
         self.failedMovies = []
+        self.inMoviesPath = ''
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -177,12 +178,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         while True:
             try:
-                inIds = set(inMoviesSet.getUniqueValues('id'))
+                availableMovies = inMoviesSet.getProcessedItems()
 
                 # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
                 # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
                 # ['id_a', 'id_b'] != ['id_b', 'id_a'], but they are the same with Counter.
-                if not inMoviesSet.isStreamOpen() and Counter(self.itemIdReadList) == Counter(inIds):
+                if inMoviesSet.isStreamClosed() and Counter(self.processedMovies) == Counter(availableMovies):
                     logger.info(cyanStr('Input set closed.\n'))
                     self._insertFunctionStep(self.closeOutputSetStep,
                                              outputsToCheck,
@@ -190,11 +191,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                              needsGPU=False)
                     break
 
-                nonProcessedIds = inIds - set(self.itemIdReadList)
-                if nonProcessedIds:
-                    moviesToProcessDict = self.fetchNewMics(inMoviesSet, nonProcessedIds)
-                    for objId, movie in moviesToProcessDict.items():
-                        movieFName = movie.getFileName()
+                nonProcessedMovies = availableMovies - set(self.processedMovies)
+                if nonProcessedMovies:
+                    for movieFn in nonProcessedMovies:
+                        movieFName = self.getInMovieFn(movieFn)
+                        # entrada con extra y con la movie
                         cInPId = self._insertFunctionStep(self.convertInputStep,
                                                           movieFName,
                                                           prerequisites=[],
@@ -209,10 +210,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                                           prerequisites=pMovPid,
                                                           needsGPU=False)
                         closeSetStepDeps.append(cOutId)
-                        logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
-                        self.itemIdReadList.append(objId)
-
-                refreshStreaming(inMoviesSet)
+                        logger.info(cyanStr(f"Steps created for movie = {movieFName}"))
+                        self.processedMovies.append(movieFName)
+                        sleepRandomly()
 
             except Exception as e:
                 logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
@@ -220,12 +220,13 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 continue
 
     def _initialize(self):
-        genStreamingDir(self)
+        genExecStatusDir(self)
         inputMovies = self.getInputMovies()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
         self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
+        self.inMoviesPath = dirname(inputMovies._mapperPath.get())
 
     @retry_on_sqlite_lock(log=logger)
     def fetchNewMics(self,
@@ -390,13 +391,16 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         if movies and None not in outputList:
             for item in movies:
-                self.itemIdReadList.append(item.getObjId())
-            self.info(cyanStr(f'Ids processed: {self.itemIdReadList}'))
+                self.processedMovies.append(item.getObjId())
+            self.info(cyanStr(f'Ids processed: {self.processedMovies}'))
         else:
             self.info(cyanStr('No movies have been processed yet'))
 
     def getInputMovies(self, asPointer: bool = False) -> Union[Pointer, SetOfMovies]:
         return self.inputMovies if asPointer else self.inputMovies.get()
+
+    def getInMovieFn(self, movieName: str) -> str:
+        return join(self.inMoviesPath, movieName)
 
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
@@ -404,7 +408,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def _genReadyStreamingFile(self, movieFName: str) -> None:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
-        readyFile = Path(getStreamingDir(self)) / f'{bName}_aligned_mic{READY_EXT}'
+        readyFile = Path(getExecStatusDir(self)) / f'{bName}_aligned_mic{READY_EXT}'
         Path(readyFile).touch()
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:

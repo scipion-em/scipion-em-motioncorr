@@ -331,8 +331,6 @@ class ProtMotionCorrBase(EMProtocol):
             '-OutStack': 1 if self.doSaveMovie else 0,
             '-Gpu': '%(GPU)s',
             '-SumRange': "0.0 0.0",  # switch off writing out DWS,
-            # '-LogDir': './'
-            # '-FmRef': 0
         }
         if self.isEER:
             argsDict.update({'-EerSampling': self.eerSampling.get() + 1,
