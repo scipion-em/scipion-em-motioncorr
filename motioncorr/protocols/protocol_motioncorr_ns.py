@@ -42,7 +42,7 @@ from typing import Tuple, List, Union, Optional, Any
 import numpy as np
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
-from pwem import genExecStatusDir, genDoneFile, getExecStatusDir, READY_EXT
+from pwem import genExecStatusDir, genDoneFile, getExecStatusDir, READY_EXT, EXEC_STATUS_DIR, SIDECAR_EXT
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
@@ -169,6 +169,16 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                            " you want to prevent this behaviour")
 
     # --------------------------- STEPS functions -----------------------------
+    def _insertAllSteps(self) -> None:
+        inMoviesSet = self.getInputMovies()
+        if inMoviesSet.isStreamOpen():
+            self._insertFunctionStep(self.stepsGeneratorStep,
+                                     prerequisites=[],
+                                     needsGPU=False)
+        else:
+            pass
+
+
     def stepsGeneratorStep(self) -> None:
         closeSetStepDeps = []
         self._initialize()
@@ -195,7 +205,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 if nonProcessedMovies:
                     for movieFn in nonProcessedMovies:
                         movieFName = self.getInMovieFn(movieFn)
-                        # entrada con extra y con la movie
                         cInPId = self._insertFunctionStep(self.convertInputStep,
                                                           movieFName,
                                                           prerequisites=[],
@@ -227,17 +236,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
         self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
         self.inMoviesPath = dirname(inputMovies._mapperPath.get())
-
-    @retry_on_sqlite_lock(log=logger)
-    def fetchNewMics(self,
-                     inMoviesSet: SetOfMovies,
-                     objIds: typing.Set[int]) -> typing.Dict[int, Movie]:
-        """
-        Extract exclusively the new movies using native SQL.
-        By avoiding a general SELECT, it drastically  minimizes the locking time (SHARED lock).
-        """
-        whereClause = " OR ".join([f"id='{objId}'" for objId in objIds])
-        return {movie.getObjId(): movie.clone() for movie in inMoviesSet.iterItems(where=whereClause)}
 
     def convertInputStep(self, movieFName: str):
         try:
@@ -400,7 +398,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return self.inputMovies if asPointer else self.inputMovies.get()
 
     def getInMovieFn(self, movieName: str) -> str:
-        return join(self.inMoviesPath, movieName)
+        return join(self.inMoviesPath, 'extra', movieName)
+
+    def getInMoviesSidecarFn(self):
+        return join(self.inMoviesPath, EXEC_STATUS_DIR,
+                    f'{type(self.getInputMovies()).__name__}{SIDECAR_EXT}')
 
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
