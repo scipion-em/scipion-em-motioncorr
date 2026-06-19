@@ -34,6 +34,7 @@ import sqlite3
 import traceback
 from collections import Counter
 from enum import Enum
+from glob import glob
 from math import ceil, sqrt
 from os.path import exists, abspath, basename, dirname, join
 from pathlib import Path
@@ -98,6 +99,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         # In-memory Movie reconstructed from the input set's YAML sidecar.
         # Its metadata is global to the set, so it is built once and reused.
         self._inMovie = None
+        # In-memory SetOfMovies reconstructed from the same YAML sidecar, used
+        # to fetch set metadata (mapperPath, gain, dark, sampling rate, ...)
+        # without reading the input set DB. Built once and reused.
+        self._inMovies = None
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -237,12 +242,16 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def _initialize(self):
         genExecStatusDir(self)
-        inputMovies = self.getInputMovies()
+        # Seed the input movies directory from the pointer's mapper path. This
+        # single, lightweight access is the only one needed to locate the YAML
+        # sidecar on disk; every other set metadata read below is then served
+        # from the in-memory SetOfMovies, avoiding input-set DB reads.
+        self.inMoviesPath = dirname(self.getInputMovies()._mapperPath.get())
+        inputMovies = self._getInMoviesFromSidecar()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
-        self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
-        self.inMoviesPath = dirname(inputMovies._mapperPath.get())
+        self.isEER = self._isInputEer()
 
     def convertInputStep(self, movieFName: str):
         try:
@@ -408,8 +417,46 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return join(self.inMoviesPath, 'extra', movieName)
 
     def getInMoviesSidecarFn(self):
+        # The input is always a SetOfMovies (form pointerClass), so the sidecar
+        # name is resolved without resolving the input pointer (no DB read).
         return join(self.inMoviesPath, EXEC_STATUS_DIR,
-                    f'{type(self.getInputMovies()).__name__}{SIDECAR_EXT}.yaml')
+                    f'{SetOfMovies.__name__}{SIDECAR_EXT}.yaml')
+
+    def _getInMoviesFromSidecar(self) -> SetOfMovies:
+        """ Reconstruct, fully in memory, the input SetOfMovies by parsing its
+        YAML sidecar file. This is the set-level counterpart of
+        _getInMovieFromSidecar: the sidecar is a faithful serialization of the
+        set's 'Properties' table (its getObjDict()), so the keys map one-to-one
+        onto SetOfMovies attributes and no remapping is needed.
+
+        The result exposes the standard data model API (getGain(), getDark(),
+        getSamplingRate(), _mapperPath, ...) and lets the protocol fetch set
+        metadata without reading the input set DB.
+        """
+        if self._inMovies is None:
+            sidecarFn = self.getInMoviesSidecarFn()
+            with open(sidecarFn) as f:
+                properties = yaml.safe_load(f) or {}
+
+            movies = SetOfMovies()
+            # 'self' is the set class name and '_acquisition' is just the parent
+            # marker (None); neither is a bindable scalar attribute. Every other
+            # key (including the nested '_acquisition.*' ones) binds directly.
+            attrs = {k: v for k, v in properties.items()
+                     if k not in ('self', '_acquisition')}
+            movies.setAttributesFromDict(attrs, setBasic=False,
+                                         ignoreMissing=True)
+            self._inMovies = movies
+
+        return self._inMovies
+
+    def _isInputEer(self) -> bool:
+        """ Detect an EER acquisition without a set-DB read. The sidecar does
+        not carry per-movie filenames, so the format is inferred from the
+        presence of '.eer' movie files in the input set's 'extra' directory
+        (gain/dark references are never '.eer').
+        """
+        return bool(glob(join(self.inMoviesPath, 'extra', '*.eer')))
 
     def _getInMovieFromSidecar(self) -> Movie:
         """ Reconstruct, fully in memory, a Movie carrying the global metadata
@@ -511,13 +558,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
+            inMovies = self._getInMoviesFromSidecar()
             outputMovies = SetOfMovies.create(self._getPath(), template='movies')
-            outputMovies.copyInfo(self.getInputMovies())
+            outputMovies.copyInfo(inMovies)
             outputMovies.setSamplingRate(self.sRate)
             with weakImport("relion"):
                 from relion.convert import OpticsGroups
                 og = OpticsGroups.fromImages(outputMovies)
-                gain = self.getInputMovies().getGain()
+                gain = inMovies.getGain()
                 ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
                 if self.isEER:
                     ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
@@ -559,7 +607,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
             outputMics = SetOfMicrographs.create(self._getPath(), template='movies', suffix=suffix)
-            outputMics.copyInfo(self.getInputMovies())
+            outputMics.copyInfo(self._getInMoviesFromSidecar())
             outputMics.setSamplingRate(self.sRate)
             outputMics.setStreamState(Set.STREAM_OPEN)
             outputMics.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
