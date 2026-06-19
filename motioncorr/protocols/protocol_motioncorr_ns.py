@@ -32,7 +32,6 @@
 import logging
 import sqlite3
 import traceback
-import typing
 from collections import Counter
 from enum import Enum
 from math import ceil, sqrt
@@ -40,12 +39,14 @@ from os.path import exists, abspath, basename, dirname, join
 from pathlib import Path
 from typing import Tuple, List, Union, Optional, Any
 import numpy as np
+import yaml
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 from pwem import genExecStatusDir, genDoneFile, getExecStatusDir, READY_EXT, EXEC_STATUS_DIR, SIDECAR_EXT
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
+from pwem.objects import (SetOfMovies, SetOfMicrographs, Movie, Micrograph,
+                          MovieAlignment, Image, Acquisition)
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
@@ -94,6 +95,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.dark = None
         self.failedMovies = []
         self.inMoviesPath = ''
+        # In-memory Movie reconstructed from the input set's YAML sidecar.
+        # Its metadata is global to the set, so it is built once and reused.
+        self._inMovie = None
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -203,6 +207,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
                 nonProcessedMovies = availableMovies - set(self.processedMovies)
                 if nonProcessedMovies:
+                    # Reconstruct the input Movie metadata from the YAML
+                    # sidecar instead of reading it from the input set DB.
+                    movie = self._getInMovieFromSidecar()
                     for movieFn in nonProcessedMovies:
                         movieFName = self.getInMovieFn(movieFn)
                         cInPId = self._insertFunctionStep(self.convertInputStep,
@@ -402,7 +409,49 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def getInMoviesSidecarFn(self):
         return join(self.inMoviesPath, EXEC_STATUS_DIR,
-                    f'{type(self.getInputMovies()).__name__}{SIDECAR_EXT}')
+                    f'{type(self.getInputMovies()).__name__}{SIDECAR_EXT}.yaml')
+
+    def _getInMovieFromSidecar(self) -> Movie:
+        """ Reconstruct, fully in memory, a Movie carrying the global metadata
+        of the input SetOfMovies by parsing its YAML sidecar file. This is the
+        inverse of ProtImportImages._genSidecarFile: the sidecar holds the
+        set's 'Properties' table, whose values are global and shared by every
+        movie in the set, so a single Movie reproduces the metadata for all.
+
+        The movie filename is resolved through another channel, so it is not
+        bound here. The result exposes the standard data model API
+        (getSamplingRate(), getAcquisition(), getFramesRange(), ...).
+        """
+        if self._inMovie is None:
+            sidecarFn = self.getInMoviesSidecarFn()
+            with open(sidecarFn) as f:
+                properties = yaml.safe_load(f) or {}
+
+            movie = Movie()
+            # An Acquisition instance must exist before binding the nested
+            # '_acquisition.*' keys onto it.
+            movie.setAcquisition(Acquisition())
+
+            attrs = {}
+            for key, value in properties.items():
+                # 'self' is the set class name and '_acquisition' is just the
+                # parent marker (None); neither is a bindable scalar attribute.
+                if key in ('self', '_acquisition'):
+                    continue
+                # The set stores the common frames range under
+                # '_firstFramesRange'; on a Movie that lives in '_framesRange'.
+                if key == '_firstFramesRange':
+                    attrs['_framesRange'] = value
+                else:
+                    attrs[key] = value
+
+            # Set-only attributes absent on a Movie (e.g. _gainFile, _firstDim,
+            # _size) are silently skipped thanks to ignoreMissing=True.
+            movie.setAttributesFromDict(attrs, setBasic=False,
+                                        ignoreMissing=True)
+            self._inMovie = movie
+
+        return self._inMovie
 
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
