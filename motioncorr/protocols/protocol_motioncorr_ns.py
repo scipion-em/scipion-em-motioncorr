@@ -68,14 +68,138 @@ class MotionCorrOutputs(Enum):
 
 
 class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs streaming movie alignment for cryo-EM image sequences using
+    MotionCor-based correction. The protocol is designed to compensate
+    for beam-induced specimen motion while producing aligned movies and
+    corrected micrographs that can be used immediately in downstream
+    processing.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
 
-    New Streaming refers to the next-generation engine developed by the Scipion Team.
-    While both the new and legacy streaming protocols will coexist for a transitional
-    period, they remain fully compatible with each other.
+    Motion Correction New Streaming (ProtMotionCorrNewStreaming) - User Manual
+        Overview
+
+        This protocol provides real-time motion correction for cryo-EM
+        movies as they become available during acquisition or during
+        incremental data transfer. Its main purpose is to transform raw
+        frame stacks into spatially stabilized image products that can be
+        inspected, curated, and processed without waiting for the full
+        dataset to finish.
+
+        In practical cryo-EM workflows, beam-induced drift is one of the
+        earliest sources of image degradation. Correcting this motion at
+        the streaming stage helps preserve high-resolution information and
+        provides a cleaner starting point for later procedures such as
+        CTF estimation, particle picking, and high-resolution refinement.
+        This protocol is especially useful in automated acquisition
+        environments where users want immediate feedback about data
+        quality.
+
+        Streaming-Oriented Processing
+
+        Unlike batch-oriented workflows, this protocol is intended for
+        continuously growing datasets. Newly arriving movies are detected,
+        processed, and incorporated into the output collections while
+        acquisition continues. This behavior makes the protocol suitable
+        for microscope facilities, unattended overnight collection, and
+        rapid experimental decision making.
+
+        From the biological user perspective, streaming correction can be
+        particularly valuable when screening samples. It allows early
+        evaluation of specimen stability, ice quality, and overall motion
+        behavior before large amounts of microscope time are invested.
+
+        Input Data and Experimental Context
+
+        The protocol expects a stream of imported movies as input. These
+        movies typically contain dose-fractionated frames that record the
+        same field of view over time. The alignment process estimates the
+        frame-to-frame motion and combines the information into corrected
+        image products.
+
+        The quality of the final results depends strongly on acquisition
+        conditions. Stable ice, good beam conditions, and consistent
+        detector calibration generally produce more reliable corrections.
+        Poorly vitrified samples or severe stage instability may still
+        yield usable outputs, but biological interpretation should remain
+        cautious.
+
+        Frame Range and Dose Considerations
+
+        Users can define which portion of the movie contributes to the
+        correction and final summation. This is biologically relevant
+        because early frames often contain the highest-resolution signal,
+        while later frames may accumulate radiation damage.
+
+        In many experiments, selecting an appropriate frame range improves
+        the interpretability of the final micrographs. When dose-weighted
+        processing is enabled, the protocol emphasizes frames according to
+        their expected information content, which is particularly useful
+        for high-resolution single-particle workflows.
+
+        Even and Odd Frame Products
+
+        The protocol can generate independent sums from even and odd
+        frames. These outputs are useful for downstream procedures that
+        require statistical independence between image subsets.
+
+        In biological practice, even and odd products are often valuable
+        when assessing consistency of signal, validating reconstruction
+        behavior, or supporting later refinement strategies where
+        independent half-data concepts are important.
+
+        Streaming Outputs and Their Meaning
+
+        As processing advances, the protocol produces aligned movies,
+        corrected micrographs, and optional dose-weighted variants. These
+        outputs become available progressively rather than only at the end
+        of the run.
+
+        Each processed movie contributes motion metadata that can be used
+        to assess specimen stability. This information is often
+        biologically informative because excessive drift can indicate poor
+        ice conditions, charging effects, or local sample instability.
+
+        Motion Visualization and Quality Control
+
+        In addition to corrected image products, the protocol generates
+        alignment trajectories that help users understand how each movie
+        behaved during acquisition. These visual summaries are especially
+        helpful during data collection because they provide immediate
+        feedback about mechanical drift, stage relaxation, or unstable
+        exposure conditions.
+
+        For screening experiments, examining motion behavior early can
+        prevent spending time on low-quality datasets. For high-resolution
+        projects, consistent low-motion trajectories usually correlate
+        with better downstream reconstruction quality.
+
+        Practical Recommendations
+
+        For most cryo-EM users, default alignment settings provide a good
+        starting point for streaming acquisition. During early screening,
+        the main goal is often rapid feedback rather than aggressive
+        optimization.
+
+        When aiming for high-resolution refinement, users should pay close
+        attention to dose handling, frame selection, and sampling
+        consistency. If motion appears unusually strong or inconsistent
+        across movies, the biological cause may lie in specimen
+        preparation, grid support behavior, or microscope stability rather
+        than in the correction procedure itself.
+
+        Final Perspective
+
+        In modern cryo-EM pipelines, streaming motion correction is more
+        than a convenience. It acts as an early quality-control stage
+        that helps determine whether acquired data are suitable for
+        meaningful biological interpretation.
+
+        By delivering progressively corrected movies and micrographs while
+        acquisition is still active, this protocol supports rapid
+        experimental feedback, efficient microscope usage, and more
+        informed downstream structural analysis.
     """
 
     _label = 'movie alignment New Streaming'
