@@ -37,20 +37,19 @@ from enum import Enum
 from glob import glob
 from math import ceil, sqrt
 from os.path import exists, abspath, basename, dirname, join
-from pathlib import Path
 from typing import Tuple, List, Union, Optional, Any
 import numpy as np
-import yaml
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
-from pwem import genExecStatusDir, genDoneFile, getExecStatusDir, READY_EXT, EXEC_STATUS_DIR, SIDECAR_EXT
+from pwem import (genExecStatusDir, getExecStatusDir, appendStreamItem,
+                  closeStreamJournal, readStreamJournal, STREAM_HEARTBEAT_TIMEOUT)
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import (SetOfMovies, SetOfMicrographs, Movie, Micrograph,
                           MovieAlignment, Image, Acquisition)
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport, yellowStr
+from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, weakImport, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.utils import sleepRandomly
 from .. import Plugin
@@ -185,8 +184,63 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                      prerequisites=[],
                                      needsGPU=False)
         else:
-            pass
+            self._insertNonStreamingSteps()
 
+    def _insertCommonSteps(self, movieFName: str, movie: Movie,
+                           closeSetStepDeps: List[int],
+                           convertPrereq: Union[List[int], int, None] = None) -> None:
+        cInPId = self._insertFunctionStep(self.convertInputStep,
+                                          movieFName,
+                                          prerequisites=convertPrereq or [],
+                                          needsGPU=False)
+        pMovPid = self._insertFunctionStep(self.processMovieStep,
+                                           movieFName,
+                                           prerequisites=cInPId,
+                                           needsGPU=True)
+        cOutId = self._insertFunctionStep(self.createOutputStep,
+                                          movieFName,
+                                          movie,
+                                          prerequisites=pMovPid,
+                                          needsGPU=False)
+        closeSetStepDeps.append(cOutId)
+
+    def _insertNonStreamingSteps(self):
+        """ Non-streaming path: the input set is already closed at launch
+        (reprocessing/replay, or a set produced by stock Scipion). A single
+        batch read of a closed set is safe (no concurrent-read contention), so
+        the steps are enumerated up front. An initializeStep runs first and the
+        per-movie steps depend on it (the streaming path initializes inside
+        stepsGeneratorStep instead). """
+        closeSetStepDeps = []
+        initId = self._insertFunctionStep(self.initializeStep,
+                                          prerequisites=[],
+                                          needsGPU=False)
+        inMoviesSet = self.getInputMovies()
+        outputsToCheck = self._getOutputsToCheck()
+        for movie in inMoviesSet.iterItems():
+            # 'movie' is a Movie (item of the SetOfMovies); its filename is read
+            # directly. (getFirstItem() belongs to Set classes, not to a Movie.)
+            movieFName = movie.getFileName()
+            self._insertCommonSteps(movieFName, movie.clone(), closeSetStepDeps,
+                                    convertPrereq=initId)
+        self._insertFunctionStep(self.closeOutputSetStep,
+                                 outputsToCheck,
+                                 prerequisites=closeSetStepDeps,
+                                 needsGPU=False)
+
+    def initializeStep(self):
+        """ Initialization for the non-streaming path. Reads the global set
+        metadata directly from the (closed) input set DB -- a one-off batch read
+        is safe and also serves as the fallback for sets produced by stock
+        Scipion that carry no stream journal. Mirrors the attributes set by
+        _initialize() in the streaming path. """
+        genExecStatusDir(self)
+        inMoviesSet = self.getInputMovies()
+        self.inMoviesPath = dirname(inMoviesSet._mapperPath.get())
+        self.gain = inMoviesSet.getGain()
+        self.dark = inMoviesSet.getDark()
+        self.sRate = inMoviesSet.getSamplingRate() * self.binFactor.get()
+        self.isEER = self._isInputEer()
 
     def stepsGeneratorStep(self) -> None:
         closeSetStepDeps = []
@@ -210,29 +264,39 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                              needsGPU=False)
                     break
 
+                # Producer liveness (Defect E): if the stream was never closed
+                # but the producer's heartbeat has gone stale, it likely died
+                # (OOM / Slurm time-limit / node failure). Close gracefully with
+                # whatever was processed instead of looping forever. Use 'break'
+                # (not 'raise') so it is not swallowed by the loop's except below.
+                if not inMoviesSet.isStreamClosed():
+                    hbAge = inMoviesSet.getProducerHeartbeatAge()
+                    if hbAge is not None and hbAge > STREAM_HEARTBEAT_TIMEOUT:
+                        logger.error(redStr(
+                            f'Producer heartbeat is stale ({hbAge:.0f}s > '
+                            f'{STREAM_HEARTBEAT_TIMEOUT}s) and the stream was never '
+                            f'closed; the producer appears dead. Closing with '
+                            f'partial outputs.'))
+                        self._insertFunctionStep(self.closeOutputSetStep,
+                                                 outputsToCheck,
+                                                 prerequisites=closeSetStepDeps,
+                                                 needsGPU=False)
+                        break
+
                 nonProcessedMovies = availableMovies - set(self.processedMovies)
                 if nonProcessedMovies:
-                    # Reconstruct the input Movie metadata from the YAML
-                    # sidecar instead of reading it from the input set DB.
-                    movie = self._getInMovieFromSidecar()
+                    # Reconstruct the input Movie metadata from the producer's
+                    # journal header instead of reading it from the input set DB.
+                    movie = self._getInMovieFromJournal()
                     for movieFn in nonProcessedMovies:
                         movieFName = self.getInMovieFn(movieFn)
-                        cInPId = self._insertFunctionStep(self.convertInputStep,
-                                                          movieFName,
-                                                          prerequisites=[],
-                                                          needsGPU=False)
-                        pMovPid = self._insertFunctionStep(self.processMovieStep,
-                                                           movieFName,
-                                                           prerequisites=cInPId,
-                                                           needsGPU=True)
-                        cOutId = self._insertFunctionStep(self.createOutputStep,
-                                                          movieFName,
-                                                          movie,
-                                                          prerequisites=pMovPid,
-                                                          needsGPU=False)
-                        closeSetStepDeps.append(cOutId)
+                        self._insertCommonSteps(movieFName, movie, closeSetStepDeps)
                         logger.info(cyanStr(f"Steps created for movie = {movieFName}"))
-                        self.processedMovies.append(movieFName)
+                        # Track the input-journal id (the same key space as
+                        # availableMovies), NOT the absolute path: otherwise the
+                        # set difference above never matches and every movie is
+                        # re-scheduled on each poll.
+                        self.processedMovies.append(movieFn)
                         sleepRandomly()
 
             except Exception as e:
@@ -243,11 +307,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _initialize(self):
         genExecStatusDir(self)
         # Seed the input movies directory from the pointer's mapper path. This
-        # single, lightweight access is the only one needed to locate the YAML
-        # sidecar on disk; every other set metadata read below is then served
+        # single, lightweight access is the only one needed to locate the stream
+        # journal on disk; every other set metadata read below is then served
         # from the in-memory SetOfMovies, avoiding input-set DB reads.
         self.inMoviesPath = dirname(self.getInputMovies()._mapperPath.get())
-        inputMovies = self._getInMoviesFromSidecar()
+        inputMovies = self._getInMoviesFromJournal()
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
@@ -367,7 +431,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if failedOutputList:
             raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
                             f'Output Log > run.stdout and run.stderr')
-        genDoneFile(self)
+        closeStreamJournal(self)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
@@ -389,26 +453,32 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     # --------------------------- UTILS functions -----------------------------
     def readingOutput(self) -> None:
-        movies = getattr(self, self._possibleOutputs.movies.name, None)
-        outputList = []
-        mics = getattr(self, self._possibleOutputs.micrographs.name, None)
-        micsDW = getattr(self, self._possibleOutputs.micrographsDW.name, None)
-        micsEven = getattr(self, self._possibleOutputs.micrographsEven.name, None)
-        micsOdd = getattr(self, self._possibleOutputs.micrographsOdd.name, None)
-        if self.splitEvenOdd.get():
-            outputList.append(micsEven)
-            outputList.append(micsOdd)
-        if self.doApplyDoseFilter.get():
-            outputList.append(micsDW)
-        else:
-            outputList.append(mics)
+        """ On resume, rebuild the set of already-processed input movies so the
+        streaming loop does not re-create steps for them.
 
-        if movies and None not in outputList:
-            for item in movies:
-                self.processedMovies.append(item.getObjId())
-            self.info(cyanStr(f'Ids processed: {self.processedMovies}'))
-        else:
+        MotionCorr appends '<stem>_aligned_mic' to its OWN stream journal only
+        AFTER an output has been successfully registered (see
+        _genReadyStreamingFile), so that journal is the authoritative record of
+        completed work. Those ids are mapped back to the input-journal id space
+        (the key space of SetOfMovies.getProcessedItems() used by the loop), so
+        the resumed state is tracked with exactly the same keys -- previously the
+        output objIds were stored, which never matched and caused every movie to
+        be reprocessed on resume. """
+        suffix = '_aligned_mic'
+        producedIds, _, _, _ = readStreamJournal(getExecStatusDir(self))
+        producedStems = {pid[:-len(suffix)] for pid in producedIds
+                         if pid and pid.endswith(suffix)}
+        if not producedStems:
             self.info(cyanStr('No movies have been processed yet'))
+            return
+
+        for movieFn in self.getInputMovies().getProcessedItems():
+            # Stem derived exactly as _getResultMicFn/_genReadyStreamingFile do.
+            stem = removeBaseExt(movieFn).replace('.mrc', '')
+            if stem in producedStems and movieFn not in self.processedMovies:
+                self.processedMovies.append(movieFn)
+        self.info(cyanStr(f'Already processed (resumed): '
+                          f'{len(self.processedMovies)} movies'))
 
     def getInputMovies(self, asPointer: bool = False) -> Union[Pointer, SetOfMovies]:
         return self.inputMovies if asPointer else self.inputMovies.get()
@@ -416,32 +486,25 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def getInMovieFn(self, movieName: str) -> str:
         return join(self.inMoviesPath, 'extra', movieName)
 
-    def getInMoviesSidecarFn(self):
-        # The input is always a SetOfMovies (form pointerClass), so the sidecar
-        # name is resolved without resolving the input pointer (no DB read).
-        return join(self.inMoviesPath, EXEC_STATUS_DIR,
-                    f'{SetOfMovies.__name__}{SIDECAR_EXT}.yaml')
-
-    def _getInMoviesFromSidecar(self) -> SetOfMovies:
-        """ Reconstruct, fully in memory, the input SetOfMovies by parsing its
-        YAML sidecar file. This is the set-level counterpart of
-        _getInMovieFromSidecar: the sidecar is a faithful serialization of the
-        set's 'Properties' table (its getObjDict()), so the keys map one-to-one
-        onto SetOfMovies attributes and no remapping is needed.
+    def _getInMoviesFromJournal(self) -> SetOfMovies:
+        """ Reconstruct, fully in memory, the input SetOfMovies from the
+        properties published in the producer's stream-journal header. This is
+        the set-level counterpart of _getInMovieFromJournal: the header carries a
+        faithful serialization of the set's 'Properties' table (its
+        getObjDict()), so the keys map one-to-one onto SetOfMovies attributes and
+        no remapping is needed.
 
         The result exposes the standard data model API (getGain(), getDark(),
-        getSamplingRate(), _mapperPath, ...) and lets the protocol fetch set
-        metadata without reading the input set DB.
+        getSamplingRate(), ...) and lets the protocol fetch set metadata without
+        reading the input set DB.
         """
         if self._inMovies is None:
-            sidecarFn = self.getInMoviesSidecarFn()
-            with open(sidecarFn) as f:
-                properties = yaml.safe_load(f) or {}
+            properties = self.getInputMovies().getStreamHeaderProperties()
 
             movies = SetOfMovies()
-            # 'self' is the set class name and '_acquisition' is just the parent
-            # marker (None); neither is a bindable scalar attribute. Every other
-            # key (including the nested '_acquisition.*' ones) binds directly.
+            # '_acquisition' is just the parent marker (None); it is not a
+            # bindable scalar attribute. Every other key (including the nested
+            # '_acquisition.*' ones) binds directly.
             attrs = {k: v for k, v in properties.items()
                      if k not in ('self', '_acquisition')}
             movies.setAttributesFromDict(attrs, setBasic=False,
@@ -451,28 +514,26 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return self._inMovies
 
     def _isInputEer(self) -> bool:
-        """ Detect an EER acquisition without a set-DB read. The sidecar does
-        not carry per-movie filenames, so the format is inferred from the
+        """ Detect an EER acquisition without a set-DB read. The journal header
+        does not carry per-movie filenames, so the format is inferred from the
         presence of '.eer' movie files in the input set's 'extra' directory
         (gain/dark references are never '.eer').
         """
         return bool(glob(join(self.inMoviesPath, 'extra', '*.eer')))
 
-    def _getInMovieFromSidecar(self) -> Movie:
-        """ Reconstruct, fully in memory, a Movie carrying the global metadata
-        of the input SetOfMovies by parsing its YAML sidecar file. This is the
-        inverse of ProtImportImages._genSidecarFile: the sidecar holds the
-        set's 'Properties' table, whose values are global and shared by every
-        movie in the set, so a single Movie reproduces the metadata for all.
+    def _getInMovieFromJournal(self) -> Movie:
+        """ Reconstruct, fully in memory, a Movie carrying the global metadata of
+        the input SetOfMovies from the producer's stream-journal header. The
+        header holds the set's 'Properties' table, whose values are global and
+        shared by every movie in the set, so a single Movie reproduces the
+        metadata for all.
 
         The movie filename is resolved through another channel, so it is not
         bound here. The result exposes the standard data model API
         (getSamplingRate(), getAcquisition(), getFramesRange(), ...).
         """
         if self._inMovie is None:
-            sidecarFn = self.getInMoviesSidecarFn()
-            with open(sidecarFn) as f:
-                properties = yaml.safe_load(f) or {}
+            properties = self.getInputMovies().getStreamHeaderProperties()
 
             movie = Movie()
             # An Acquisition instance must exist before binding the nested
@@ -481,8 +542,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
             attrs = {}
             for key, value in properties.items():
-                # 'self' is the set class name and '_acquisition' is just the
-                # parent marker (None); neither is a bindable scalar attribute.
+                # '_acquisition' is just the parent marker (None); it is not a
+                # bindable scalar attribute.
                 if key in ('self', '_acquisition'):
                     continue
                 # The set stores the common frames range under
@@ -505,9 +566,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
 
     def _genReadyStreamingFile(self, movieFName: str) -> None:
+        """ Publish this micrograph as ready in the protocol's own stream
+        journal (so downstream streaming consumers can discover it). """
         bName = removeBaseExt(movieFName).replace('.mrc', '')
-        readyFile = Path(getExecStatusDir(self)) / f'{bName}_aligned_mic{READY_EXT}'
-        Path(readyFile).touch()
+        appendStreamItem(self, f'{bName}_aligned_mic')
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
@@ -558,7 +620,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
-            inMovies = self._getInMoviesFromSidecar()
+            inMovies = self._getInMoviesFromJournal()
             outputMovies = SetOfMovies.create(self._getPath(), template='movies')
             outputMovies.copyInfo(inMovies)
             outputMovies.setSamplingRate(self.sRate)
@@ -607,7 +669,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
             outputMics = SetOfMicrographs.create(self._getPath(), template='movies', suffix=suffix)
-            outputMics.copyInfo(self._getInMoviesFromSidecar())
+            outputMics.copyInfo(self._getInMoviesFromJournal())
             outputMics.setSamplingRate(self.sRate)
             outputMics.setStreamState(Set.STREAM_OPEN)
             outputMics.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
