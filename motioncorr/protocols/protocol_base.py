@@ -316,10 +316,16 @@ class ProtMotionCorrBase(EMProtocol):
             self.patchX.set(0)
         if self.patchY.get() == 1:
             self.patchY.set(0)
-
+                # Trunc value
+        if self.isEER:
+            truncVal = 0
+        elif frameN == 0:
+            truncVal = numbOfFrames,
+        else:
+            truncVal = numbOfFrames - frameN
         argsDict = {
             '-Throw': 0 if self.isEER else (frame0 - 1),
-            '-Trunc': 0 if self.isEER else (numbOfFrames - frameN),
+            '-Trunc': truncVal,
             '-Patch': f"{self.patchX} {self.patchY}",
             '-MaskCent': f"{self.cropOffsetX} {self.cropOffsetY}",
             '-MaskSize': f"{cropDimX} {cropDimY}",
