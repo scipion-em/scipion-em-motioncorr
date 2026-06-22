@@ -316,13 +316,10 @@ class ProtMotionCorrBase(EMProtocol):
             self.patchX.set(0)
         if self.patchY.get() == 1:
             self.patchY.set(0)
-                # Trunc value
-        if self.isEER:
+        # Trunc value
+        truncVal = numbOfFrames - frameN
+        if self.isEER or frameN == 0:
             truncVal = 0
-        elif frameN == 0:
-            truncVal = numbOfFrames,
-        else:
-            truncVal = numbOfFrames - frameN
         argsDict = {
             '-Throw': 0 if self.isEER else (frame0 - 1),
             '-Trunc': truncVal,
