@@ -1,3 +1,7 @@
+4.0.1:
+ Users:
+  - Improve the installer with the expected paths by Scipion and removing debug flags.
+  - Fix bug in the calculation of the value for the input argument Trunc
 4.0.0:
   Users:
   - The plugin installation now makes the compilation of the binaries instead of
