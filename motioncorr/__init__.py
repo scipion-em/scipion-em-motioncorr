@@ -34,7 +34,7 @@ from pyworkflow import SPA, TOMO
 from .constants import *
 
 
-__version__ = '4.0.0'
+__version__ = '4.0.1'
 _references = ['Zheng2017']
 
 
@@ -102,7 +102,10 @@ class Plugin(pwem.Plugin):
             f'cd motioncor3-{v} && '
             f'git checkout {commit} && '
             'mkdir bin && '
+            r"sed -i 's|^CONDA = .*|CONDA = $(HOME)/miniforge3|' makefile11 && "
+            r"sed -i 's|^CUDAHOME = .*|CUDAHOME =  /usr/local/cuda|' makefile11 && "
             r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
+            r"sed -i 's|@\$(NVCC) -g -G -m64|@\$(NVCC) -m64|' makefile11 && "
             r"sed -i '/-L\/usr\/lib64 \\/a\    -Xcompiler -no-pie \\' makefile11 && "
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
