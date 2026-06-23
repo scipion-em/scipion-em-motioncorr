@@ -393,8 +393,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             # Minimal lock scope: only DB writes
             self.registerOutputs(outMovie, micsToRegister)
 
-            # Save ready file
-            self._genReadyStreamingFile(movieFName)
+            # Publish the ready item to our journal, inlining the primary
+            # micrograph's metadata (micsToRegister[0] is the consumed mic:
+            # dose-weighted if dose filtering, else plain) so ProtComposeTS can
+            # rebuild it from the journal without reading our SQLite set.
+            self._genReadyStreamingFile(movieFName, primaryMic=micsToRegister[0][2])
 
         except Exception as e:
             if isinstance(e, sqlite3.OperationalError):
@@ -465,7 +468,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         output objIds were stored, which never matched and caused every movie to
         be reprocessed on resume. """
         suffix = '_aligned_mic'
-        producedIds, _, _, _ = readStreamJournal(getExecStatusDir(self))
+        producedIds, _, _, _, _ = readStreamJournal(getExecStatusDir(self))
         producedStems = {pid[:-len(suffix)] for pid in producedIds
                          if pid and pid.endswith(suffix)}
         if not producedStems:
@@ -565,11 +568,28 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         bName = removeBaseExt(movieFName).replace('.mrc', '')
         return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
 
-    def _genReadyStreamingFile(self, movieFName: str) -> None:
-        """ Publish this micrograph as ready in the protocol's own stream
-        journal (so downstream streaming consumers can discover it). """
+    def _genReadyStreamingFile(self, movieFName: str, primaryMic: Micrograph = None) -> None:
+        """ Publish this micrograph as ready in the protocol's own stream journal
+        (so downstream streaming consumers can discover it). When the primary
+        output micrograph is provided, its metadata is INLINED in the journal
+        record so a consumer (e.g. ProtComposeTS) can rebuild the Micrograph from
+        the journal alone -- no producer-DB read and no per-mic sidecar files. The
+        'key' is the movie stem, i.e. removeBaseExt() of the mdoc's movie file, so
+        the consumer matches without depending on micName resolution. """
         bName = removeBaseExt(movieFName).replace('.mrc', '')
-        appendStreamItem(self, f'{bName}_aligned_mic')
+        meta = None
+        if primaryMic is not None:
+            acq = primaryMic.getAcquisition()
+            eo = getattr(primaryMic, MC_EVEN_ODD_ATTRIBUTE, None)
+            meta = {
+                'key': bName,
+                'micName': bName,
+                'fileName': primaryMic.getFileName(),
+                'samplingRate': primaryMic.getSamplingRate(),
+                'dosePerFrame': acq.getDosePerFrame() if acq is not None else None,
+                'evenOdd': eo.get() if eo is not None else None,
+            }
+        appendStreamItem(self, f'{bName}_aligned_mic', meta=meta)
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
