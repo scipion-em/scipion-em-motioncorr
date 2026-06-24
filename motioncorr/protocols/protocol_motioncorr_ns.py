@@ -587,7 +587,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 'fileName': primaryMic.getFileName(),
                 'samplingRate': primaryMic.getSamplingRate(),
                 'dosePerFrame': acq.getDosePerFrame() if acq is not None else None,
-                'evenOdd': eo.get() if eo is not None else None,
+                # list(eo) yields the [odd, even] path list (CsvList subclasses
+                # list). Do NOT use eo.get(): that returns the comma-joined string,
+                # which a consumer's list(...) would split into single characters.
+                'evenOdd': list(eo) if eo is not None else None,
             }
         appendStreamItem(self, f'{bName}_aligned_mic', meta=meta)
 
