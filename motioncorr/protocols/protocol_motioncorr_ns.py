@@ -221,7 +221,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             # 'movie' is a Movie (item of the SetOfMovies); its filename is read
             # directly. (getFirstItem() belongs to Set classes, not to a Movie.)
             movieFName = movie.getFileName()
-            self._insertCommonSteps(movieFName, movie.clone(), closeSetStepDeps,
+            self._insertCommonSteps(movieFName,
+                                    movie.clone(),
+                                    closeSetStepDeps,
                                     convertPrereq=initId)
         self._insertFunctionStep(self.closeOutputSetStep,
                                  outputsToCheck,
@@ -297,10 +299,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                         # set difference above never matches and every movie is
                         # re-scheduled on each poll.
                         self.processedMovies.append(movieFn)
-                        sleepRandomly()
+
+                sleepRandomly()
 
             except Exception as e:
                 logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
+                logger.error(traceback.format_exc())
                 sleepRandomly()
                 continue
 
