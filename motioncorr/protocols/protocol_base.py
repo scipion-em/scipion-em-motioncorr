@@ -45,6 +45,284 @@ logger = logging.getLogger(__name__)
 
 
 class ProtMotionCorrBase(EMProtocol):
+    """
+    Base protocol for movie motion correction using MotionCor-based alignment.
+
+    AI Generated:
+
+    Motion Correction Base (ProtMotionCorrBase) — User Manual
+        Overview
+
+        The ProtMotionCorrBase protocol provides the common framework for
+        correcting beam-induced motion in cryo-EM movie stacks. During electron
+        exposure, particles move slightly due to specimen drift and beam-induced
+        deformation. If uncorrected, this motion reduces high-resolution signal
+        and degrades downstream processing.
+
+        This protocol aligns movie frames, optionally applies dose-weighting,
+        supports local patch-based correction, handles gain and dark reference
+        corrections, accepts defect information, and supports modern EER
+        (Electron Event Representation) movies.
+
+        It acts as a reusable base protocol: subclasses define how input movies
+        are accessed and how per-movie outputs are organized, while this class
+        provides the shared logic for validation, preprocessing, parameter
+        handling, and MotionCor argument generation.
+
+        Inputs
+
+        The protocol expects an input set of movies. Each movie should contain:
+
+            - A valid stack of frames.
+            - Acquisition metadata such as voltage and dose per frame.
+            - Optionally, gain and dark reference images.
+
+        The input movies must exist on disk. Since cryo-EM projects often rely
+        on symbolic links, broken links are explicitly checked during validation.
+
+        Main Workflow
+
+        The protocol follows these general stages:
+
+            1. Input preparation
+               Gain, dark, and EER-related files are prepared and converted
+               if necessary.
+
+            2. Validation
+               Frame ranges, gain dimensions, dose metadata, and EER-specific
+               restrictions are checked before execution.
+
+            3. MotionCor argument generation
+               All alignment parameters are translated into command-line options
+               for the MotionCor binary.
+
+            4. Execution
+               Subclasses launch the external program.
+
+            5. Output parsing
+               Frame shifts and alignment metadata can later be extracted.
+
+        Frame Alignment
+
+        Motion correction aligns frames over a user-defined frame range.
+
+        For conventional movie stacks:
+
+            - Alignment uses the selected start and end frame directly.
+
+        For EER movies:
+
+            - Alignment is performed on grouped hardware frames.
+            - Frame range must begin at frame 1.
+            - End frame must be either 0 (all frames) or the total number of
+              available frames.
+
+        This restriction is enforced because EER fractionation is internally
+        handled differently from standard frame stacks.
+
+        Patch-Based Local Alignment
+
+        Local alignment can be performed by dividing each frame into patches.
+
+        Parameters include:
+
+            - patchX, patchY
+                Number of patches along X and Y.
+
+            - patchOverlap
+                Percentage of overlap between neighboring patches.
+
+        Practical interpretation:
+
+            - 0 0 patches:
+                Only global motion correction is performed.
+
+            - Multiple patches:
+                Local deformation is estimated and corrected.
+
+        For biological datasets:
+
+            - Smaller particles or thin ice often benefit from local alignment.
+            - Large particles with strong beam-induced local motion usually
+              benefit substantially from patch correction.
+
+        Frame Grouping
+
+        Frames can be grouped before alignment.
+
+            - group
+                Grouping for global alignment.
+
+            - groupLocal
+                Grouping for local alignment.
+
+        Grouping reduces noise by summing neighboring frames prior to alignment.
+        This is often useful when individual frames have very low signal.
+
+        Dose Weighting
+
+        If enabled, the protocol applies dose-dependent filtering before summing
+        aligned frames.
+
+        This requires valid dose metadata:
+
+            - Initial dose
+            - Dose per frame
+
+        Biological rationale:
+
+            Early frames usually preserve higher-resolution information, whereas
+            later frames accumulate radiation damage. Dose-weighting downweights
+            damaged high-frequency signal and generally improves reconstruction
+            quality.
+
+        For tomography-specific acquisition orders, the protocol also supports
+        corrected pre-exposure calculation.
+
+        Gain, Dark, and Detector Defects
+
+        Gain and dark correction references are supported.
+
+        Special behavior:
+
+            - DM4 gain references are automatically converted to MRC.
+            - Converted files are cached to avoid repeated conversion.
+
+        Defect correction can be provided in three ways:
+
+            - Defect file
+                Rectangular bad-pixel regions.
+
+            - Defect map
+                Binary defect mask.
+
+            - EER-derived defect file
+                Automatically parsed from EER gain files.
+
+        These corrections are important because detector defects can introduce
+        artifacts that bias alignment and downstream CTF estimation.
+
+        EER Support
+
+        EER movies are handled explicitly.
+
+        Additional EER-specific behavior includes:
+
+            - Parsing detector defects from the gain file.
+            - Writing an FmIntFile describing:
+                * total number of frames
+                * EER grouping factor
+                * dose information
+
+        Important EER parameters:
+
+            - eerGroup
+                Hardware frame fractionation.
+
+            - eerSampling
+                Upsampling level.
+
+        Since Falcon EER data can have very high temporal sampling, correct
+        grouping is important for balancing temporal resolution and signal.
+
+        Magnification Correction
+
+        The protocol optionally supports anisotropic magnification correction.
+
+        Parameters include:
+
+            - scaleMaj
+                Major scale factor.
+
+            - scaleMin
+                Minor scale factor.
+
+            - angDist
+                Distortion angle.
+
+        This correction compensates for directional magnification distortions,
+        which can otherwise slightly bias high-resolution reconstructions.
+
+        Validation Rules
+
+        Before execution, the protocol verifies:
+
+            - Input movies exist.
+            - Frame range is valid.
+            - EER frame constraints are respected.
+            - Dose metadata is available if dose-weighting is enabled.
+            - Gain dimensions match movie dimensions.
+
+        These checks prevent common user errors that would otherwise produce
+        invalid motion correction results.
+
+        MotionCor Argument Construction
+
+        The protocol prepares command-line arguments for MotionCor.
+
+        Internally generated arguments include:
+
+            - frame throwing and truncation
+            - patch geometry
+            - crop center and crop size
+            - binning factor
+            - tolerance
+            - pixel size
+            - accelerating voltage
+            - dose-weighting parameters
+            - gain and dark references
+            - defect handling
+            - EER parameters
+            - anisotropic magnification correction
+
+        This centralized argument generation is one of the main roles of the
+        base class.
+
+        Output Utilities
+
+        After execution, subclasses can use shared utilities to retrieve:
+
+            - movie log file paths
+            - per-frame X/Y shifts
+            - corrected frame ranges
+            - corrected dose parameters
+            - effective binning factors
+
+        The extracted shifts are always reported in pixels, independent of any
+        binning applied during alignment.
+
+        Practical Recommendations
+
+        For routine cryo-EM single-particle processing:
+
+            - Use dose-weighting whenever dose metadata is available.
+            - Use local patch alignment for most modern datasets.
+            - Keep frame grouping modest unless frames are extremely noisy.
+
+        For EER datasets:
+
+            - Carefully choose EER grouping so each fraction contains a useful
+              electron dose.
+            - Ensure the EER frame range follows the required convention.
+
+        For high-resolution work:
+
+            - Check gain orientation carefully.
+            - Verify gain dimensions.
+            - Use anisotropic magnification correction when available.
+
+        Final Perspective
+
+        Motion correction is one of the earliest but most important stages of
+        cryo-EM image processing.
+
+        The ProtMotionCorrBase protocol provides the shared infrastructure
+        needed to prepare movie stacks for accurate downstream analysis.
+        Proper frame range selection, correct detector references, reliable
+        dose metadata, and sensible local alignment settings all directly
+        influence the quality of particle alignment, CTF estimation, and final
+        reconstruction resolution.
+    """
     _label = None
     stepsExecutionMode = STEPS_PARALLEL
     program = Plugin.getProgram()

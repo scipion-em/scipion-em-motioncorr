@@ -54,10 +54,193 @@ class TSMcorrOutputs(Enum):
     tiltSeries = SetOfTiltSeries
 
 class ProtTsMotionCorr(ProtMotionCorrBase):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs motion correction of tilt-series movies using MotionCor,
+    generating aligned tilt-series stacks for cryo-electron tomography.
 
-    Motioncor performs anisotropic drift correction
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Tilt-Series Motion Correction (ProtTsMotionCorr) — User Manual
+        Overview
+
+        The Tilt-Series Motion Correction protocol aligns the movie frames
+        associated with each tilt image of a cryo-electron tomography
+        tilt-series.
+
+        It wraps MotionCor to perform frame alignment independently for
+        each angular movie and then reconstructs the final aligned
+        tilt-series stack.
+
+        This protocol is specifically designed for tomography workflows,
+        where each tilt angle corresponds to an independent movie rather
+        than a single-frame projection.
+
+        Biological Purpose
+
+        In cryo-electron tomography, each tilt image is typically acquired
+        as a movie composed of multiple frames.
+
+        During exposure, beam-induced motion affects each tilt movie,
+        causing image blurring and reducing high-resolution information.
+
+        Correcting motion before tilt-series reconstruction improves:
+
+            - tomogram quality
+            - alignment accuracy
+            - CTF estimation
+            - subtomogram averaging
+            - structural interpretability
+
+        Input Data
+
+        The required input is a SetOfTiltSeriesM.
+
+        Each tilt-series contains multiple tilt-image movies, each
+        associated with a different acquisition angle.
+
+        The protocol processes each angular movie independently and later
+        assembles the corrected outputs into a final tilt-series stack.
+
+        Alignment Workflow
+
+        For every tilt-series, the protocol performs the following steps:
+
+            1. Input preparation
+               Gain, dark, and EER-related correction files are prepared.
+
+            2. Per-angle motion correction
+               Each tilt-image movie is aligned independently.
+
+            3. Stack reconstruction
+               Corrected tilt images are reassembled into a final
+               ordered tilt-series stack.
+
+            4. Output registration
+               The aligned tilt-series is stored in the output set.
+
+        Processing is parallelized across tilt images.
+
+        Frame Range Selection
+
+        Users can define the frame interval used for alignment.
+
+        Optionally, a different frame interval can be used for summation.
+
+        This is especially useful in tomography because some workflows
+        may prefer excluding early or late frames depending on dose
+        accumulation or acquisition conditions.
+
+        Binning and Cropping
+
+        Before alignment, the protocol allows:
+
+            - binning
+            - crop offsets
+            - crop dimensions
+
+        Binning can reduce computational cost and is commonly used during
+        early tomographic preprocessing.
+
+        Cropping may be useful for restricting alignment to a smaller
+        image region when appropriate.
+
+        Patch Alignment
+
+        Although MotionCor supports patch-based local alignment, this
+        protocol disables it by default.
+
+        For tilt-series data, global alignment is generally preferred
+        because local patch alignment is often unstable at high tilt
+        angles where signal-to-noise becomes low.
+
+        Odd/Even Outputs
+
+        The protocol optionally supports odd/even frame splitting.
+
+        When enabled, additional odd-frame and even-frame tilt-series
+        stacks are generated.
+
+        This is especially useful for:
+
+            - denoising workflows
+            - independent half-data validation
+            - machine learning data preparation
+
+        Stack Reconstruction
+
+        After all angular movies have been aligned, the protocol rebuilds
+        the final tilt-series stack.
+
+        The corrected individual images are:
+
+            - sorted by tilt angle
+            - loaded into memory
+            - written into a single MRC stack
+
+        The resulting stack preserves acquisition order and sampling
+        metadata.
+
+        If requested, the temporary individual aligned images are removed
+        after stack creation.
+
+        Output Data
+
+        The main output is a SetOfTiltSeries.
+
+        Each output tilt-series contains:
+
+            - aligned stacked tilt images
+            - original tilt metadata
+            - updated sampling rate
+            - odd/even references when enabled
+
+        This output is directly suitable for downstream tomographic
+        alignment and reconstruction workflows.
+
+        Failed Inputs
+
+        If processing fails for a tilt-series, the input item is copied
+        into a dedicated failed-output set.
+
+        This makes it possible to continue processing the remaining data
+        without stopping the entire tomography workflow.
+
+        Dose Handling in Tomography
+
+        Unlike standard single-particle workflows, dose weighting is
+        disabled here.
+
+        In tomography, dose accumulation is distributed across tilt
+        angles, and the biological interpretation of per-frame dose
+        weighting differs from conventional movie alignment.
+
+        However, dose information is still used internally when needed
+        for frame-dose calculations.
+
+        Practical Recommendations
+
+        In most tomography workflows:
+
+            - keep patch alignment disabled
+            - start with global alignment
+            - use moderate binning for early preprocessing
+            - enable odd/even outputs only when required
+
+        For high-tilt images, careful inspection is recommended because
+        signal quality decreases substantially at extreme angles.
+
+        Final Perspective
+
+        ProtTsMotionCorr adapts movie motion correction to cryo-electron
+        tomography.
+
+        Instead of producing isolated aligned micrographs, it preserves
+        the angular structure of the dataset and reconstructs corrected
+        tilt-series stacks.
+
+        From a biological perspective, this provides cleaner input data
+        for tomogram reconstruction and improves the reliability of
+        downstream structural interpretation.
     """
 
     _label = 'align tilt-series movies'

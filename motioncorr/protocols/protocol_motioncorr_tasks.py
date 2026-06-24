@@ -46,10 +46,184 @@ from .. import Plugin
 
 
 class ProtMotionCorrTasks(ProtMotionCorr):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Performs streaming and batch-based movie alignment using MotionCor
+    with GPU task parallelization.
 
-    Motioncor performs anisotropic drift correction and dose weighting
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Motion Correction Tasks (ProtMotionCorrTasks) — User Manual
+        Overview
+
+        The Motion Correction Tasks protocol is a task-oriented streaming
+        implementation of MotionCor designed for high-throughput cryo-EM
+        movie alignment.
+
+        Unlike the standard movie-by-movie execution model, this protocol
+        groups incoming movies into batches and processes them in parallel
+        across available GPUs.
+
+        It is intended for streaming environments where large volumes of
+        movies must be aligned efficiently during acquisition or automated
+        processing.
+
+        Biological Purpose
+
+        During cryo-EM acquisition, beam-induced specimen motion introduces
+        frame-to-frame drift that reduces high-resolution information.
+
+        This protocol corrects that motion by aligning movie frames and
+        optionally applying dose weighting.
+
+        The resulting aligned micrographs preserve structural signal more
+        effectively and improve downstream steps such as:
+
+            - CTF estimation
+            - particle picking
+            - 2D classification
+            - 3D refinement
+
+        Streaming Task-Based Execution
+
+        This protocol is designed to work in streaming mode.
+
+        Instead of relying on the standard Scipion step-based parallelism,
+        it uses an internal task pipeline.
+
+        The workflow continuously monitors the input movie set and groups
+        newly arriving movies into batches.
+
+        Each batch is then dispatched to an available GPU for parallel
+        processing.
+
+        This architecture allows several groups of movies to be aligned
+        simultaneously, making better use of multi-GPU systems.
+
+        Processing Workflow
+
+        The protocol follows this execution model:
+
+            1. Input preparation
+               Gain, dark, and correction images are converted once.
+
+            2. Streaming monitoring
+               Incoming movies are detected continuously.
+
+            3. Batch formation
+               Movies are grouped according to the selected batch size.
+
+            4. GPU parallel processing
+               Each batch is assigned to one GPU.
+
+            5. Output registration
+               Generated micrographs and metadata are moved into the
+               output streaming sets.
+
+        The protocol continues until the input stream is closed.
+
+        Batch Processing Strategy
+
+        MotionCor is executed in serial mode inside each batch folder,
+        but multiple batches can run in parallel across different GPUs.
+
+        This means:
+
+            - one MotionCor process per GPU
+            - one batch per process
+            - multiple movies handled inside each batch
+
+        If execution fails, the protocol retries the batch once before
+        declaring it failed.
+
+        Dose Weighting and Outputs
+
+        Depending on selected parameters, the protocol may generate:
+
+            - aligned micrographs
+            - dose-weighted micrographs
+            - odd-frame micrographs
+            - even-frame micrographs
+
+        If dose weighting is enabled, dose-weighted outputs become the
+        primary aligned micrographs.
+
+        When odd/even splitting is enabled, independent sums are created
+        from odd and even frames.
+
+        These outputs are useful for downstream validation and
+        half-dataset consistency analyses.
+
+        Output Registration
+
+        After a batch finishes, all generated files are moved from the
+        temporary batch folder into the protocol output directory.
+
+        Successfully processed movies are registered immediately in
+        streaming output sets.
+
+        Missing files are detected automatically and affected movies are
+        marked as failed.
+
+        Motion Metadata
+
+        For each successfully processed movie, the protocol stores motion
+        statistics.
+
+        When dose weighting is enabled, the micrograph can include:
+
+            - accumulated total motion
+            - early-frame accumulated motion
+            - late-frame accumulated motion
+
+        These measurements help identify unstable acquisitions or movies
+        affected by excessive drift.
+
+        GPU Utilization
+
+        A major purpose of this protocol is maximizing GPU throughput.
+
+        Available GPUs are detected and used as independent workers.
+
+        In practical facility environments, this allows alignment to keep
+        pace with microscope acquisition more effectively than traditional
+        one-movie-at-a-time execution.
+
+        Streaming Behavior
+
+        The protocol supports continuous acquisition.
+
+        When no new movies are available, it sleeps for a configurable
+        interval and resumes monitoring afterward.
+
+        By default, the waiting interval is one minute.
+
+        Once acquisition finishes, output sets are explicitly closed.
+
+        Practical Recommendations
+
+        This protocol is especially useful when:
+
+            - data collection is continuous
+            - multiple GPUs are available
+            - rapid feedback during acquisition is important
+            - large datasets must be processed automatically
+
+        For most biological workflows, task-based execution improves
+        throughput without changing the scientific meaning of the
+        motion correction itself.
+
+        Final Perspective
+
+        ProtMotionCorrTasks is optimized for high-throughput streaming
+        cryo-EM environments.
+
+        Its main advantage is not a different alignment algorithm, but a
+        different execution strategy: batching, GPU task parallelization,
+        and immediate streaming output registration.
+
+        From a biological perspective, this means faster movie processing,
+        quicker identification of unstable acquisitions, and more efficient
+        downstream analysis during data collection.
     """
 
     _label = 'tasks'
