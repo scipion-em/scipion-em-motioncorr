@@ -54,10 +54,149 @@ class TSMcorrOutputs(Enum):
     tiltSeries = SetOfTiltSeries
 
 class ProtTsMotionCorr(ProtMotionCorrBase):
-    """ This protocol wraps motioncor movie alignment program developed at UCSF.
+    """
+    Aligns tilt-series movies by correcting beam-induced motion across
+    the individual movie stacks associated with each tilt angle. The
+    protocol produces motion-corrected tilt-series that preserve the
+    angular organization required for downstream tomographic
+    reconstruction.
 
-    Motioncor performs anisotropic drift correction
-        (written by Shawn Zheng @ David Agard lab)
+    AI Generated:
+
+    Tilt-Series Motion Correction (ProtTsMotionCorr) - User Manual
+        Overview
+
+        The Tilt-Series Motion Correction protocol is designed for cryo-electron
+        tomography workflows in which each tilt image is acquired as a movie
+        rather than as a single exposure. Its main purpose is to compensate for
+        beam-induced specimen drift before the tilt-series enters alignment,
+        reconstruction, or subtomogram analysis stages.
+
+        In tomography, even small frame-to-frame movements can propagate into
+        substantial degradation of the final three-dimensional reconstruction.
+        Correcting this motion at the movie level improves image sharpness,
+        enhances high-resolution signal, and stabilizes the geometric
+        consistency of the full angular series.
+
+        Biological Context
+
+        From a biological perspective, this protocol becomes especially valuable
+        when working with fragile cellular material, thick vitrified specimens,
+        or low-dose acquisitions where every projection contributes critically
+        to the final tomogram. Motion correction does not create new signal,
+        but it preserves information that would otherwise be blurred during
+        exposure.
+
+        The protocol is particularly useful for in situ cryo-electron
+        tomography, where biological heterogeneity is already high and where
+        maintaining the quality of every tilt image strongly influences the
+        interpretability of macromolecular features inside the reconstructed
+        volume.
+
+        Inputs and General Workflow
+
+        The protocol takes as input a set of tilt-series movies. Each tilt
+        angle is treated as an independent movie exposure, but the final goal
+        is not simply to improve isolated images. Instead, the protocol
+        preserves the integrity of the ordered angular series so that the
+        resulting dataset remains immediately usable for tomographic processing.
+
+        A practical requirement is that all movies in a tilt-series should
+        belong to the same acquisition geometry and should have consistent
+        metadata. Maintaining correct tilt ordering is biologically important
+        because the downstream reconstruction assumes that every corrected
+        projection remains associated with its original acquisition angle.
+
+        Frame Selection and Dose Considerations
+
+        Users can define which movie frames contribute to alignment and which
+        frames contribute to the final summed image. This provides an important
+        degree of biological control because early frames often contain better
+        high-resolution information, while later frames may be more affected by
+        radiation damage.
+
+        In low-dose tomography experiments, thoughtful frame selection can
+        improve contrast and preserve structural information. Excluding highly
+        damaged late frames may be beneficial, especially for sensitive
+        macromolecular assemblies or when the total accumulated dose approaches
+        biological limits.
+
+        Binning and Cropping
+
+        The protocol allows spatial binning before correction. Binning reduces
+        computational cost and may improve robustness in noisy datasets. For
+        many exploratory tomography workflows, moderate binning is practical,
+        especially when the immediate objective is coarse tilt-series alignment
+        rather than high-resolution subtomogram refinement.
+
+        Cropping can also be used to restrict the corrected field of view.
+        Biologically, this may be helpful when large empty regions, thick ice,
+        or detector artifacts occupy substantial portions of the images.
+        However, cropping should be applied cautiously so that relevant
+        biological structures remain fully represented across all tilt angles.
+
+        Odd and Even Frame Splitting
+
+        An optional feature generates independent odd-frame and even-frame
+        corrected outputs. This is particularly useful for denoising,
+        validation, and data partitioning workflows.
+
+        For biological users, these paired outputs can support later
+        noise-aware processing strategies or help evaluate the reproducibility
+        of weak structural signal. Although these split outputs are not
+        typically the primary dataset used for reconstruction, they can become
+        valuable in advanced tomographic workflows.
+
+        Output Tilt-Series and Interpretation
+
+        The main result is a corrected tilt-series in which every projection
+        retains its original angular identity while benefiting from motion
+        compensation. This preserves compatibility with downstream tilt-series
+        alignment, tomogram reconstruction, and subtomogram averaging.
+
+        The resulting tilt-series should generally display improved local
+        contrast, sharper particle boundaries, and more stable fiducial or
+        structural landmarks. These improvements are often most visible during
+        subsequent alignment stages, where better projection quality typically
+        translates into more reliable geometric fitting.
+
+        Failed Data and Robust Workflow Handling
+
+        In practical tomography experiments, some tilt images may fail because
+        of acquisition problems, corrupted files, or extreme image quality
+        issues. The protocol is designed to preserve workflow continuity by
+        separating unsuccessful items from successfully corrected data.
+
+        This behavior is biologically useful because tomography datasets often
+        contain large numbers of tilt-series, and failure of a small subset
+        should not necessarily interrupt processing of the full experiment.
+
+        Practical Recommendations
+
+        For routine cryo-electron tomography, a sensible strategy is to begin
+        with standard frame alignment using default parameters and modest
+        binning if the data are noisy. After correction, visual inspection of
+        several representative tilt images is strongly recommended.
+
+        When preparing datasets for high-resolution subtomogram analysis, it is
+        often worth using conservative cropping, preserving all biologically
+        relevant image regions, and carefully considering whether damaged late
+        frames should contribute to the final summed projections.
+
+        If the dataset will be used mainly for exploratory cellular
+        visualization, speed and robustness may be more important than
+        aggressive parameter optimization.
+
+        Final Perspective
+
+        In cryo-electron tomography, motion correction is not simply an image
+        cleanup step. It is an essential early operation that directly affects
+        the quality of every subsequent reconstruction and interpretation.
+
+        Reliable correction of tilt-series movies improves the consistency of
+        angular projections, protects fragile biological signal, and increases
+        the likelihood that downstream tomograms will faithfully represent the
+        native structural organization of the specimen.
     """
 
     _label = 'align tilt-series movies'
