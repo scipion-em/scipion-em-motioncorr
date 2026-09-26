@@ -65,6 +65,7 @@ class MotionCorrOutputs(Enum):
     micrographsDW = SetOfMicrographs()
     micrographsEven = SetOfMicrographs()
     micrographsOdd = SetOfMicrographs()
+    moviesFailed = SetOfMovies()
 
 
 class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
@@ -311,16 +312,51 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
-        self._closeOutputSet()
         attribList = [attrib] if type(attrib) is str else attrib
         failedOutputList = []
         for attr in attribList:
-            outTsSet = getattr(self, attr, None)
-            if not outTsSet or (outTsSet and len(outTsSet) == 0):
+            outputSet = getattr(self, attr, None)
+            if not outputSet or len(outputSet) == 0:
                 failedOutputList.append(attr)
+
+        if self.failedMovies:
+            if len(failedOutputList) == len(attribList):
+                raise RuntimeError(
+                    f"Motioncor failed for all {len(self.failedMovies)} movie(s). "
+                    "No useful output was generated."
+                )
+
+            self._createFailedMoviesOutput()
+            self.warning(
+                f"Motioncor failed for {len(self.failedMovies)} movie(s). "
+                f"They are available in '{self._possibleOutputs.moviesFailed.name}'."
+            )
+
         if failedOutputList:
-            raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
-                            f'Output Log > run.stdout and run.stderr')
+            raise RuntimeError(
+                f"No output/s {failedOutputList} were generated. "
+                "Please check the Output Log > run.stdout and run.stderr"
+            )
+
+        self._closeOutputSet()
+
+    def _createFailedMoviesOutput(self):
+        """Publish locally failed movies as a regular Scipion output Set."""
+        inputMovies = self.getInputMovies()
+        failedNames = set(self.failedMovies)
+        outputName = self._possibleOutputs.moviesFailed.name
+
+        failedMovies = self._createSetOfMovies(suffix='failed')
+        failedMovies.copyInfo(inputMovies)
+
+        for movie in inputMovies.iterItems():
+            if movie.getFileName() in failedNames:
+                failedMovies.append(movie.clone())
+
+        failedMovies.setStreamState(Set.STREAM_CLOSED)
+        failedMovies.write()
+        self._defineOutputs(**{outputName: failedMovies})
+        self._defineSourceRelation(self.getInputMovies(asPointer=True), failedMovies)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
