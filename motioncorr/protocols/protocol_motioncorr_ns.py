@@ -264,52 +264,56 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
             return
-        try:
-            if self.doSaveMovie.get():
-                outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
-                setMRCSamplingRate(outMovieFn, self.sRate)
-            else:
-                outMovieFn = movieFName
-            with self._lock:
+        if self.doSaveMovie.get():
+            outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
+            setMRCSamplingRate(outMovieFn, self.sRate)
+        else:
+            outMovieFn = movieFName
+
+        with self._lock:
                 # SET OF MOVIES ----------------------------------------------------------------
                 outputMovies = self._getOutputMovies()
-                outMovie = Movie()
-                outMovie.copyInfo(inMovie)
-                outMovie.setFileName(outMovieFn)
-                outMovie.setMicName(basename(outMovieFn))
-                # Movie alignment
-                n = outMovie.getNumberOfFrames()
-                alignment = self.getMovieAlignment(movieFName, n)
-                outMovie.setAlignment(alignment)
-                # Data persistence
-                outputMovies.append(outMovie)
-                outputMovies.update(outMovie)
-                outputMovies.write()
-                self._store(outputMovies)
+                if (len(outputMovies) == 0 or
+                        inMovie.getObjId() not in outputMovies):
+                    outMovie = Movie()
+                    outMovie.copyInfo(inMovie)
+                    outMovie.setFileName(outMovieFn)
+                    outMovie.setMicName(basename(outMovieFn))
+                    # Movie alignment
+                    n = outMovie.getNumberOfFrames()
+                    alignment = self.getMovieAlignment(movieFName, n)
+                    outMovie.setAlignment(alignment)
+                    # Data persistence
+                    outputMovies.append(outMovie)
+                    outputMovies.update(outMovie)
+                    outputMovies.write()
+                    self._store(outputMovies)
 
                 # SET OF MICROGRAPHS ----------------------------------------------------------
-                if self.doApplyDoseFilter.get():
-                    suffix = DW_SUFFIX
-                    outputName = self._possibleOutputs.micrographsDW.name
-                else:
-                    suffix = ''
-                    outputName = self._possibleOutputs.micrographs.name
-                self._registerMics(movieFName, inMovie, outputName, suffix=suffix)
-                if self.splitEvenOdd.get():
-                    # Even
-                    outputName = self._possibleOutputs.micrographsEven.name
-                    self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX)
-                    # Odd
-                    outputName = self._possibleOutputs.micrographsOdd.name
-                    self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX)
+                try:
+                    if self.doApplyDoseFilter.get():
+                        suffix = DW_SUFFIX
+                        outputName = self._possibleOutputs.micrographsDW.name
+                    else:
+                        suffix = ''
+                        outputName = self._possibleOutputs.micrographs.name
+                    self._registerMics(movieFName, inMovie, outputName, suffix=suffix)
+                    if self.splitEvenOdd.get():
+                        # Even
+                        outputName = self._possibleOutputs.micrographsEven.name
+                        self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX)
+                        # Odd
+                        outputName = self._possibleOutputs.micrographsOdd.name
+                        self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX)
 
-                # Close explicitly the outputs (for streaming)
-                self.closeOutputsForStreaming()
+                    # Close explicitly the outputs (for streaming)
+                    self.closeOutputsForStreaming()
 
-        except Exception as e:
-            logger.error(
-                redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}. Skipping... '))
-            logger.error(traceback.format_exc())
+                except Exception as e:
+                    logger.error(
+                        redStr(f'Movie = {movieFName} -> Unable to register the output with exception {e}.'))
+                    logger.error(traceback.format_exc())
+                    raise
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         attribList = [attrib] if type(attrib) is str else attrib
@@ -393,8 +397,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputList.append(mics)
 
         if movies and None not in outputList:
+            completedIds = set(item.getObjId() for item in movies)
+            for outputSet in outputList:
+                completedIds.intersection_update(
+                    item.getObjId() for item in outputSet
+                )
+
+            completedIds.intersection_update(
+                self.getInputMovies().getUniqueValues('id')
+            )
+
             for item in movies:
-                self.itemIdReadList.append(item.getObjId())
+                if item.getObjId() in completedIds:
+                    self.itemIdReadList.append(item.getObjId())
+
             self.info(cyanStr(f'Ids processed: {self.itemIdReadList}'))
         else:
             self.info(cyanStr('No movies have been processed yet'))
@@ -453,6 +469,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                       inMovie: Movie, outputName: str,
                       suffix: str = '') -> None:
         outMicSet = self._getOutputMics(outputName, suffix=suffix)
+        if (len(outMicSet) > 0 and
+                inMovie.getObjId() in outMicSet):
+            return
+
         outMic = Micrograph()
         outMic.copyInfo(inMovie)
         micFn = self._getResultMicFn(movieFName, suffix=suffix)
