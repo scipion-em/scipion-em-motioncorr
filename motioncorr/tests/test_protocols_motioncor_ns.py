@@ -28,12 +28,14 @@
 # *
 # **************************************************************************
 import os.path
+from unittest.mock import patch
 
 from pwem.protocols import ProtImportMovies
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
 from ..protocols import ProtMotionCorrTasks, ProtMotionCorrNewStreaming
+from ..protocols.protocol_base import ProtMotionCorrBase
 
 
 class TestMotioncorNSAlignMovies(BaseTest):
@@ -182,3 +184,33 @@ class TestMotioncorNSAlignMovies(BaseTest):
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
+
+class TestMotioncorrNSStreamingConfiguration(BaseTest):
+    # Regression tests for the New Streaming execution configuration.
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testNewStreamingUsesAtLeastTwoThreadsByDefault(self):
+        prot = self.newProtocol(ProtMotionCorrNewStreaming)
+
+        self.assertGreaterEqual(
+            prot.numberOfThreads.get(),
+            2,
+            "ProtStreamingBase needs one thread for the generator and "
+            "at least one more for processing steps.",
+        )
+
+    def testNewStreamingRejectsSingleThread(self):
+        prot = self.newProtocol(ProtMotionCorrNewStreaming)
+        prot.numberOfThreads.set(1)
+
+        with patch.object(ProtMotionCorrBase, '_validate', return_value=[]):
+            errors = prot._validate()
+
+        self.assertTrue(
+            any('At least 2 threads' in error for error in errors),
+            "ProtMotionCorrNewStreaming must preserve ProtStreamingBase "
+            "thread validation.",
+        )

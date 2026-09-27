@@ -100,6 +100,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                       help='Select a set of previously imported movies.')
         self._defineAlignmentParams(form)
         self._defineCommonParams(form)
+        # ProtStreamingBase keeps the generator step running while
+        # processing steps consume additional executor threads.
+        form.getParam('numberOfThreads').setDefault(2)
 
     @staticmethod
     def _defineAlignmentParams(form):
@@ -378,7 +381,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         return summary
 
     def _validate(self):
-        return ProtMotionCorrBase._validate(self)
+        errors = ProtMotionCorrBase._validate(self)
+        self._validateThreads(errors)
+        return errors
 
     # --------------------------- UTILS functions -----------------------------
     def readingOutput(self) -> None:
