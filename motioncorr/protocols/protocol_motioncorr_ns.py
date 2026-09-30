@@ -46,7 +46,6 @@ from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, Movie
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport
-from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from .. import Plugin
 from .protocol_base import ProtMotionCorrBase
 from ..convert import parseMovieAlignment2
@@ -175,6 +174,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.readingOutput()
         outputsToCheck = self._getOutputsToCheck()
 
+        prepareInputStepId = self._insertFunctionStep(
+            self._convertInputStep,
+            prerequisites=[],
+            needsGPU=False,
+        )
+
         while True:
             with self._lock:
                 inIds = set(inMoviesSet.getUniqueValues('id'))
@@ -195,14 +200,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                    if (objId := movie.getObjId()) in nonProcessedIds}
             for objId, movie in moviesToProcessDict.items():
                 movieFName = movie.getFileName()
-                cInPId = self._insertFunctionStep(self.convertInputStep,
-                                                  movieFName,
-                                                  prerequisites=[],
-                                                  needsGPU=False)
-                pMovPid = self._insertFunctionStep(self.processMovieStep,
-                                                   movieFName,
-                                                   prerequisites=cInPId,
-                                                   needsGPU=True)
+                pMovPid = self._insertFunctionStep(
+                    self.processMovieStep,
+                    movieFName,
+                    prerequisites=prepareInputStepId,
+                    needsGPU=True,
+                )
                 cOutId = self._insertFunctionStep(self.createOutputStep,
                                                   movieFName,
                                                   movie,
@@ -244,33 +247,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             )
 
         self.isEER = getExt(firstItem.getFileName()) == ".eer"
-
-    def convertInputStep(self, movieFName: str):
-        try:
-            # Convert the gain and dark images if they haven't been
-            # converted yet (DONE marker) and only if a gain/dark
-            # reference is actually configured. `and` binds tighter
-            # than `or` in Python, so parenthesize explicitly - without
-            # it, "self.dark or self.gain and not exists(DONE)" is
-            # "self.dark or (self.gain and not exists(DONE))", which is
-            # unconditionally True whenever a dark reference is
-            # configured, ignoring the DONE marker entirely and
-            # reconverting on every single movie forever.
-            #
-            # convertInputStep is inserted per-movie with no ordering
-            # between movies under STEPS_PARALLEL, so double-checked
-            # locking is needed here too: without it, multiple workers
-            # could race to convert/write the same shared correction
-            # image file (__convertCorrectionImage) concurrently.
-            if (self.dark or self.gain) and not exists(self._getExtraPath('DONE')):
-                with self._lock:
-                    if not exists(self._getExtraPath('DONE')):
-                        super()._convertInputStep()
-        except Exception as e:
-            self.failedMovies.append(movieFName)
-            logger.error(redStr(f"ERROR: movie convert failed for {movieFName} with the exception {e}"))
-            traceback.print_exc()
-
     def processMovieStep(self, movieFName: str):
         if movieFName in self.failedMovies:
             return
@@ -308,7 +284,6 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                 f"with the exception {e}"))
             traceback.print_exc()
 
-    @retry_on_sqlite_lock(log=logger)
     def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
             return
@@ -316,14 +291,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if self.doSaveMovie.get():
             outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
             try:
-                # Only the data-building call is isolated here, not the
-                # persistence calls below (append/update/write/_store),
-                # which must keep propagating: retry_on_sqlite_lock
-                # needs a real sqlite-lock exception to reach it to
-                # retry, and a persistence failure is exactly what
-                # test_CreateOutputDoesNotSwallowProtocolStoreFailure
-                # deliberately keeps loud instead of silently routing
-                # to failedMovies.
+                # Only the data-building call is isolated here.
+                # Persistence failures below (append/update/write/_store)
+                # must keep propagating instead of being converted into
+                # per-movie processing failures.
                 setMRCSamplingRate(outMovieFn, self.sRate)
             except Exception as e:
                 self.failedMovies.append(movieFName)
@@ -341,6 +312,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                         inMovie.getObjId() not in outputMovies):
                     outMovie = Movie()
                     outMovie.copyInfo(inMovie)
+                    outMovie.copyObjId(inMovie)
                     outMovie.setFileName(outMovieFn)
                     outMovie.setMicName(basename(outMovieFn))
                     # Movie alignment
@@ -553,6 +525,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         outMic = Micrograph()
         outMic.copyInfo(inMovie)
+        outMic.copyObjId(inMovie)
         micFn = self._getResultMicFn(movieFName, suffix=suffix)
         setMRCSamplingRate(micFn, self.sRate)
         outMic.setFileName(micFn)
@@ -569,7 +542,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name
         outputMovies = getattr(self, attrName, None)
-        if outputMovies:
+        if outputMovies is not None:
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
@@ -589,7 +562,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 og.updateAll(**ogDict)
                 og.toImages(outputMovies)
             outputMovies.setStreamState(Set.STREAM_OPEN)
-            outputMovies.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
+            outputMovies.write()  # Persist set properties before exposing the streaming output.
 
             self._defineOutputs(**{attrName: outputMovies})
             self._defineSourceRelation(inputMoviesPointer, outputMovies)
@@ -616,7 +589,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def _getOutputMics(self, outputName: str, suffix: str = '') -> SetOfMicrographs:
         outputMics = getattr(self, outputName, None)
-        if outputMics:
+        if outputMics is not None:
             outputMics.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
@@ -624,7 +597,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMics.copyInfo(self.getInputMovies())
             outputMics.setSamplingRate(self.sRate)
             outputMics.setStreamState(Set.STREAM_OPEN)
-            outputMics.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
+            outputMics.write()  # Persist set properties before exposing the streaming output.
 
             self._defineOutputs(**{outputName: outputMics})
             self._defineSourceRelation(inputMoviesPointer, outputMics)
@@ -647,7 +620,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         # Close explicitly the outputs (for streaming)
         for outputName in self._possibleOutputs:
             output = getattr(self, outputName.name, None)
-            if output:
+            if output is not None:
                 output.close()
 
     def _getFrameRange(self, n: int, prefix: str) -> Tuple[int, int]:
@@ -682,7 +655,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         # when using EER, the hardware frames are grouped
         if self.isEER:
             dose *= self.eerGroup.get()
-        cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
+        # dose can legitimately be 0.0 when the acquisition's dose per
+        # frame is missing (_getCorrectedDose degrades to 0.0 instead
+        # of crashing, and this is now a non-blocking _warnings()
+        # notice rather than a hard _validate() error) - without a
+        # known dose there is no way to tell when 4 e/A^2 was reached,
+        # so treat every frame as "early" instead of raising
+        # ZeroDivisionError.
+        cutoff = (4 - preExp) // dose if dose else nframes  # early is <= 4e/A^2
         total, early, late = 0., 0., 0.
         x, y, xOld, yOld = 0., 0., 0., 0.
         try:

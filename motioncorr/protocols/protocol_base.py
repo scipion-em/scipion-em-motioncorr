@@ -190,7 +190,6 @@ class ProtMotionCorrBase(EMProtocol):
         logger.info(cyanStr('Converting the inputs (gain, dark and /or EER)...'))
         inputMovies = self.getInputMovies()
         self._prepareEERFiles()
-        pwutils.makePath(self._getExtraPath('DONE'))
 
         # Convert gain
         gain = inputMovies.getGain()
@@ -260,6 +259,18 @@ class ProtMotionCorrBase(EMProtocol):
             if self.alignFrame0 >= self.alignFrameN:
                 errors.append(msg)
 
+        # check dose for DW
+        if self.doApplyDoseFilter:
+            acq = inputMovies.getAcquisition()
+            dose = acq.getDosePerFrame()
+            if dose is None or dose < 0.00001:
+                errors.append(
+                    "Input movies do not contain the dose information, "
+                    "dose-weighting can not be performed. Either provide "
+                    "the dose per frame in the input movies' acquisition, "
+                    "or turn off 'Apply dose filtering'."
+                )
+
         # check gain dimensions and extension
         if inputMovies.getGain() and exists(inputMovies.getGain()):
             ih = ImageHandler()
@@ -273,21 +284,6 @@ class ProtMotionCorrBase(EMProtocol):
                               f"do not match the movies ({imgx} x {imgy})!")
 
         return errors
-
-    def _warnings(self):
-        warnings = []
-
-        if self.doApplyDoseFilter:
-            acq = self.getInputMovies().getAcquisition()
-            dose = acq.getDosePerFrame()
-            if dose is None or dose < 0.00001:
-                warnings.append(
-                    "Input movies do not contain the dose information. "
-                    "Dose-weighting will be skipped (dose treated as 0) "
-                    "for movies missing it."
-                )
-
-        return warnings
 
     def _methods(self):
         methods = []

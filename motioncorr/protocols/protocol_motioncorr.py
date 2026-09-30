@@ -399,7 +399,14 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         # when using EER, the hardware frames are grouped
         if self.isEER:
             dose *= self.eerGroup.get()
-        cutoff = (4 - preExp) // dose  # early is <= 4e/A^2
+        # dose can legitimately be 0.0 when the acquisition's dose per
+        # frame is missing (_getCorrectedDose degrades to 0.0 instead
+        # of crashing, and this is now a non-blocking _warnings()
+        # notice rather than a hard _validate() error) - without a
+        # known dose there is no way to tell when 4 e/A^2 was reached,
+        # so treat every frame as "early" instead of raising
+        # ZeroDivisionError.
+        cutoff = (4 - preExp) // dose if dose else nframes  # early is <= 4e/A^2
         total, early, late = 0., 0., 0.
         x, y, xOld, yOld = 0., 0., 0., 0.
         pix = self.getSamplingRate()

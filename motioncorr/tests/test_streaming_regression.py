@@ -5,6 +5,7 @@
 # **************************************************************************
 
 import unittest
+from unittest.mock import patch
 
 from motioncorr.protocols.protocol_motioncorr import ProtMotionCorr
 from motioncorr.protocols.protocol_base import ProtMotionCorrBase
@@ -161,51 +162,151 @@ class TestMotionCorrCorrectedDoseRegression(unittest.TestCase):
         self.assertEqual(2.0, dose)
 
 
+class _ValidateMovie:
+    def __init__(self, fileName):
+        self._fileName = fileName
+
+    def getFileName(self):
+        return self._fileName
+
+
+class _ValidateInputMovies:
+    def __init__(self, acquisition, gain=None):
+        self._acquisition = acquisition
+        self._gain = gain
+        self._movie = _ValidateMovie("movie_001.mrc")
+
+    def getFirstItem(self):
+        return self._movie
+
+    def getAcquisition(self):
+        return self._acquisition
+
+    def getGain(self):
+        return self._gain
+
+
 class _DoseValidateHarness(ProtMotionCorrBase):
     def __init__(self, acquisition, doApplyDoseFilter):
-        self._inputMovies = _DoseInputMovies(acquisition)
+        self._inputMovies = _ValidateInputMovies(acquisition)
         self.doApplyDoseFilter = _Value(doApplyDoseFilter)
+        self.alignFrame0 = _Value(1)
+        self.alignFrameN = _Value(0)
 
     def getInputMovies(self):
         return self._inputMovies
 
+    def _getNumberOfFrames(self):
+        return 10
 
-class TestMotionCorrMissingDoseWarningRegression(unittest.TestCase):
-    # A missing dose no longer blocks the protocol from being
-    # launched at all (_getCorrectedDose now degrades gracefully to
-    # 0.0) - it must instead surface as a non-blocking _warnings()
-    # message the user can approve past, not a hard _validate() error.
 
-    def testMissingDoseIsAWarningNotAValidationError(self):
+class TestMotionCorrMissingDoseValidationRegression(unittest.TestCase):
+    # Regression test: a missing dose was briefly turned into a
+    # non-blocking _warnings() notice (letting the protocol launch
+    # with dose treated as 0), but that surfaced worse downstream
+    # failures - MotionCor2 itself silently skips writing a
+    # dose-weighted output when given -FmDose 0, so the protocol later
+    # crashed in createOutputStep looking for a _DW.mrc file that was
+    # never produced. Missing dose with doApplyDoseFilter on must go
+    # back to blocking the launch with a clear _validate() error.
+
+    def testMissingDoseBlocksLaunchWhenDoseFilterIsOn(self):
         harness = _DoseValidateHarness(
             _Acquisition(doseInitial=None, dosePerFrame=None),
             doApplyDoseFilter=True,
         )
 
-        warnings = ProtMotionCorrBase._warnings(harness)
+        module = "motioncorr.protocols.protocol_base"
+        with patch(module + ".exists", return_value=True):
+            errors = ProtMotionCorrBase._validate(harness)
 
-        self.assertEqual(1, len(warnings))
-        self.assertIn("dose", warnings[0].lower())
+        self.assertEqual(1, len(errors))
+        self.assertIn("dose", errors[0].lower())
 
-    def testNoWarningWhenDoseFilterIsOff(self):
+    def testMissingDoseDoesNotBlockLaunchWhenDoseFilterIsOff(self):
         harness = _DoseValidateHarness(
             _Acquisition(doseInitial=None, dosePerFrame=None),
             doApplyDoseFilter=False,
         )
 
-        warnings = ProtMotionCorrBase._warnings(harness)
+        module = "motioncorr.protocols.protocol_base"
+        with patch(module + ".exists", return_value=True):
+            errors = ProtMotionCorrBase._validate(harness)
 
-        self.assertEqual([], warnings)
+        self.assertEqual([], errors)
 
-    def testNoWarningWhenDoseIsPresent(self):
+    def testPresentDoseDoesNotBlockLaunch(self):
         harness = _DoseValidateHarness(
             _Acquisition(doseInitial=1.0, dosePerFrame=2.0),
             doApplyDoseFilter=True,
         )
 
-        warnings = ProtMotionCorrBase._warnings(harness)
+        module = "motioncorr.protocols.protocol_base"
+        with patch(module + ".exists", return_value=True):
+            errors = ProtMotionCorrBase._validate(harness)
 
-        self.assertEqual([], warnings)
+        self.assertEqual([], errors)
+
+
+class _FrameMotionHarness:
+    # Minimal harness shared by both calcFrameMotion regression tests
+    # below (classic ProtMotionCorr and ProtMotionCorrNewStreaming
+    # share the same calcFrameMotion shape and bug).
+    def __init__(self, dose):
+        self.isEER = False
+        self.sRate = 1.0
+        self._dose = dose
+
+    def _getMovieShifts(self, movie):
+        return [0.0, 1.0, 2.0], [0.0, 1.0, 2.0]
+
+    def _getFramesRange(self):
+        return 1, 3
+
+    def _getCorrectedDose(self):
+        return 0.0, self._dose
+
+    def getSamplingRate(self):
+        return self.sRate
+
+
+class TestMotionCorrCalcFrameMotionZeroDoseRegression(unittest.TestCase):
+    # Regression test: once a missing dose became a non-blocking
+    # _warnings() notice instead of a hard _validate() error (see
+    # TestMotionCorrMissingDoseWarningRegression above),
+    # _getCorrectedDose legitimately returns dose == 0.0 for a movie
+    # whose acquisition never had a dose per frame. calcFrameMotion's
+    # "cutoff = (4 - preExp) // dose" had no guard for that, crashing
+    # with ZeroDivisionError - in protocol_motioncorr_ns.py this
+    # happens inside createOutputStep's SET OF MICROGRAPHS block,
+    # which deliberately re-raises (fail-loud for output Set
+    # integrity), so it crashed the whole protocol rather than just
+    # that one micrograph.
+
+    def testNewStreamingCalcFrameMotionDoesNotCrashOnZeroDose(self):
+        from motioncorr.protocols.protocol_motioncorr_ns import (
+            ProtMotionCorrNewStreaming,
+        )
+
+        harness = _FrameMotionHarness(dose=0.0)
+
+        total, early, late = ProtMotionCorrNewStreaming.calcFrameMotion(
+            harness, "movie_001.mrc")
+
+        self.assertGreater(total, 0.0)
+        # With no known dose, every frame is treated as "early".
+        self.assertEqual(total, early)
+        self.assertEqual(0.0, late)
+
+    def testClassicCalcFrameMotionDoesNotCrashOnZeroDose(self):
+        harness = _FrameMotionHarness(dose=0.0)
+
+        total, early, late = ProtMotionCorr.calcFrameMotion(
+            harness, "movie_001.mrc")
+
+        self.assertGreater(total, 0.0)
+        self.assertEqual(total, early)
+        self.assertEqual(0.0, late)
 
 
 if __name__ == "__main__":
