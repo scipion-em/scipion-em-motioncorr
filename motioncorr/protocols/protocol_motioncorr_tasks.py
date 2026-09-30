@@ -273,7 +273,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
 
     def _setPlotInfo(self, movie, mic):
         # FIXME: For now not support PSD or Thumbnail
-        if self.doApplyDoseFilter:
+        if self.doApplyDoseFilter and self._hasValidDose():
             total, early, late = self.calcFrameMotion(movie)
             mic._rlnAccumMotionTotal = Float(total)
             mic._rlnAccumMotionEarly = Float(early)

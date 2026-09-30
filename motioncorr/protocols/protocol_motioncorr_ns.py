@@ -339,20 +339,30 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
                 # SET OF MICROGRAPHS ----------------------------------------------------------
                 try:
-                    if self.doApplyDoseFilter.get():
+                    # Match _getMcArgs: MotionCor2 was only asked to
+                    # dose-weight (and therefore only writes a _DW
+                    # output) when a usable dose was actually
+                    # available - requesting the DW output here
+                    # whenever doApplyDoseFilter is merely checked on
+                    # the form would look for a file that was never
+                    # produced.
+                    if self.doApplyDoseFilter.get() and self._hasValidDose():
                         suffix = DW_SUFFIX
                         outputName = self._possibleOutputs.micrographsDW.name
                     else:
                         suffix = ''
                         outputName = self._possibleOutputs.micrographs.name
-                    self._registerMics(movieFName, inMovie, outputName, suffix=suffix)
+                    if not self._registerMics(movieFName, inMovie, outputName, suffix=suffix):
+                        return
                     if self.splitEvenOdd.get():
                         # Even
                         outputName = self._possibleOutputs.micrographsEven.name
-                        self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX)
+                        if not self._registerMics(movieFName, inMovie, outputName, suffix=EVEN_SUFFIX):
+                            return
                         # Odd
                         outputName = self._possibleOutputs.micrographsOdd.name
-                        self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX)
+                        if not self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX):
+                            return
 
                     # Close explicitly the outputs (for streaming)
                     self.closeOutputsForStreaming()
@@ -474,7 +484,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
-        if self.doApplyDoseFilter.get():
+        if self.doApplyDoseFilter.get() and self._hasValidDose():
             total, early, late = self.calcFrameMotion(movieFName)
             mic._rlnAccumMotionTotal = Float(total)
             mic._rlnAccumMotionEarly = Float(early)
@@ -517,20 +527,36 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _registerMics(self,
                       movieFName: str,
                       inMovie: Movie, outputName: str,
-                      suffix: str = '') -> None:
+                      suffix: str = '') -> bool:
         outMicSet = self._getOutputMics(outputName, suffix=suffix)
         if (len(outMicSet) > 0 and
                 inMovie.getObjId() in outMicSet):
-            return
+            return True
 
         outMic = Micrograph()
         outMic.copyInfo(inMovie)
         outMic.copyObjId(inMovie)
         micFn = self._getResultMicFn(movieFName, suffix=suffix)
-        setMRCSamplingRate(micFn, self.sRate)
-        outMic.setFileName(micFn)
-        outMic.setSamplingRate(self.sRate)
-        self.setMicPlotInfo(outMic, movieFName)
+        try:
+            # Isolate data-building (reading the mic's own header,
+            # parsing its alignment log for frame-motion stats) from
+            # the persistence calls below. The external tool can
+            # finish successfully without producing every expected
+            # output file for a given movie (e.g. too few frames for
+            # dose weighting) - a missing/unreadable file here must
+            # not crash the whole protocol, but persistence stays
+            # unprotected like everywhere else in this class.
+            setMRCSamplingRate(micFn, self.sRate)
+            outMic.setFileName(micFn)
+            outMic.setSamplingRate(self.sRate)
+            self.setMicPlotInfo(outMic, movieFName)
+        except Exception as e:
+            self.failedMovies.append(movieFName)
+            logger.error(redStr(f"ERROR: Registering micrograph output failed for "
+                                f"{movieFName} with the exception {e}"))
+            traceback.print_exc()
+            return False
+
         if suffix in [DW_SUFFIX, '']:
             self.setMicsEvenOdd(movieFName, outMic)
         # Data persistence
@@ -538,6 +564,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         outMicSet.update(outMic)
         outMicSet.write()
         self._store(outMicSet)
+        return True
 
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name

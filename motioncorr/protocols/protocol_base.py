@@ -332,7 +332,7 @@ class ProtMotionCorrBase(EMProtocol):
             '-FtBin': self.binFactor.get(),
             '-Tol': self.tol.get(),
             '-PixSize': inputMovies.getSamplingRate(),
-            '-kV': inputMovies.getAcquisition().getVoltage(),
+            '-kV': self._getCachedAcquisitionValues()[0],
             '-Cs': 0,
             '-OutStack': 1 if self.doSaveMovie else 0,
             '-Gpu': '%(GPU)s',
@@ -344,7 +344,7 @@ class ProtMotionCorrBase(EMProtocol):
             argsDict.update({'-EerSampling': self.eerSampling.get() + 1,
                              '-FmIntFile': self._getExtraPath("FmIntFile.txt")})
 
-        if self.doApplyDoseFilter:
+        if self.doApplyDoseFilter and self._hasValidDose():
             preExp, dose = self._getCorrectedDose(acqOrder)
             argsDict['-InitDose'] = preExp if preExp > 0.001 else 0
             if not self.isEER:
@@ -433,19 +433,78 @@ class ProtMotionCorrBase(EMProtocol):
 
     def _getDoseParams(self):
         """ Precalculate params in advance. """
-        acq = self.getInputMovies().getAcquisition()
-        preExp = acq.getDoseInitial()
-        dose = acq.getDosePerFrame()
+        voltage, preExp, dose = self._getCachedAcquisitionValues()
 
-        return acq, preExp, dose
+        return voltage, preExp, dose
 
     def __getFramesRange(self):
         """ Returns frames range for input movies. """
         return self.getInputMovies().getFramesRange()
 
+    def _getCachedAcquisitionValues(self):
+        """ Resolve the input movies' Acquisition-derived scalars
+        (voltage, initial dose, dose per frame) once per run and reuse
+        the same plain floats afterwards.
+
+        _getMcArgs, _getDoseParams (and therefore _getCorrectedDose) and
+        _hasValidDose all need these values and are each called
+        multiple times per movie. Every one of those call sites used
+        to do its own fresh self.getInputMovies().getAcquisition(),
+        which is unreliable across calls.
+
+        Caching a reference to the Acquisition OBJECT (an earlier
+        version of this fix) is not enough, even serialized with
+        self._lock: the object can still be mutated in place later by
+        something unrelated - e.g. stepsGeneratorStep's periodic
+        "with self._lock: inMoviesSet.loadAllProperties()" refresh,
+        which reloads properties on whatever SetOfMovies/Acquisition
+        instances the runtime is tracking. Confirmed in production:
+        the very first movie resolved voltage/dose correctly and that
+        Acquisition reference got cached, yet a later movie mid-run
+        still saw -kV/-FmDose come out as None/0.0, because the
+        cached object's OWN fields had been reset in place by that
+        later refresh, not because the reference itself changed.
+        Copying the plain float values out once, instead of holding a
+        reference to the mutable object, removes any dependence on
+        that object's lifetime or mutability - a bare float can't be
+        reached and rewritten by unrelated code the way an Acquisition
+        object can. """
+        if not hasattr(self, '_cachedAcquisitionValues'):
+            with self._lock:
+                if not hasattr(self, '_cachedAcquisitionValues'):
+                    acq = self.getInputMovies().getAcquisition()
+                    self._cachedAcquisitionValues = (
+                        acq.getVoltage(),
+                        acq.getDoseInitial(),
+                        acq.getDosePerFrame(),
+                    )
+
+        return self._cachedAcquisitionValues
+
+    def _hasValidDose(self):
+        """ Whether the input movies' acquisition carries a usable dose
+        per frame, so dose-weighting can actually be requested from the
+        underlying tool. _validate() already blocks a direct launch
+        with doApplyDoseFilter on and no dose, but that check is not
+        necessarily re-enforced on every launch path (e.g. a protocol
+        started as part of a resumed/chained workflow) - asking
+        MotionCor2 to dose-weight with an unusable dose makes it
+        silently skip writing the dose-weighted output altogether, so
+        this must also be checked at the point the args are built.
+
+        Computed once and cached: dose availability is a property of
+        the whole input Set, constant for the entire run (same as
+        self.isEER), not something that can legitimately change
+        between movies. """
+        if not hasattr(self, '_hasValidDoseCache'):
+            _, _, dose = self._getCachedAcquisitionValues()
+            self._hasValidDoseCache = dose is not None and dose >= 0.00001
+
+        return self._hasValidDoseCache
+
     def _getCorrectedDose(self, acqOrder=None):
         """ Reimplement this because of a special tomo case. """
-        acq, preExp, dose = self._getDoseParams()
+        _, preExp, dose = self._getDoseParams()
         # Acquisition metadata may not always carry dose values (e.g.
         # an import that didn't set them, or a movie whose acquisition
         # dose is not visible yet at processing time) - default to 0

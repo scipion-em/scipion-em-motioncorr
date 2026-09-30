@@ -4,6 +4,7 @@
 # *
 # **************************************************************************
 
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -98,15 +99,19 @@ class TestMotionCorrStreamingRegression(unittest.TestCase):
 
 
 class _Acquisition:
-    def __init__(self, doseInitial=None, dosePerFrame=None):
+    def __init__(self, doseInitial=None, dosePerFrame=None, voltage=300.0):
         self._doseInitial = doseInitial
         self._dosePerFrame = dosePerFrame
+        self._voltage = voltage
 
     def getDoseInitial(self):
         return self._doseInitial
 
     def getDosePerFrame(self):
         return self._dosePerFrame
+
+    def getVoltage(self):
+        return self._voltage
 
 
 class _DoseInputMovies:
@@ -123,6 +128,11 @@ class _DoseInputMovies:
 class _DoseHarness(ProtMotionCorrBase):
     def __init__(self, acquisition):
         self._inputMovies = _DoseInputMovies(acquisition)
+        # _getCachedAcquisitionValues() serializes its first population with
+        # self._lock (see its docstring) - this harness bypasses the
+        # real Protocol.__init__ (which sets up a threading.RLock), so
+        # it must provide one itself.
+        self._lock = threading.RLock()
 
     def getInputMovies(self):
         return self._inputMovies
@@ -162,19 +172,112 @@ class TestMotionCorrCorrectedDoseRegression(unittest.TestCase):
         self.assertEqual(2.0, dose)
 
 
-class _ValidateMovie:
-    def __init__(self, fileName):
-        self._fileName = fileName
+class TestMotionCorrHasValidDoseRegression(unittest.TestCase):
+    # Regression tests: _validate() blocks a direct launch with
+    # doApplyDoseFilter on and no dose, but that validation is not
+    # necessarily re-enforced on every launch path (e.g. a protocol
+    # started as part of a resumed/chained workflow). Asking MotionCor2
+    # to dose-weight with an unusable dose (-FmDose 0) makes it
+    # silently skip writing the dose-weighted output altogether, which
+    # then crashed createOutputStep looking for a file that was never
+    # produced. _hasValidDose() must be checked at the point the args
+    # are built and the point the output is registered, not only at
+    # _validate() time.
 
-    def getFileName(self):
-        return self._fileName
+    def testHasValidDoseIsFalseWhenDoseMissing(self):
+        harness = _DoseHarness(
+            _Acquisition(doseInitial=None, dosePerFrame=None))
+
+        self.assertFalse(ProtMotionCorrBase._hasValidDose(harness))
+
+    def testHasValidDoseIsFalseWhenDoseIsZero(self):
+        harness = _DoseHarness(
+            _Acquisition(doseInitial=0.0, dosePerFrame=0.0))
+
+        self.assertFalse(ProtMotionCorrBase._hasValidDose(harness))
+
+    def testHasValidDoseIsTrueWhenDoseIsPresent(self):
+        harness = _DoseHarness(
+            _Acquisition(doseInitial=1.0, dosePerFrame=2.0))
+
+        self.assertTrue(ProtMotionCorrBase._hasValidDose(harness))
+
+    def testHasValidDoseResolvesInputMoviesOnlyOnceAcrossManyCalls(self):
+        # Regression test: _hasValidDose() is called multiple times per
+        # movie from three different places (_getMcArgs,
+        # createOutputStep, setMicPlotInfo). Re-resolving
+        # getInputMovies().getAcquisition().getDosePerFrame() fresh on
+        # every single call multiplies the exposure to any
+        # inconsistency in how the input Set gets reconstructed across
+        # calls - which is exactly what let the same protocol run
+        # inconsistently split its movies between a dose-weighted and
+        # a non-dose-weighted output. Caching after the first call
+        # eliminates that exposure entirely for the rest of the run.
+        harness = _DoseHarness(
+            _Acquisition(doseInitial=1.0, dosePerFrame=2.0))
+        harness._inputMovies.getAcquisitionCalls = 0
+        realGetAcquisition = harness._inputMovies.getAcquisition
+
+        def _countingGetAcquisition():
+            harness._inputMovies.getAcquisitionCalls += 1
+            return realGetAcquisition()
+
+        harness._inputMovies.getAcquisition = _countingGetAcquisition
+
+        for _ in range(5):
+            ProtMotionCorrBase._hasValidDose(harness)
+
+        self.assertEqual(
+            1,
+            harness._inputMovies.getAcquisitionCalls,
+            "_hasValidDose() must resolve the input Set's Acquisition "
+            "only once per protocol instance, not once per call.",
+        )
+
+    def testHasValidDoseAndGetCorrectedDoseShareTheSameCachedAcquisition(self):
+        # Regression test for a real production failure: within a
+        # single run, _hasValidDose() cached True (so dose-weighting
+        # keeps being requested for every movie), but _getCorrectedDose
+        # (called from _getMcArgs/calcFrameMotion, once per movie) kept
+        # resolving getInputMovies().getAcquisition() fresh on its own
+        # and occasionally got back dose=None/voltage=None for a movie
+        # in the middle of the run - MotionCor2 then silently skipped
+        # writing the dose-weighted output for that movie (and every
+        # one after it) while still being asked for one, making
+        # createOutputStep crash looking for a _DW.mrc that was never
+        # produced. Both call sites must resolve the Acquisition
+        # through the same cache, not independently.
+        harness = _DoseHarness(
+            _Acquisition(doseInitial=1.0, dosePerFrame=2.0))
+        harness._inputMovies.getAcquisitionCalls = 0
+        realGetAcquisition = harness._inputMovies.getAcquisition
+
+        def _countingGetAcquisition():
+            harness._inputMovies.getAcquisitionCalls += 1
+            return realGetAcquisition()
+
+        harness._inputMovies.getAcquisition = _countingGetAcquisition
+
+        ProtMotionCorrBase._hasValidDose(harness)
+        for _ in range(3):
+            ProtMotionCorrBase._getCorrectedDose(harness)
+
+        self.assertEqual(
+            1,
+            harness._inputMovies.getAcquisitionCalls,
+            "_hasValidDose() and _getCorrectedDose() must resolve the "
+            "input Set's Acquisition through the same shared cache.",
+        )
 
 
 class _ValidateInputMovies:
     def __init__(self, acquisition, gain=None):
+        from pwem.objects import Movie
+
         self._acquisition = acquisition
         self._gain = gain
-        self._movie = _ValidateMovie("movie_001.mrc")
+        self._movie = Movie()
+        self._movie.setFileName("movie_001.mrc")
 
     def getFirstItem(self):
         return self._movie

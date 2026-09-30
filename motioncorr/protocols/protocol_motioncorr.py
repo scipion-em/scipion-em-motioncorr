@@ -304,7 +304,7 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
             mic.psdCorr = Image(location=self._getPsdCorr(movie))
         if self._doComputeMicThumbnail():
             mic.thumbnail = Image(location=self._getOutputMicThumbnail(movie))
-        if self.doApplyDoseFilter:
+        if self.doApplyDoseFilter and self._hasValidDose():
             total, early, late = self.calcFrameMotion(movie)
             mic._rlnAccumMotionTotal = Float(total)
             mic._rlnAccumMotionEarly = Float(early)

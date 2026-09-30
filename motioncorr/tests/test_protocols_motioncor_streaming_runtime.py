@@ -113,7 +113,10 @@ class _ProtocolStub:
             outputName,
             suffix="",
     ):
-        return None
+        return True
+
+    def _hasValidDose(self):
+        return True
 
     def closeOutputsForStreaming(self):
         return None
@@ -148,6 +151,7 @@ class _MicrographProtocolStub:
         self.sRate = 1.5
         self.splitEvenOdd = _ValueStub(False)
         self.outputMicsSet = _OutputSetStub()
+        self.failedMovies = []
 
     def _getOutputMics(
             self,
@@ -363,6 +367,111 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
             outputMic.getObjId(),
             inputMovie.getObjId(),
         )
+
+    def test_CreateOutputStepSkipsDoseWeightedOutputWhenDoseUnavailable(self):
+        # Regression test: createOutputStep used to request the DW
+        # (dose-weighted) output purely based on the doApplyDoseFilter
+        # form flag, regardless of whether a usable dose was actually
+        # available. _getMcArgs only asks MotionCor2 to dose-weight
+        # when _hasValidDose() is True, so MotionCor2 never writes a
+        # DW file when it is False - createOutputStep must request the
+        # plain (non-DW) output in that case instead of looking for a
+        # file that was never produced.
+        protocol = _ProtocolStub()
+        protocol.doApplyDoseFilter = _ValueStub(True)
+        protocol._hasValidDose = lambda: False
+        registerCalls = []
+
+        def _recordRegisterMics(movieFName, inMovie, outputName, suffix=""):
+            registerCalls.append((outputName, suffix))
+            return True
+
+        protocol._registerMics = _recordRegisterMics
+        inputMovie = _InputMovieStub(objId=37)
+
+        with patch.object(
+            motioncorrNs,
+            "Movie",
+            _OutputMovieStub,
+        ):
+            ProtMotionCorrNewStreaming.createOutputStep(
+                protocol,
+                "/tmp/movie-37.mrc",
+                inputMovie,
+            )
+
+        self.assertEqual(1, len(registerCalls))
+        outputName, suffix = registerCalls[0]
+        self.assertEqual("", suffix)
+        self.assertEqual(
+            MotionCorrOutputs.micrographs.name,
+            outputName,
+        )
+
+    def test_CreateOutputStepStopsWhenRegisterMicsFails(self):
+        # createOutputStep must not proceed to splitEvenOdd registration
+        # or closeOutputsForStreaming for a movie whose primary
+        # micrograph registration already failed and was routed to
+        # failedMovies.
+        protocol = _ProtocolStub()
+        protocol.splitEvenOdd = _ValueStub(True)
+        protocol._registerMics = lambda *args, **kwargs: False
+        closeCalls = []
+        protocol.closeOutputsForStreaming = lambda: closeCalls.append(1)
+        inputMovie = _InputMovieStub(objId=37)
+
+        with patch.object(
+            motioncorrNs,
+            "Movie",
+            _OutputMovieStub,
+        ):
+            ProtMotionCorrNewStreaming.createOutputStep(
+                protocol,
+                "/tmp/movie-37.mrc",
+                inputMovie,
+            )
+
+        self.assertEqual([], closeCalls)
+
+    def test_RegisterMicsRoutesMissingOutputFileToFailedMoviesInsteadOfCrashing(self):
+        # Regression test: _registerMics never checked that the
+        # motion-correction output file actually existed before
+        # reading its header (setMRCSamplingRate) - the external tool
+        # can return success without producing every expected output
+        # for a given movie (e.g. too few frames for dose weighting),
+        # and createOutputStep's SET OF MICROGRAPHS block deliberately
+        # re-raises on failure for output-Set-integrity reasons, so a
+        # single missing micrograph file crashed the whole protocol
+        # instead of being routed to failedMovies like every other
+        # per-movie failure in this class.
+        protocol = _MicrographProtocolStub()
+        inputMovie = _InputMovieStub(objId=37)
+
+        def _failSetMRCSamplingRate(*args, **kwargs):
+            raise FileNotFoundError(
+                "[Errno 2] No such file or directory: '/tmp/mic-37.mrc'"
+            )
+
+        with patch.object(
+            motioncorrNs,
+            "Micrograph",
+            _OutputMicrographStub,
+        ), patch.object(
+            motioncorrNs,
+            "setMRCSamplingRate",
+            _failSetMRCSamplingRate,
+        ):
+            result = ProtMotionCorrNewStreaming._registerMics(
+                protocol,
+                "/tmp/movie-37.mrc",
+                inputMovie,
+                "micrographs",
+                suffix="",
+            )
+
+        self.assertFalse(result)
+        self.assertEqual(["/tmp/movie-37.mrc"], protocol.failedMovies)
+        self.assertIsNone(protocol.outputMicsSet.appended)
 
     def test_CreateOutputStepIsNotWrappedByStorageRetryDecorator(self):
         self.assertFalse(
