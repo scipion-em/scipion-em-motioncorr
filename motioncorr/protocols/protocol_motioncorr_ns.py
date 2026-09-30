@@ -222,13 +222,50 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.gain = inputMovies.getGain()
         self.dark = inputMovies.getDark()
         self.sRate = inputMovies.getSamplingRate() * self.binFactor.get()
-        self.isEER = getExt(inputMovies.getFirstItem().getFileName()) == ".eer"
+
+        # This runs once, unconditionally, before the streaming loop
+        # even starts. In live-acquisition streaming the input Set can
+        # still be empty at launch (a normal race with the upstream
+        # import-movies protocol) - getFirstItem() returns None for an
+        # empty Set, and .getFileName() on None would crash the whole
+        # protocol at t=0 instead of simply waiting for the first movie
+        # like the rest of this generator already does.
+        firstItem = inputMovies.getFirstItem()
+        while firstItem is None and inputMovies.isStreamOpen():
+            time.sleep(10)
+            with self._lock:
+                inputMovies.loadAllProperties()
+            firstItem = inputMovies.getFirstItem()
+
+        if firstItem is None:
+            raise RuntimeError(
+                "No movies available and the input stream is already "
+                "closed; nothing to process."
+            )
+
+        self.isEER = getExt(firstItem.getFileName()) == ".eer"
 
     def convertInputStep(self, movieFName: str):
         try:
-            # Convert the gain and dark images if they haven't been converted yet or if they weren't provided
-            if self.dark or self.gain and not exists(self._getExtraPath('DONE')):
-                super()._convertInputStep()
+            # Convert the gain and dark images if they haven't been
+            # converted yet (DONE marker) and only if a gain/dark
+            # reference is actually configured. `and` binds tighter
+            # than `or` in Python, so parenthesize explicitly - without
+            # it, "self.dark or self.gain and not exists(DONE)" is
+            # "self.dark or (self.gain and not exists(DONE))", which is
+            # unconditionally True whenever a dark reference is
+            # configured, ignoring the DONE marker entirely and
+            # reconverting on every single movie forever.
+            #
+            # convertInputStep is inserted per-movie with no ordering
+            # between movies under STEPS_PARALLEL, so double-checked
+            # locking is needed here too: without it, multiple workers
+            # could race to convert/write the same shared correction
+            # image file (__convertCorrectionImage) concurrently.
+            if (self.dark or self.gain) and not exists(self._getExtraPath('DONE')):
+                with self._lock:
+                    if not exists(self._getExtraPath('DONE')):
+                        super()._convertInputStep()
         except Exception as e:
             self.failedMovies.append(movieFName)
             logger.error(redStr(f"ERROR: movie convert failed for {movieFName} with the exception {e}"))
@@ -239,15 +276,23 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             return
 
         logger.info(cyanStr(f"Processing movie: {movieFName}"))
-        outputMicFn = self._getResultMicFn(movieFName)
-        argsDict = self._getMcArgs()
-        argsDict['-OutMrc'] = f'{outputMicFn}'
-        argsDict['-LogDir'] = f'{self._getExtraPath()}'
-        args = self._getInputFormat(movieFName, absPath=True)
-        args += ' '.join(['%s %s' % (k, v) for k, v in argsDict.items()])
-        args += ' ' + self.extraParams2.get()
 
         try:
+            # createOutputStep/the streaming generator has no exception
+            # boundary of its own around this step, so building the
+            # arguments (which can raise, e.g. _getInputFormat for an
+            # unsupported extension) must be inside the try like the
+            # runJob failure already is - otherwise a single movie
+            # crashes the whole protocol instead of being routed to
+            # failedMovies like every other failure in this function.
+            outputMicFn = self._getResultMicFn(movieFName)
+            argsDict = self._getMcArgs()
+            argsDict['-OutMrc'] = f'{outputMicFn}'
+            argsDict['-LogDir'] = f'{self._getExtraPath()}'
+            args = self._getInputFormat(movieFName, absPath=True)
+            args += ' '.join(['%s %s' % (k, v) for k, v in argsDict.items()])
+            args += ' ' + self.extraParams2.get()
+
             self.runJob(Plugin.getProgram(), args, env=Plugin.getEnviron())
         except Exception as e:
             self.failedMovies.append(movieFName)
@@ -267,9 +312,25 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def createOutputStep(self, movieFName: str, inMovie: Movie):
         if movieFName in self.failedMovies:
             return
+
         if self.doSaveMovie.get():
             outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
-            setMRCSamplingRate(outMovieFn, self.sRate)
+            try:
+                # Only the data-building call is isolated here, not the
+                # persistence calls below (append/update/write/_store),
+                # which must keep propagating: retry_on_sqlite_lock
+                # needs a real sqlite-lock exception to reach it to
+                # retry, and a persistence failure is exactly what
+                # test_CreateOutputDoesNotSwallowProtocolStoreFailure
+                # deliberately keeps loud instead of silently routing
+                # to failedMovies.
+                setMRCSamplingRate(outMovieFn, self.sRate)
+            except Exception as e:
+                self.failedMovies.append(movieFName)
+                logger.error(redStr(f"ERROR: Patching the movie stack header failed for "
+                                    f"{movieFName} with the exception {e}"))
+                traceback.print_exc()
+                return
         else:
             outMovieFn = movieFName
 
@@ -284,7 +345,19 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     outMovie.setMicName(basename(outMovieFn))
                     # Movie alignment
                     n = outMovie.getNumberOfFrames()
-                    alignment = self.getMovieAlignment(movieFName, n)
+                    try:
+                        # Same isolation rationale as setMRCSamplingRate
+                        # above - a movie whose alignment log fails to
+                        # parse must not crash the whole protocol, but
+                        # the persistence calls right after this must
+                        # stay unprotected.
+                        alignment = self.getMovieAlignment(movieFName, n)
+                    except Exception as e:
+                        self.failedMovies.append(movieFName)
+                        logger.error(redStr(f"ERROR: Parsing the alignment for {movieFName} "
+                                            f"failed with the exception {e}"))
+                        traceback.print_exc()
+                        return
                     outMovie.setAlignment(alignment)
                     # Data persistence
                     outputMovies.append(outMovie)

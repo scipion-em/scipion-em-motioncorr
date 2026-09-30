@@ -500,3 +500,224 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             protocol.closed,
             "A run with no useful output must not close as a successful protocol.",
         )
+
+    def test_ProcessMovieArgBuildingFailureIsCaughtInsteadOfCrashingProtocol(self):
+        # Regression test: _getMcArgs()/_getInputFormat() and the rest
+        # of the argument-building code used to run BEFORE the try/
+        # except in processMovieStep. This generator step has no
+        # exception boundary of its own, so a single movie failing
+        # here (e.g. bad acquisition metadata, or an unsupported file
+        # extension raising ValueError from _getInputFormat) would
+        # crash the whole protocol instead of being routed to
+        # failedMovies like the runJob failure already was.
+        protocol = _NewStreamingHarness()
+
+        def _fail_getMcArgs():
+            raise ValueError("simulated bad acquisition metadata")
+
+        protocol._getMcArgs = _fail_getMcArgs
+
+        protocol.processMovieStep("/data/movie_001.mrcs")
+
+        self.assertEqual(["/data/movie_001.mrcs"], protocol.failedMovies)
+        self.assertEqual(
+            0,
+            len(protocol.runCalls),
+            "runJob must not be called when argument building already "
+            "failed.",
+        )
+
+    def test_CreateOutputStackHeaderFailureRoutesToFailedMoviesInsteadOfCrashing(self):
+        # Regression test: setMRCSamplingRate used to run before any
+        # try/except in createOutputStep. A single movie whose stack
+        # header fails to patch must not crash the whole protocol.
+        protocol = _NewStreamingHarness()
+        protocol.doSaveMovie = _Value(True)
+        protocol._lock = threading.RLock()
+
+        class _InputMovie:
+            def getObjId(self):
+                return 7
+
+        def _fail_setMRCSamplingRate(*args, **kwargs):
+            raise RuntimeError("simulated header patch failure")
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".setMRCSamplingRate",
+                  side_effect=_fail_setMRCSamplingRate):
+            protocol.createOutputStep("/data/movie_007.mrcs", _InputMovie())
+
+        self.assertEqual(["/data/movie_007.mrcs"], protocol.failedMovies)
+
+    def test_CreateOutputAlignmentParsingFailureRoutesToFailedMoviesInsteadOfCrashing(self):
+        # Regression test: getMovieAlignment used to run with no
+        # try/except of its own around it (only the later "SET OF
+        # MICROGRAPHS" block had one). A single movie whose alignment
+        # log fails to parse must not crash the whole protocol - but,
+        # unlike this, the persistence calls right after it
+        # (append/update/write/_store) must keep propagating on
+        # failure (see test_CreateOutputDoesNotSwallowProtocolStoreFailure).
+        protocol = _NewStreamingHarness()
+        protocol.doSaveMovie = _Value(False)
+        protocol._lock = threading.RLock()
+
+        class _InputMovie:
+            def getObjId(self):
+                return 7
+
+        class _FakeMovie:
+            def copyInfo(self, _):
+                pass
+
+            def setFileName(self, _):
+                pass
+
+            def setMicName(self, _):
+                pass
+
+            def getNumberOfFrames(self):
+                return 1
+
+            def setAlignment(self, _):
+                pass
+
+        class _OutputMovies:
+            def __len__(self):
+                return 0
+
+            def __contains__(self, obj_id):
+                return False
+
+            def append(self, _):
+                raise AssertionError(
+                    "append must not be called when alignment parsing "
+                    "already failed."
+                )
+
+        protocol._getOutputMovies = lambda: _OutputMovies()
+
+        def _fail_alignment(*args, **kwargs):
+            raise RuntimeError("simulated malformed alignment log")
+
+        protocol.getMovieAlignment = _fail_alignment
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".Movie", _FakeMovie):
+            protocol.createOutputStep("/data/movie_007.mrcs", _InputMovie())
+
+        self.assertEqual(["/data/movie_007.mrcs"], protocol.failedMovies)
+
+    def test_ConvertInputStepRespectsDoneMarkerWhenDarkReferenceConfigured(self):
+        # Regression test: "self.dark or self.gain and not exists(DONE)"
+        # parses, by Python operator precedence, as
+        # "self.dark or (self.gain and not exists(DONE))" - which is
+        # unconditionally True whenever a dark reference is configured,
+        # ignoring the DONE marker entirely and reconverting on every
+        # single movie forever instead of once.
+        protocol = _NewStreamingHarness()
+        protocol.dark = "/data/dark.mrc"
+        protocol.gain = None
+        protocol._lock = threading.RLock()
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".exists", return_value=True), \
+             patch("motioncorr.protocols.protocol_base.ProtMotionCorrBase."
+                  "_convertInputStep") as mockConvert:
+            protocol.convertInputStep("/data/movie_001.mrcs")
+
+        mockConvert.assert_not_called()
+        self.assertEqual([], protocol.failedMovies)
+
+    def test_ConvertInputStepConvertsWhenDoneMarkerMissingAndDarkConfigured(self):
+        protocol = _NewStreamingHarness()
+        protocol.dark = "/data/dark.mrc"
+        protocol.gain = None
+        protocol._lock = threading.RLock()
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".exists", return_value=False), \
+             patch("motioncorr.protocols.protocol_base.ProtMotionCorrBase."
+                  "_convertInputStep") as mockConvert:
+            protocol.convertInputStep("/data/movie_001.mrcs")
+
+        mockConvert.assert_called_once()
+
+    def test_InitializeWaitsForFirstMovieInsteadOfCrashingOnEmptySet(self):
+        # Regression test: _initialize() runs once, unconditionally,
+        # before the streaming loop even starts. In live-acquisition
+        # streaming the input Set can still be empty at launch (a
+        # normal race with the upstream import-movies protocol) -
+        # getFirstItem() returns None for an empty Set, and calling
+        # .getFileName() on None would crash the whole protocol at t=0
+        # instead of waiting for the first movie.
+        protocol = _NewStreamingHarness()
+        protocol._lock = threading.RLock()
+        protocol.binFactor = _Value(1.0)
+
+        class _Item:
+            def getFileName(self):
+                return "movie_001.mrc"
+
+        class _InputMovies:
+            def __init__(self):
+                self.calls = 0
+
+            def getGain(self):
+                return None
+
+            def getDark(self):
+                return None
+
+            def getSamplingRate(self):
+                return 1.0
+
+            def getFirstItem(self):
+                self.calls += 1
+                return None if self.calls < 3 else _Item()
+
+            def isStreamOpen(self):
+                return True
+
+            def loadAllProperties(self):
+                pass
+
+        inputMovies = _InputMovies()
+        protocol.getInputMovies = lambda: inputMovies
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".time.sleep", return_value=None):
+            protocol._initialize()
+
+        self.assertFalse(protocol.isEER)
+        self.assertGreaterEqual(inputMovies.calls, 3)
+
+    def test_InitializeRaisesClearlyWhenStreamClosesWithNoMovies(self):
+        protocol = _NewStreamingHarness()
+        protocol._lock = threading.RLock()
+        protocol.binFactor = _Value(1.0)
+
+        class _InputMovies:
+            def getGain(self):
+                return None
+
+            def getDark(self):
+                return None
+
+            def getSamplingRate(self):
+                return 1.0
+
+            def getFirstItem(self):
+                return None
+
+            def isStreamOpen(self):
+                return False
+
+            def loadAllProperties(self):
+                pass
+
+        protocol.getInputMovies = lambda: _InputMovies()
+
+        module = "motioncorr.protocols.protocol_motioncorr_ns"
+        with patch(module + ".time.sleep", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "No movies"):
+                protocol._initialize()

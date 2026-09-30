@@ -151,26 +151,34 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
     # --------------------------- STEPS functions -----------------------------
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
-        movieFolder = self._getOutputMovieFolder(movie)
-        outputMicFn = self._getOutputMicName(movie)
-
-        argsDict = self._getMcArgs()
-        argsDict['-OutMrc'] = f'"{outputMicFn}"'
-        argsDict['-LogDir'] = './'
-        if self.isEER:
-            argsDict.update({'-FmIntFile': "../../extra/FmIntFile.txt"})
-        if self.defectFile.get():
-            argsDict['-DefectFile'] = self.defectFile.get()
-        elif self.defectMap.get():
-            argsDict['-DefectMap'] = self.defectMap.get()
-        elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
-            argsDict['-DefectFile'] = f"../../extra/{DEFECTS_FILE_EER}"
-        args = self._getInputFormat(movie.getFileName())
-        args += ' '.join(['%s %s' % (k, v)
-                          for k, v in argsDict.items()])
-        args += ' ' + self.extraParams2.get()
 
         try:
+            # processMovieStep (the pwem base class step calling this
+            # hook) has no exception boundary of its own around it - a
+            # single movie whose format/args fail to build here (e.g.
+            # _getInputFormat raising ValueError for an unrecognized
+            # extension) must not crash the whole protocol, so this
+            # setup is inside the try like the runJob failure already
+            # was.
+            movieFolder = self._getOutputMovieFolder(movie)
+            outputMicFn = self._getOutputMicName(movie)
+
+            argsDict = self._getMcArgs()
+            argsDict['-OutMrc'] = f'"{outputMicFn}"'
+            argsDict['-LogDir'] = './'
+            if self.isEER:
+                argsDict.update({'-FmIntFile': "../../extra/FmIntFile.txt"})
+            if self.defectFile.get():
+                argsDict['-DefectFile'] = self.defectFile.get()
+            elif self.defectMap.get():
+                argsDict['-DefectMap'] = self.defectMap.get()
+            elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
+                argsDict['-DefectFile'] = f"../../extra/{DEFECTS_FILE_EER}"
+            args = self._getInputFormat(movie.getFileName())
+            args += ' '.join(['%s %s' % (k, v)
+                              for k, v in argsDict.items()])
+            args += ' ' + self.extraParams2.get()
+
             self.runJob(Plugin.getProgram(), args, cwd=movieFolder,
                         env=Plugin.getEnviron())
             self._moveOutput(movie)
