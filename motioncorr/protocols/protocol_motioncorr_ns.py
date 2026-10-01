@@ -630,6 +630,40 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             ]
 
             if missingOpticsValues:
+                inputMovies = self.getInputMovies()
+                inputAcquisition = inputMovies.getAcquisition()
+                firstInputMovie = inputMovies.getFirstItem()
+                firstMovieAcquisition = (
+                    firstInputMovie.getAcquisition()
+                    if firstInputMovie is not None
+                    and firstInputMovie.hasAcquisition()
+                    else None
+                )
+                logger.error(
+                    "MotionCorr optics input diagnostic: "
+                    "setVoltage=%s setSphericalAberration=%s "
+                    "setAmplitudeContrast=%s firstMovieVoltage=%s "
+                    "firstMovieSphericalAberration=%s "
+                    "firstMovieAmplitudeContrast=%s",
+                    inputAcquisition.getVoltage(),
+                    inputAcquisition.getSphericalAberration(),
+                    inputAcquisition.getAmplitudeContrast(),
+                    (
+                        firstMovieAcquisition.getVoltage()
+                        if firstMovieAcquisition is not None
+                        else None
+                    ),
+                    (
+                        firstMovieAcquisition.getSphericalAberration()
+                        if firstMovieAcquisition is not None
+                        else None
+                    ),
+                    (
+                        firstMovieAcquisition.getAmplitudeContrast()
+                        if firstMovieAcquisition is not None
+                        else None
+                    ),
+                )
                 acquisition = outputMovies.getAcquisition()
                 raise RuntimeError(
                     "Missing Relion optics values before serialization: %s. "
