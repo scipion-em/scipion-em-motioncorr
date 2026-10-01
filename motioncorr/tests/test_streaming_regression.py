@@ -350,6 +350,101 @@ class TestMotionCorrMissingDoseValidationRegression(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_OpenEmptyStreamingInputDefersDoseValidationUntilMetadataArrives(self):
+        class OpenEmptyInputMovies:
+            def getFirstItem(self):
+                return None
+
+            def isStreamOpen(self):
+                return True
+
+            def getAcquisition(self):
+                return _Acquisition(
+                    doseInitial=None,
+                    dosePerFrame=None,
+                )
+
+            def getGain(self):
+                return None
+
+        class Harness(ProtMotionCorrBase):
+            def __init__(self):
+                self._inputMovies = OpenEmptyInputMovies()
+                self.doApplyDoseFilter = _Value(True)
+                self.alignFrame0 = _Value(1)
+                self.alignFrameN = _Value(0)
+
+            def getInputMovies(self):
+                return self._inputMovies
+
+            def _getNumberOfFrames(self):
+                raise AssertionError(
+                    "Frame metadata must not be required before the "
+                    "first streaming movie exists."
+                )
+
+        harness = Harness()
+
+        module = "motioncorr.protocols.protocol_base"
+        with patch(module + ".exists", return_value=True):
+            errors = ProtMotionCorrBase._validate(harness)
+
+        self.assertEqual(
+            [],
+            errors,
+            "An open, still-empty streaming input must not be rejected "
+            "as if its final acquisition metadata were already known.",
+        )
+
+    def test_HasValidDoseFallsBackToFirstMovieAcquisitionWhenSetMetadataIsIncomplete(self):
+        setAcquisition = _Acquisition(
+            doseInitial=None,
+            dosePerFrame=None,
+            voltage=None,
+        )
+        movieAcquisition = _Acquisition(
+            doseInitial=0.5,
+            dosePerFrame=1.25,
+            voltage=300.0,
+        )
+
+        class FirstMovie:
+            def getAcquisition(self):
+                return movieAcquisition
+
+        class InputMovies:
+            def getAcquisition(self):
+                return setAcquisition
+
+            def getFirstItem(self):
+                return FirstMovie()
+
+            def getFramesRange(self):
+                return [1, 10, 0]
+
+        class Harness(ProtMotionCorrBase):
+            def __init__(self):
+                self._inputMovies = InputMovies()
+                self._lock = threading.RLock()
+
+            def getInputMovies(self):
+                return self._inputMovies
+
+            def _getNumberOfFrames(self):
+                return 10
+
+        harness = Harness()
+
+        self.assertTrue(
+            ProtMotionCorrBase._hasValidDose(harness),
+            "A temporarily incomplete Set-level Acquisition must not hide "
+            "valid acquisition metadata already present on the first Movie.",
+        )
+        self.assertEqual(
+            (300.0, 0.5, 1.25),
+            ProtMotionCorrBase._getCachedAcquisitionValues(harness),
+        )
+
 
 class _FrameMotionHarness:
     # Minimal harness shared by both calcFrameMotion regression tests

@@ -149,6 +149,14 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         self._defineCommonParams(form)
 
     # --------------------------- STEPS functions -----------------------------
+    def _convertInputStep(self):
+        # Legacy ProtAlignMovies.processMovieStep still writes per-movie
+        # DONE markers under extra/DONE. Keep that compatibility local
+        # to the classic protocol only; streaming protocols must not use
+        # filesystem checkpoints for durable progress.
+        pwutils.makePath(self._getExtraPath('DONE'))
+        ProtMotionCorrBase._convertInputStep(self)
+
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
 

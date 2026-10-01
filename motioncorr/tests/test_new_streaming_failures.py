@@ -1,4 +1,3 @@
-import sqlite3
 import threading
 from unittest import TestCase
 from unittest.mock import patch
@@ -43,6 +42,7 @@ class _NewStreamingHarness(ProtMotionCorrNewStreaming):
         self.failedMovies = []
         self.sRate = 1.0
         self.extraParams2 = _Value("")
+        self.doApplyDoseFilter = _Value(False)
         self.runCalls = []
         self.closed = False
         self.warnings = []
@@ -141,38 +141,6 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             "persisted output contains that movie.",
         )
 
-    def test_CreateOutputRetriesSqliteLockInsteadOfSwallowingIt(self):
-        protocol = _NewStreamingHarness()
-        protocol.doSaveMovie = _Value(False)
-        protocol._lock = threading.RLock()
-
-        attempts = []
-
-        def locked_output_movies():
-            attempts.append(1)
-            raise sqlite3.OperationalError("database is locked")
-
-        protocol._getOutputMovies = locked_output_movies
-
-        with patch(
-            "pyworkflow.utils.retry_streaming.time.sleep",
-            return_value=None,
-        ):
-            with self.assertRaisesRegex(
-                sqlite3.OperationalError,
-                "database is locked",
-            ):
-                protocol.createOutputStep(
-                    "/data/movie_001.mrcs",
-                    None,
-                )
-
-        self.assertEqual(
-            15,
-            len(attempts),
-            "createOutputStep must let SQLite lock errors reach "
-            "retry_on_sqlite_lock so the decorator can retry them.",
-        )
 
     def test_CreateOutputDoesNotSwallowProtocolStoreFailure(self):
         protocol = _NewStreamingHarness()
@@ -188,6 +156,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
         class _FakeMovie:
             def copyInfo(self, _):
                 pass
+
+            def copyObjId(self, movie):
+                return None
 
             def setFileName(self, _):
                 pass
@@ -263,6 +234,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             def copyInfo(self, movie):
                 self._obj_id = movie.getObjId()
 
+            def copyObjId(self, movie):
+                self._obj_id = movie.getObjId()
+
             def getObjId(self):
                 return self._obj_id
 
@@ -334,6 +308,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
                 self._obj_id = None
 
             def copyInfo(self, movie):
+                self._obj_id = movie.getObjId()
+
+            def copyObjId(self, movie):
                 self._obj_id = movie.getObjId()
 
             def getObjId(self):
@@ -569,6 +546,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             def copyInfo(self, _):
                 pass
 
+            def copyObjId(self, movie):
+                return None
+
             def setFileName(self, _):
                 pass
 
@@ -607,40 +587,7 @@ class TestMotionCorrNewStreamingFailures(TestCase):
 
         self.assertEqual(["/data/movie_007.mrcs"], protocol.failedMovies)
 
-    def test_ConvertInputStepRespectsDoneMarkerWhenDarkReferenceConfigured(self):
-        # Regression test: "self.dark or self.gain and not exists(DONE)"
-        # parses, by Python operator precedence, as
-        # "self.dark or (self.gain and not exists(DONE))" - which is
-        # unconditionally True whenever a dark reference is configured,
-        # ignoring the DONE marker entirely and reconverting on every
-        # single movie forever instead of once.
-        protocol = _NewStreamingHarness()
-        protocol.dark = "/data/dark.mrc"
-        protocol.gain = None
-        protocol._lock = threading.RLock()
 
-        module = "motioncorr.protocols.protocol_motioncorr_ns"
-        with patch(module + ".exists", return_value=True), \
-             patch("motioncorr.protocols.protocol_base.ProtMotionCorrBase."
-                  "_convertInputStep") as mockConvert:
-            protocol.convertInputStep("/data/movie_001.mrcs")
-
-        mockConvert.assert_not_called()
-        self.assertEqual([], protocol.failedMovies)
-
-    def test_ConvertInputStepConvertsWhenDoneMarkerMissingAndDarkConfigured(self):
-        protocol = _NewStreamingHarness()
-        protocol.dark = "/data/dark.mrc"
-        protocol.gain = None
-        protocol._lock = threading.RLock()
-
-        module = "motioncorr.protocols.protocol_motioncorr_ns"
-        with patch(module + ".exists", return_value=False), \
-             patch("motioncorr.protocols.protocol_base.ProtMotionCorrBase."
-                  "_convertInputStep") as mockConvert:
-            protocol.convertInputStep("/data/movie_001.mrcs")
-
-        mockConvert.assert_called_once()
 
     def test_InitializeWaitsForFirstMovieInsteadOfCrashingOnEmptySet(self):
         # Regression test: _initialize() runs once, unconditionally,

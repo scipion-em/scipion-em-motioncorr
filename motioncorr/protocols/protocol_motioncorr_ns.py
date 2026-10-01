@@ -247,6 +247,13 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             )
 
         self.isEER = getExt(firstItem.getFileName()) == ".eer"
+
+        if (self.doApplyDoseFilter.get()
+                and not self._hasValidDose()):
+            raise RuntimeError(
+                "Input movies do not contain usable dose information "
+                "for dose weighting."
+            )
     def processMovieStep(self, movieFName: str):
         if movieFName in self.failedMovies:
             return
@@ -346,7 +353,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     # whenever doApplyDoseFilter is merely checked on
                     # the form would look for a file that was never
                     # produced.
-                    if self.doApplyDoseFilter.get() and self._hasValidDose():
+                    if ProtMotionCorrBase._useDoseWeightedOutput(self):
                         suffix = DW_SUFFIX
                         outputName = self._possibleOutputs.micrographsDW.name
                     else:
@@ -451,7 +458,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if self.splitEvenOdd.get():
             outputList.append(micsEven)
             outputList.append(micsOdd)
-        if self.doApplyDoseFilter.get():
+        if ProtMotionCorrBase._useDoseWeightedOutput(self):
             outputList.append(micsDW)
         else:
             outputList.append(mics)
@@ -484,7 +491,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
-        if self.doApplyDoseFilter.get() and self._hasValidDose():
+        if ProtMotionCorrBase._useDoseWeightedOutput(self):
             total, early, late = self.calcFrameMotion(movieFName)
             mic._rlnAccumMotionTotal = Float(total)
             mic._rlnAccumMotionEarly = Float(early)
@@ -634,7 +641,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         outputsToCheck = [
             self._possibleOutputs.movies.name,
         ]
-        if self.doApplyDoseFilter.get():
+        if ProtMotionCorrBase._useDoseWeightedOutput(self):
             outputsToCheck.append(self._possibleOutputs.micrographsDW.name)
         else:
             outputsToCheck.append(self._possibleOutputs.micrographs.name)

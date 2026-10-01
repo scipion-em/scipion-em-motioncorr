@@ -191,13 +191,18 @@ class ProtMotionCorrBase(EMProtocol):
         inputMovies = self.getInputMovies()
         self._prepareEERFiles()
 
-        # Convert gain
+        # Convert correction images once and keep the prepared paths on
+        # the protocol. The input Set is periodically refreshed during
+        # streaming and may legitimately restore its persisted original
+        # gain/dark metadata; processing must keep using the correction
+        # images prepared by this shared step.
         gain = inputMovies.getGain()
-        inputMovies.setGain(self.__convertCorrectionImage(gain))
+        self._preparedGain = self.__convertCorrectionImage(gain)
+        inputMovies.setGain(self._preparedGain)
 
-        # Convert dark
         dark = inputMovies.getDark()
-        inputMovies.setDark(self.__convertCorrectionImage(dark))
+        self._preparedDark = self.__convertCorrectionImage(dark)
+        inputMovies.setDark(self._preparedDark)
 
     def _prepareEERFiles(self):
         """ Parse .gain file for defects and create dose distribution file.
@@ -231,10 +236,24 @@ class ProtMotionCorrBase(EMProtocol):
         errors = []
         inputMovies = self.getInputMovies()
 
-        # check if the first movie exists
+        # Streaming inputs may legitimately still be empty when
+        # validation runs. Defer movie-dependent checks until the first
+        # item exists instead of treating missing-yet metadata as invalid.
         firstMovie = inputMovies.getFirstItem()
+        if firstMovie is None:
+            isStreamOpen = getattr(inputMovies, 'isStreamOpen', None)
+            if callable(isStreamOpen) and isStreamOpen():
+                return errors
+            errors.append("Input movies are empty.")
+            return errors
+
         if not isinstance(firstMovie, Movie):
-            firstMovie = firstMovie.getFirstItem()
+            getFirstItem = getattr(firstMovie, 'getFirstItem', None)
+            firstMovie = getFirstItem() if callable(getFirstItem) else firstMovie
+
+        if firstMovie is None:
+            errors.append("Input movies are empty.")
+            return errors
 
         if not exists(firstMovie.getFileName()):
             errors.append("The input movie files do not exist!!! "
@@ -261,8 +280,10 @@ class ProtMotionCorrBase(EMProtocol):
 
         # check dose for DW
         if self.doApplyDoseFilter:
-            acq = inputMovies.getAcquisition()
-            dose = acq.getDosePerFrame()
+            _, _, dose = self._resolveAcquisitionValues(
+                inputMovies=inputMovies,
+                firstMovie=firstMovie,
+            )
             if dose is None or dose < 0.00001:
                 errors.append(
                     "Input movies do not contain the dose information, "
@@ -361,13 +382,24 @@ class ProtMotionCorrBase(EMProtocol):
         elif exists(self._getExtraPath(DEFECTS_FILE_EER)):
             argsDict['-DefectFile'] = self._getExtraPath(DEFECTS_FILE_EER)
 
-        if inputMovies.getGain():
-            argsDict.update({'-Gain': f'"{inputMovies.getGain()}"',
+        gain = getattr(
+            self,
+            '_preparedGain',
+            inputMovies.getGain(),
+        )
+        dark = getattr(
+            self,
+            '_preparedDark',
+            inputMovies.getDark(),
+        )
+
+        if gain:
+            argsDict.update({'-Gain': f'"{gain}"',
                              '-RotGain': self.gainRot.get(),
                              '-FlipGain': self.gainFlip.get()})
 
-        if inputMovies.getDark():
-            argsDict['-Dark'] = inputMovies.getDark()
+        if dark:
+            argsDict['-Dark'] = dark
 
         patchOverlap = self.getAttributeValue('patchOverlap')
         if patchOverlap:  # 0 or None is False
@@ -441,45 +473,103 @@ class ProtMotionCorrBase(EMProtocol):
         """ Returns frames range for input movies. """
         return self.getInputMovies().getFramesRange()
 
+    @staticmethod
+    def _readAcquisitionValues(acquisition):
+        if acquisition is None:
+            return None, None, None
+
+        def _get(name):
+            getter = getattr(acquisition, name, None)
+            return getter() if callable(getter) else None
+
+        return (
+            _get('getVoltage'),
+            _get('getDoseInitial'),
+            _get('getDosePerFrame'),
+        )
+
+    def _resolveAcquisitionValues(self, inputMovies=None, firstMovie=None):
+        # Resolve Set-level Acquisition metadata first. When a streaming
+        # runtime Set is visible before all nested properties have arrived,
+        # use the first input item only to fill still-missing values.
+        inputMovies = inputMovies or self.getInputMovies()
+
+        getAcquisition = getattr(inputMovies, 'getAcquisition', None)
+        setAcquisition = (
+            getAcquisition()
+            if callable(getAcquisition)
+            else None
+        )
+        values = list(
+            self._readAcquisitionValues(setAcquisition)
+        )
+
+        if None not in values:
+            return tuple(values)
+
+        if firstMovie is None:
+            getFirstItem = getattr(inputMovies, 'getFirstItem', None)
+            firstMovie = (
+                getFirstItem()
+                if callable(getFirstItem)
+                else None
+            )
+
+        candidate = firstMovie
+        getCandidateAcquisition = getattr(
+            candidate,
+            'getAcquisition',
+            None,
+        )
+
+        if not callable(getCandidateAcquisition):
+            getFirstItem = getattr(candidate, 'getFirstItem', None)
+            candidate = (
+                getFirstItem()
+                if callable(getFirstItem)
+                else candidate
+            )
+            getCandidateAcquisition = getattr(
+                candidate,
+                'getAcquisition',
+                None,
+            )
+
+        itemAcquisition = (
+            getCandidateAcquisition()
+            if callable(getCandidateAcquisition)
+            else None
+        )
+        itemValues = self._readAcquisitionValues(
+            itemAcquisition
+        )
+
+        return tuple(
+            itemValue if value is None else value
+            for value, itemValue in zip(values, itemValues)
+        )
+
     def _getCachedAcquisitionValues(self):
-        """ Resolve the input movies' Acquisition-derived scalars
-        (voltage, initial dose, dose per frame) once per run and reuse
-        the same plain floats afterwards.
-
-        _getMcArgs, _getDoseParams (and therefore _getCorrectedDose) and
-        _hasValidDose all need these values and are each called
-        multiple times per movie. Every one of those call sites used
-        to do its own fresh self.getInputMovies().getAcquisition(),
-        which is unreliable across calls.
-
-        Caching a reference to the Acquisition OBJECT (an earlier
-        version of this fix) is not enough, even serialized with
-        self._lock: the object can still be mutated in place later by
-        something unrelated - e.g. stepsGeneratorStep's periodic
-        "with self._lock: inMoviesSet.loadAllProperties()" refresh,
-        which reloads properties on whatever SetOfMovies/Acquisition
-        instances the runtime is tracking. Confirmed in production:
-        the very first movie resolved voltage/dose correctly and that
-        Acquisition reference got cached, yet a later movie mid-run
-        still saw -kV/-FmDose come out as None/0.0, because the
-        cached object's OWN fields had been reset in place by that
-        later refresh, not because the reference itself changed.
-        Copying the plain float values out once, instead of holding a
-        reference to the mutable object, removes any dependence on
-        that object's lifetime or mutability - a bare float can't be
-        reached and rewritten by unrelated code the way an Acquisition
-        object can. """
+        # Cache plain scalars so later loadAllProperties() refreshes cannot
+        # mutate the Acquisition object used by an already-running protocol.
         if not hasattr(self, '_cachedAcquisitionValues'):
             with self._lock:
                 if not hasattr(self, '_cachedAcquisitionValues'):
-                    acq = self.getInputMovies().getAcquisition()
                     self._cachedAcquisitionValues = (
-                        acq.getVoltage(),
-                        acq.getDoseInitial(),
-                        acq.getDosePerFrame(),
+                        self._resolveAcquisitionValues()
                     )
 
         return self._cachedAcquisitionValues
+
+    def _useDoseWeightedOutput(self):
+        doApplyDoseFilter = self.doApplyDoseFilter
+        getter = getattr(doApplyDoseFilter, 'get', None)
+        enabled = (
+            getter()
+            if callable(getter)
+            else bool(doApplyDoseFilter)
+        )
+        return bool(enabled) and self._hasValidDose()
 
     def _hasValidDose(self):
         """ Whether the input movies' acquisition carries a usable dose
