@@ -580,9 +580,15 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
+            inputMovies = self.getInputMovies()
             outputMovies = SetOfMovies.create(self._getPath(), template='movies')
-            outputMovies.copyInfo(self.getInputMovies())
+            outputMovies.copyInfo(inputMovies)
             outputMovies.setSamplingRate(self.sRate)
+            # OpticsGroups.fromImages() serializes rlnImageSize from
+            # imageSet.getXDim(). A newly created logical Set is still
+            # empty here, so seed its dimensions from the logical input
+            # before building Relion optics metadata.
+            outputMovies.setDim(inputMovies.getDim())
             with weakImport("relion"):
                 from relion.convert import OpticsGroups
                 og = OpticsGroups.fromImages(outputMovies)

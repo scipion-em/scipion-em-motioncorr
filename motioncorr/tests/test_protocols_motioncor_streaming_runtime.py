@@ -861,6 +861,31 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
             "the dark prepared by the shared input-preparation step.",
         )
 
+    def test_NewOutputMoviesHasDimensionsBeforeBuildingOpticsGroups(self):
+        import inspect
+
+        source = inspect.getsource(
+            motioncorrNs.ProtMotionCorrNewStreaming._getOutputMovies
+        )
+
+        setDimCall = "outputMovies.setDim(inputMovies.getDim())"
+        opticsCall = "OpticsGroups.fromImages(outputMovies)"
+
+        self.assertIn(
+            setDimCall,
+            source,
+            "A new empty outputMovies Set must inherit the logical input "
+            "dimensions before Relion optics are built; otherwise "
+            "rlnImageSize can be None.",
+        )
+        self.assertIn(opticsCall, source)
+        self.assertLess(
+            source.index(setDimCall),
+            source.index(opticsCall),
+            "The dimensions must be available before "
+            "OpticsGroups.fromImages(outputMovies).",
+        )
+
 class TestMotionCorrTasksStreamingRuntime(TestCase):
     def test_ProcessAllMoviesUsesLogicalInputWithoutBackingFile(self):
         class LogicalMovie:
