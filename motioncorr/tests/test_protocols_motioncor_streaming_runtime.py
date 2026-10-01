@@ -861,29 +861,33 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
             "the dark prepared by the shared input-preparation step.",
         )
 
-    def test_NewOutputMoviesHasDimensionsBeforeBuildingOpticsGroups(self):
+    def test_NewStreamingBuildsMovieOpticsOnlyAfterFirstOutputAppend(self):
         import inspect
 
-        source = inspect.getsource(
+        get_output_source = inspect.getsource(
             motioncorrNs.ProtMotionCorrNewStreaming._getOutputMovies
         )
-
-        setDimCall = "outputMovies.setDim(inputMovies.getDim())"
-        opticsCall = "OpticsGroups.fromImages(outputMovies)"
-
-        self.assertIn(
-            setDimCall,
-            source,
-            "A new empty outputMovies Set must inherit the logical input "
-            "dimensions before Relion optics are built; otherwise "
-            "rlnImageSize can be None.",
+        create_output_source = inspect.getsource(
+            motioncorrNs.ProtMotionCorrNewStreaming.createOutputStep
         )
-        self.assertIn(opticsCall, source)
+
+        self.assertNotIn(
+            "OpticsGroups.fromImages(outputMovies)",
+            get_output_source,
+            "NewStreaming must not build Relion optics from a newly created "
+            "empty outputMovies Set.",
+        )
+
+        optics_call = "self._updateOutputMoviesOptics(outputMovies)"
+        append_call = "outputMovies.append(outMovie)"
+
+        self.assertIn(optics_call, create_output_source)
+        self.assertIn(append_call, create_output_source)
         self.assertLess(
-            source.index(setDimCall),
-            source.index(opticsCall),
-            "The dimensions must be available before "
-            "OpticsGroups.fromImages(outputMovies).",
+            create_output_source.index(append_call),
+            create_output_source.index(optics_call),
+            "Relion optics must be built only after the first output movie "
+            "has populated the Set dimensions.",
         )
 
 class TestMotionCorrTasksStreamingRuntime(TestCase):

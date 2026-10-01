@@ -339,7 +339,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                         return
                     outMovie.setAlignment(alignment)
                     # Data persistence
+                    firstOutputMovie = outputMovies.getSize() == 0
                     outputMovies.append(outMovie)
+                    if firstOutputMovie:
+                        self._updateOutputMoviesOptics(outputMovies)
                     outputMovies.update(outMovie)
                     outputMovies.write()
                     self._store(outputMovies)
@@ -580,33 +583,47 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
-            inputMovies = self.getInputMovies()
             outputMovies = SetOfMovies.create(self._getPath(), template='movies')
-            outputMovies.copyInfo(inputMovies)
+            outputMovies.copyInfo(self.getInputMovies())
             outputMovies.setSamplingRate(self.sRate)
-            # OpticsGroups.fromImages() serializes rlnImageSize from
-            # imageSet.getXDim(). A newly created logical Set is still
-            # empty here, so seed its dimensions from the logical input
-            # before building Relion optics metadata.
-            outputMovies.setDim(inputMovies.getDim())
-            with weakImport("relion"):
-                from relion.convert import OpticsGroups
-                og = OpticsGroups.fromImages(outputMovies)
-                gain = self.getInputMovies().getGain()
-                ogDict = {'rlnMicrographStartFrame': self.alignFrame0.get()}
-                if self.isEER:
-                    ogDict.update({'rlnEERGrouping': self.eerGroup.get(),
-                                   'rlnEERUpsampling': self.eerSampling.get() + 1})
-                if gain:
-                    ogDict['rlnMicrographGainName'] = gain
-                og.updateAll(**ogDict)
-                og.toImages(outputMovies)
             outputMovies.setStreamState(Set.STREAM_OPEN)
             outputMovies.write()  # Persist set properties before exposing the streaming output.
 
             self._defineOutputs(**{attrName: outputMovies})
             self._defineSourceRelation(inputMoviesPointer, outputMovies)
         return outputMovies
+
+    def _updateOutputMoviesOptics(
+            self,
+            outputMovies: SetOfMovies,
+    ) -> None:
+        """Initialize Relion optics after the first output movie exists.
+
+        The classic MotionCorr protocol builds optics only after the first
+        output movie has populated the Set. Doing it while the streaming Set
+        is still empty can leave required optics values as None.
+        """
+        with weakImport("relion"):
+            from relion.convert import OpticsGroups
+
+            og = OpticsGroups.fromImages(outputMovies)
+            gain = self.getInputMovies().getGain()
+            ogDict = {
+                'rlnMicrographStartFrame': self.alignFrame0.get()
+            }
+
+            if self.isEER:
+                ogDict.update({
+                    'rlnEERGrouping': self.eerGroup.get(),
+                    'rlnEERUpsampling': self.eerSampling.get() + 1,
+                })
+
+            if gain:
+                ogDict['rlnMicrographGainName'] = gain
+
+            og.updateAll(**ogDict)
+            og.toImages(outputMovies)
+
 
     def getMovieAlignment(self, inMovieFName: str, nFrames: int) -> MovieAlignment:
         first, last = self._getFrameRange(nFrames, 'align')
