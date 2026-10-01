@@ -622,6 +622,30 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 ogDict['rlnMicrographGainName'] = gain
 
             og.updateAll(**ogDict)
+            opticsValues = og.first()._asdict()
+            missingOpticsValues = [
+                name
+                for name, value in opticsValues.items()
+                if value is None
+            ]
+
+            if missingOpticsValues:
+                acquisition = outputMovies.getAcquisition()
+                raise RuntimeError(
+                    "Missing Relion optics values before serialization: %s. "
+                    "outputDim=%s samplingRate=%s voltage=%s sphericalAberration=%s "
+                    "amplitudeContrast=%s optics=%s"
+                    % (
+                        ", ".join(missingOpticsValues),
+                        outputMovies.getDim(),
+                        outputMovies.getSamplingRate(),
+                        acquisition.getVoltage(),
+                        acquisition.getSphericalAberration(),
+                        acquisition.getAmplitudeContrast(),
+                        dict(opticsValues),
+                    )
+                )
+
             og.toImages(outputMovies)
 
 

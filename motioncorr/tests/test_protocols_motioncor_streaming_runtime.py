@@ -88,6 +88,9 @@ class _OutputSetStub:
     def write(self):
         self.writeCalls += 1
 
+    def getSize(self):
+        return 0
+
 
 class _ProtocolStub:
     _possibleOutputs = MotionCorrOutputs
@@ -122,6 +125,9 @@ class _ProtocolStub:
         return True
 
     def closeOutputsForStreaming(self):
+        return None
+
+    def _updateOutputMoviesOptics(self, outputMovies):
         return None
 
 
