@@ -452,6 +452,15 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
     # --------------------------- UTILS functions -----------------------------
     def readingOutput(self) -> None:
+        inputMovies = self.getInputMovies()
+        loadAllProperties = getattr(
+            inputMovies,
+            'loadAllProperties',
+            None,
+        )
+        if callable(loadAllProperties):
+            loadAllProperties()
+
         movies = getattr(self, self._possibleOutputs.movies.name, None)
         outputList = []
         mics = getattr(self, self._possibleOutputs.micrographs.name, None)
@@ -466,7 +475,16 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         else:
             outputList.append(mics)
 
-        if movies and None not in outputList:
+        if movies is not None and None not in outputList:
+            for outputSet in [movies] + outputList:
+                loadAllProperties = getattr(
+                    outputSet,
+                    'loadAllProperties',
+                    None,
+                )
+                if callable(loadAllProperties):
+                    loadAllProperties()
+
             completedIds = set(item.getObjId() for item in movies)
             for outputSet in outputList:
                 completedIds.intersection_update(
@@ -474,7 +492,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 )
 
             completedIds.intersection_update(
-                self.getInputMovies().getUniqueValues('id')
+                inputMovies.getUniqueValues('id')
             )
 
             for item in movies:
@@ -580,6 +598,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         attrName = self._possibleOutputs.movies.name
         outputMovies = getattr(self, attrName, None)
         if outputMovies is not None:
+            loadAllProperties = getattr(
+                outputMovies,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             outputMovies.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)
@@ -648,6 +674,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _getOutputMics(self, outputName: str, suffix: str = '') -> SetOfMicrographs:
         outputMics = getattr(self, outputName, None)
         if outputMics is not None:
+            loadAllProperties = getattr(
+                outputMics,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             outputMics.enableAppend()
         else:
             inputMoviesPointer = self.getInputMovies(asPointer=True)

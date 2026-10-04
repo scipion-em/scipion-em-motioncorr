@@ -2112,3 +2112,126 @@ class TestMotionCorrTasksLogicalOutputRestore(TestCase):
         self.assertIs(protocol.outputMovies, outputSet)
         self.assertTrue(outputSet.loaded)
         self.assertTrue(outputSet.appendEnabled)
+
+
+class _RefreshRequiredNsItem:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+
+class _RefreshRequiredNsSet:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.loaded = False
+        self.appendEnabled = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def __len__(self):
+        if not self.loaded:
+            raise AssertionError(
+                "Logical Set must be refreshed before reading persisted state."
+            )
+        return len(self.ids)
+
+    def __iter__(self):
+        if not self.loaded:
+            raise AssertionError(
+                "Logical Set must be refreshed before iterating persisted state."
+            )
+        return iter(_RefreshRequiredNsItem(objId) for objId in self.ids)
+
+    def getUniqueValues(self, attribute):
+        if not self.loaded:
+            raise AssertionError(
+                "Logical input must be refreshed before reading ids."
+            )
+        if attribute != "id":
+            raise AssertionError("Unexpected attribute: %s" % attribute)
+        return list(self.ids)
+
+    def enableAppend(self):
+        if not self.loaded:
+            raise AssertionError(
+                "Existing output must be refreshed before enableAppend()."
+            )
+        self.appendEnabled = True
+
+
+class TestMotionCorrNewStreamingLogicalOutputRestore(TestCase):
+    def testReadingOutputRefreshesInputAndPersistedOutputsBeforeResume(self):
+        inputMovies = _RefreshRequiredNsSet([1, 2])
+        outputMovies = _RefreshRequiredNsSet([1, 2])
+        outputMics = _RefreshRequiredNsSet([1])
+
+        class Harness:
+            _possibleOutputs = MotionCorrOutputs
+
+            def __init__(self):
+                self.itemIdReadList = []
+                self.splitEvenOdd = _ValueStub(False)
+                self.doApplyDoseFilter = _ValueStub(False)
+                setattr(
+                    self,
+                    self._possibleOutputs.movies.name,
+                    outputMovies,
+                )
+                setattr(
+                    self,
+                    self._possibleOutputs.micrographs.name,
+                    outputMics,
+                )
+
+            def getInputMovies(self):
+                return inputMovies
+
+            def _hasValidDose(self):
+                return False
+
+            def info(self, message):
+                pass
+
+        protocol = Harness()
+
+        ProtMotionCorrNewStreaming.readingOutput(protocol)
+
+        self.assertTrue(inputMovies.loaded)
+        self.assertTrue(outputMovies.loaded)
+        self.assertTrue(outputMics.loaded)
+        self.assertEqual([1], protocol.itemIdReadList)
+
+    def testExistingOutputFactoriesRefreshBeforeAppend(self):
+        outputMovies = _RefreshRequiredNsSet([1])
+        outputMics = _RefreshRequiredNsSet([1])
+
+        class Harness:
+            _possibleOutputs = MotionCorrOutputs
+
+            def __init__(self):
+                setattr(
+                    self,
+                    self._possibleOutputs.movies.name,
+                    outputMovies,
+                )
+                setattr(
+                    self,
+                    self._possibleOutputs.micrographs.name,
+                    outputMics,
+                )
+
+        protocol = Harness()
+
+        movies = ProtMotionCorrNewStreaming._getOutputMovies(protocol)
+        mics = ProtMotionCorrNewStreaming._getOutputMics(
+            protocol,
+            protocol._possibleOutputs.micrographs.name,
+        )
+
+        self.assertTrue(movies.loaded)
+        self.assertTrue(movies.appendEnabled)
+        self.assertTrue(mics.loaded)
+        self.assertTrue(mics.appendEnabled)
