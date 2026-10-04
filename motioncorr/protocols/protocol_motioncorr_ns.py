@@ -388,7 +388,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         failedOutputList = []
         for attr in attribList:
             outputSet = getattr(self, attr, None)
-            if not outputSet or len(outputSet) == 0:
+            if outputSet is not None:
+                loadAllProperties = getattr(outputSet, 'loadAllProperties', None)
+                if callable(loadAllProperties):
+                    loadAllProperties()
+            if outputSet is None or len(outputSet) == 0:
                 failedOutputList.append(attr)
 
         if self.failedMovies:

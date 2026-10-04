@@ -2355,3 +2355,33 @@ class TestMotionCorrNewStreamingCanonicalOutputs(TestCase):
 
         self.assertIs(canonical, output)
         self.assertTrue(canonical.appendEnabled)
+
+
+class _RefreshRequiredCloseOutput:
+    def __init__(self):
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def __len__(self):
+        if not self.loaded:
+            raise AssertionError("Persisted output must be refreshed before checking terminal state.")
+        return 1
+
+
+class TestMotionCorrNewStreamingTerminalRefresh(TestCase):
+    def testCloseOutputStepRefreshesPersistedOutputsBeforeCheckingSize(self):
+        class Harness:
+            def __init__(self):
+                self.movies = _RefreshRequiredCloseOutput()
+                self.failedMovies = []
+                self.closed = False
+
+            def _closeOutputSet(self):
+                self.closed = True
+
+        protocol = Harness()
+        ProtMotionCorrNewStreaming.closeOutputSetStep(protocol, ["movies"])
+        self.assertTrue(protocol.movies.loaded)
+        self.assertTrue(protocol.closed)
