@@ -616,6 +616,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMovies.write()  # Persist set properties before exposing the streaming output.
 
             self._defineOutputs(**{attrName: outputMovies})
+
+            outputMovies = getattr(
+                self,
+                attrName,
+                outputMovies,
+            )
+            enableAppend = getattr(
+                outputMovies,
+                'enableAppend',
+                None,
+            )
+            if callable(enableAppend):
+                enableAppend()
+
             self._defineSourceRelation(inputMoviesPointer, outputMovies)
         return outputMovies
 
@@ -692,6 +706,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputMics.write()  # Persist set properties before exposing the streaming output.
 
             self._defineOutputs(**{outputName: outputMics})
+
+            outputMics = getattr(
+                self,
+                outputName,
+                outputMics,
+            )
+            enableAppend = getattr(
+                outputMics,
+                'enableAppend',
+                None,
+            )
+            if callable(enableAppend):
+                enableAppend()
+
             self._defineSourceRelation(inputMoviesPointer, outputMics)
         return outputMics
 

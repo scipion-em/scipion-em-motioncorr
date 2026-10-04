@@ -2235,3 +2235,123 @@ class TestMotionCorrNewStreamingLogicalOutputRestore(TestCase):
         self.assertTrue(movies.appendEnabled)
         self.assertTrue(mics.loaded)
         self.assertTrue(mics.appendEnabled)
+
+
+class _CanonicalNsOutputSet:
+    def __init__(self, name):
+        self.name = name
+        self.appendEnabled = False
+        self.copyInfoCalls = 0
+        self.samplingRates = []
+        self.streamStates = []
+        self.writeCalls = 0
+
+    def copyInfo(self, inputSet):
+        self.copyInfoCalls += 1
+
+    def setSamplingRate(self, value):
+        self.samplingRates.append(value)
+
+    def setStreamState(self, state):
+        self.streamStates.append(state)
+
+    def write(self):
+        self.writeCalls += 1
+
+    def enableAppend(self):
+        self.appendEnabled = True
+
+
+class TestMotionCorrNewStreamingCanonicalOutputs(TestCase):
+    def testNewMovieOutputUsesCanonicalSetPublishedByDefineOutputs(self):
+        provisional = _CanonicalNsOutputSet("provisional")
+        canonical = _CanonicalNsOutputSet("canonical")
+
+        class InputMovies:
+            def getSamplingRate(self):
+                return 1.5
+
+        class Harness:
+            _possibleOutputs = MotionCorrOutputs
+
+            def __init__(self):
+                self.sRate = 1.5
+                self.inputMovies = object()
+                self.inputSet = InputMovies()
+                self.relations = []
+
+            def getInputMovies(self, asPointer=False):
+                return self.inputMovies if asPointer else self.inputSet
+
+            def _getPath(self):
+                return "/tmp/protocol"
+
+            def _defineOutputs(self, **kwargs):
+                setattr(
+                    self,
+                    self._possibleOutputs.movies.name,
+                    canonical,
+                )
+
+            def _defineSourceRelation(self, source, target):
+                self.relations.append((source, target))
+
+        protocol = Harness()
+
+        with patch.object(
+            motioncorrNs.SetOfMovies,
+            "create",
+            return_value=provisional,
+        ):
+            output = ProtMotionCorrNewStreaming._getOutputMovies(protocol)
+
+        self.assertIs(canonical, output)
+        self.assertTrue(canonical.appendEnabled)
+
+    def testNewMicrographOutputUsesCanonicalSetPublishedByDefineOutputs(self):
+        provisional = _CanonicalNsOutputSet("provisional")
+        canonical = _CanonicalNsOutputSet("canonical")
+
+        class InputMovies:
+            def getSamplingRate(self):
+                return 1.5
+
+        class Harness:
+            _possibleOutputs = MotionCorrOutputs
+
+            def __init__(self):
+                self.sRate = 1.5
+                self.inputMovies = object()
+                self.inputSet = InputMovies()
+                self.relations = []
+
+            def getInputMovies(self, asPointer=False):
+                return self.inputMovies if asPointer else self.inputSet
+
+            def _getPath(self):
+                return "/tmp/protocol"
+
+            def _defineOutputs(self, **kwargs):
+                setattr(
+                    self,
+                    self._possibleOutputs.micrographs.name,
+                    canonical,
+                )
+
+            def _defineSourceRelation(self, source, target):
+                self.relations.append((source, target))
+
+        protocol = Harness()
+
+        with patch.object(
+            motioncorrNs.SetOfMicrographs,
+            "create",
+            return_value=provisional,
+        ):
+            output = ProtMotionCorrNewStreaming._getOutputMics(
+                protocol,
+                protocol._possibleOutputs.micrographs.name,
+            )
+
+        self.assertIs(canonical, output)
+        self.assertTrue(canonical.appendEnabled)
