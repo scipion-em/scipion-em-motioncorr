@@ -2041,3 +2041,74 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
         self.assertIs(returnedBatch, batch)
         self.assertEqual(1, len(protocol._batchFailures))
         self.assertIs(error, protocol._batchFailures[0])
+
+
+class _RefreshRequiredTasksOutput:
+    def __init__(self, ids=None):
+        self.ids = set(ids or [])
+        self.loaded = False
+        self.appendEnabled = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def enableAppend(self):
+        if not self.loaded:
+            raise AssertionError(
+                "Existing logical output must be refreshed before enableAppend()."
+            )
+        self.appendEnabled = True
+
+    def getUniqueValues(self, attribute):
+        if not self.loaded:
+            raise AssertionError(
+                "Persisted logical output must be refreshed before reading ids."
+            )
+        if attribute != "id":
+            raise AssertionError("Unexpected attribute: %s" % attribute)
+        return sorted(self.ids)
+
+
+class TestMotionCorrTasksLogicalOutputRestore(TestCase):
+    def testResumeRefreshesPersistedOutputsBeforeReadingCompletedIds(self):
+        class Harness:
+            def __init__(self):
+                self.outputMovies = _RefreshRequiredTasksOutput({1, 2})
+
+            def _getRequiredOutputNamesForResume(self):
+                return ["outputMovies"]
+
+            _getOutputItemIds = staticmethod(
+                motioncorrTasks.ProtMotionCorrTasks._getOutputItemIds
+            )
+
+        protocol = Harness()
+
+        completed = (
+            motioncorrTasks.ProtMotionCorrTasks
+            ._getPersistedOutputMovieIds(protocol)
+        )
+
+        self.assertTrue(protocol.outputMovies.loaded)
+        self.assertEqual({1, 2}, completed)
+
+    def testExistingLogicalOutputIsRefreshedBeforeReuse(self):
+        class Harness:
+            def __init__(self):
+                self.outputMovies = _RefreshRequiredTasksOutput({1})
+
+        protocol = Harness()
+
+        outputSet, created = (
+            motioncorrTasks.ProtMotionCorrTasks
+            ._getLogicalOutputSet(
+                protocol,
+                "outputMovies",
+                object,
+            )
+        )
+
+        self.assertFalse(created)
+        self.assertIs(protocol.outputMovies, outputSet)
+        self.assertTrue(outputSet.loaded)
+        self.assertTrue(outputSet.appendEnabled)

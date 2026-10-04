@@ -179,6 +179,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             def __len__(self):
                 return 0
 
+            def getSize(self):
+                return len(self)
+
             def __contains__(self, obj_id):
                 return False
 
@@ -194,6 +197,7 @@ class TestMotionCorrNewStreamingFailures(TestCase):
         outputMovies = _OutputMovies()
         protocol._getOutputMovies = lambda: outputMovies
         protocol.getMovieAlignment = lambda *args, **kwargs: object()
+        protocol._updateOutputMoviesOptics = lambda outputSet: None
 
         def fail_protocol_store(*args, **kwargs):
             raise RuntimeError("protocol store failed")

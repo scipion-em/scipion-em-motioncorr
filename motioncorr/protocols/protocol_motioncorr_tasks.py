@@ -208,6 +208,14 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             if outputSet is None:
                 return set()
 
+            loadAllProperties = getattr(
+                outputSet,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             outputIds = self._getOutputItemIds(
                 outputSet
             )
@@ -273,6 +281,14 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                              suffix='', fixSampling=True):
         outputSet = getattr(self, outputName, None)
         if outputSet is not None:
+            loadAllProperties = getattr(
+                outputSet,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             outputSet.enableAppend()
             return outputSet, False
 
