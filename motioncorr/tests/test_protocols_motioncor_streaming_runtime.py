@@ -627,6 +627,230 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
             "checkpoint to track streaming state.",
         )
 
+
+    def test_NewCanonicalOutputMoviesReloadPersistedMetadataAfterDefineOutputs(self):
+        class AcquisitionStub:
+            def __init__(self, voltage=None, sphericalAberration=None, amplitudeContrast=None):
+                self.voltage = voltage
+                self.sphericalAberration = sphericalAberration
+                self.amplitudeContrast = amplitudeContrast
+
+            def getVoltage(self):
+                return self.voltage
+
+            def getSphericalAberration(self):
+                return self.sphericalAberration
+
+            def getAmplitudeContrast(self):
+                return self.amplitudeContrast
+
+        class InputMoviesStub:
+            def __init__(self):
+                self.acquisition = AcquisitionStub(300.0, 2.7, 0.1)
+
+            def getAcquisition(self):
+                return self.acquisition
+
+        class ProvisionalOutputStub:
+            def __init__(self):
+                self.acquisition = AcquisitionStub()
+                self.samplingRate = None
+                self.streamState = None
+                self.writeCalls = 0
+
+            def copyInfo(self, inputMovies):
+                acquisition = inputMovies.getAcquisition()
+                self.acquisition = AcquisitionStub(
+                    acquisition.getVoltage(),
+                    acquisition.getSphericalAberration(),
+                    acquisition.getAmplitudeContrast(),
+                )
+
+            def setSamplingRate(self, samplingRate):
+                self.samplingRate = samplingRate
+
+            def setStreamState(self, streamState):
+                self.streamState = streamState
+
+            def write(self):
+                self.writeCalls += 1
+
+        class CanonicalOutputStub:
+            def __init__(self, persisted):
+                self.persisted = persisted
+                self.acquisition = AcquisitionStub()
+                self.samplingRate = None
+                self.loadCalls = 0
+                self.appendEnabled = False
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+                self.acquisition = AcquisitionStub(
+                    self.persisted.acquisition.getVoltage(),
+                    self.persisted.acquisition.getSphericalAberration(),
+                    self.persisted.acquisition.getAmplitudeContrast(),
+                )
+                self.samplingRate = self.persisted.samplingRate
+
+            def enableAppend(self):
+                self.appendEnabled = True
+
+            def getAcquisition(self):
+                return self.acquisition
+
+            def getSamplingRate(self):
+                return self.samplingRate
+
+        class ProtocolStub:
+            _possibleOutputs = motioncorrNs.MotionCorrOutputs
+
+            def __init__(self, provisional):
+                self.sRate = 1.5
+                self.inputMovies = InputMoviesStub()
+                self.provisional = provisional
+                self.canonical = CanonicalOutputStub(provisional)
+
+            def getInputMovies(self, asPointer=False):
+                return object() if asPointer else self.inputMovies
+
+            def _getPath(self):
+                return "/tmp"
+
+            def _defineOutputs(self, **kwargs):
+                setattr(self, self._possibleOutputs.movies.name, self.canonical)
+
+            def _defineSourceRelation(self, source, output):
+                return None
+
+        provisional = ProvisionalOutputStub()
+        protocol = ProtocolStub(provisional)
+
+        with patch.object(motioncorrNs.SetOfMovies, "create", return_value=provisional):
+            outputMovies = ProtMotionCorrNewStreaming._getOutputMovies(protocol)
+
+        self.assertIs(outputMovies, protocol.canonical)
+        self.assertEqual(
+            outputMovies.getAcquisition().getVoltage(),
+            300.0,
+            "The canonical output returned after _defineOutputs must reload persisted acquisition metadata.",
+        )
+        self.assertEqual(outputMovies.getAcquisition().getSphericalAberration(), 2.7)
+        self.assertEqual(outputMovies.getAcquisition().getAmplitudeContrast(), 0.1)
+        self.assertEqual(outputMovies.getSamplingRate(), 1.5)
+        self.assertEqual(outputMovies.loadCalls, 1)
+        self.assertTrue(outputMovies.appendEnabled)
+
+
+
+    def test_NewCanonicalOutputMicrographsReloadPersistedMetadataAfterDefineOutputs(self):
+        class AcquisitionStub:
+            def __init__(self, voltage=None):
+                self.voltage = voltage
+
+            def getVoltage(self):
+                return self.voltage
+
+        class InputMoviesStub:
+            def __init__(self):
+                self.acquisition = AcquisitionStub(300.0)
+
+            def getAcquisition(self):
+                return self.acquisition
+
+        class ProvisionalOutputStub:
+            def __init__(self):
+                self.acquisition = AcquisitionStub()
+                self.samplingRate = None
+                self.streamState = None
+                self.writeCalls = 0
+
+            def copyInfo(self, inputMovies):
+                self.acquisition = AcquisitionStub(
+                    inputMovies.getAcquisition().getVoltage()
+                )
+
+            def setSamplingRate(self, samplingRate):
+                self.samplingRate = samplingRate
+
+            def setStreamState(self, streamState):
+                self.streamState = streamState
+
+            def write(self):
+                self.writeCalls += 1
+
+        class CanonicalOutputStub:
+            def __init__(self, persisted):
+                self.persisted = persisted
+                self.acquisition = AcquisitionStub()
+                self.samplingRate = None
+                self.loadCalls = 0
+                self.appendEnabled = False
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+                self.acquisition = AcquisitionStub(
+                    self.persisted.acquisition.getVoltage()
+                )
+                self.samplingRate = self.persisted.samplingRate
+
+            def enableAppend(self):
+                self.appendEnabled = True
+
+            def getAcquisition(self):
+                return self.acquisition
+
+            def getSamplingRate(self):
+                return self.samplingRate
+
+        class ProtocolStub:
+            _possibleOutputs = motioncorrNs.MotionCorrOutputs
+
+            def __init__(self, provisional):
+                self.sRate = 1.5
+                self.inputMovies = InputMoviesStub()
+                self.canonical = CanonicalOutputStub(provisional)
+
+            def getInputMovies(self, asPointer=False):
+                return object() if asPointer else self.inputMovies
+
+            def _getPath(self):
+                return "/tmp"
+
+            def _defineOutputs(self, **kwargs):
+                setattr(
+                    self,
+                    self._possibleOutputs.micrographs.name,
+                    self.canonical,
+                )
+
+            def _defineSourceRelation(self, source, output):
+                return None
+
+        provisional = ProvisionalOutputStub()
+        protocol = ProtocolStub(provisional)
+
+        with patch.object(
+            motioncorrNs.SetOfMicrographs,
+            "create",
+            return_value=provisional,
+        ):
+            outputMics = ProtMotionCorrNewStreaming._getOutputMics(
+                protocol,
+                protocol._possibleOutputs.micrographs.name,
+            )
+
+        self.assertIs(outputMics, protocol.canonical)
+        self.assertEqual(
+            outputMics.getAcquisition().getVoltage(),
+            300.0,
+            "The canonical micrograph output returned after _defineOutputs "
+            "must reload persisted acquisition metadata.",
+        )
+        self.assertEqual(outputMics.getSamplingRate(), 1.5)
+        self.assertEqual(outputMics.loadCalls, 1)
+        self.assertTrue(outputMics.appendEnabled)
+
+
     def test_OutputFactoriesReuseAlreadyDefinedEmptySets(self):
         existingMovies = _ExistingEmptyOutputSetStub()
         existingMics = _ExistingEmptyOutputSetStub()

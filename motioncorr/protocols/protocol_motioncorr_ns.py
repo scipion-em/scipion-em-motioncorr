@@ -633,6 +633,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 attrName,
                 outputMovies,
             )
+            loadAllProperties = getattr(
+                outputMovies,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             enableAppend = getattr(
                 outputMovies,
                 'enableAppend',
@@ -723,6 +731,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 outputName,
                 outputMics,
             )
+            loadAllProperties = getattr(
+                outputMics,
+                'loadAllProperties',
+                None,
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             enableAppend = getattr(
                 outputMics,
                 'enableAppend',
