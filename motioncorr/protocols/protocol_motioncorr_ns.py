@@ -181,6 +181,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         )
 
         while True:
+            if self.isFailed():
+                return
+
             with self._lock:
                 inIds = set(inMoviesSet.getUniqueValues('id'))
 
@@ -214,6 +217,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 closeSetStepDeps.append(cOutId)
                 logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
                 self.itemIdReadList.append(objId)
+
+            if self.isFailed():
+                return
 
             time.sleep(10)
             if inMoviesSet.isStreamOpen():
@@ -342,6 +348,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     firstOutputMovie = outputMovies.getSize() == 0
                     outputMovies.append(outMovie)
                     if firstOutputMovie:
+                        outputMovies.setDim(outMovie.getDim())
                         self._updateOutputMoviesOptics(outputMovies)
                     outputMovies.update(outMovie)
                     outputMovies.write()

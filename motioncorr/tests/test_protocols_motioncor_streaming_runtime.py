@@ -56,6 +56,9 @@ class _OutputMovieStub:
     def getNumberOfFrames(self):
         return 10
 
+    def getDim(self):
+        return (4096, 4096, 40)
+
     def setAlignment(self, alignment):
         self.alignment = alignment
 
@@ -65,6 +68,7 @@ class _OutputSetStub:
         self.appended = None
         self.updated = None
         self.writeCalls = 0
+        self.dim = None
 
     def __len__(self):
         return (
@@ -90,6 +94,9 @@ class _OutputSetStub:
 
     def getSize(self):
         return 0
+
+    def setDim(self, dim):
+        self.dim = dim
 
 
 class _ProtocolStub:
@@ -241,6 +248,9 @@ class _GeneratorProtocolStub:
             )
         )
 
+    def isFailed(self):
+        return False
+
     def _initialize(self):
         return None
 
@@ -307,6 +317,34 @@ class _ExistingEmptyOutputSetStub:
         self.appendEnabled = True
 
 class TestMotionCorrNewStreamingRuntime(TestCase):
+
+    def test_FirstOutputMovieSeedsSetDimensionsBeforeOptics(self):
+        class OutputMovieStub(_OutputMovieStub):
+            def getDim(self):
+                return (4096, 4096, 40)
+
+        class OutputSetStub(_OutputSetStub):
+            def __init__(self):
+                super().__init__()
+                self.dim = None
+
+            def setDim(self, dim):
+                self.dim = dim
+
+        protocol = _ProtocolStub()
+        protocol.outputMoviesSet = OutputSetStub()
+
+        def assertOpticsHasDimensions(outputMovies):
+            self.assertEqual((4096, 4096, 40), outputMovies.dim)
+
+        protocol._updateOutputMoviesOptics = assertOpticsHasDimensions
+        inputMovie = _InputMovieStub(objId=37)
+
+        with patch.object(motioncorrNs, "Movie", OutputMovieStub):
+            ProtMotionCorrNewStreaming.createOutputStep(protocol, "/tmp/movie-37.mrc", inputMovie)
+
+        self.assertEqual((4096, 4096, 40), protocol.outputMoviesSet.dim)
+
     def test_OutputMoviesPreserveInputMovieIdentity(self):
         protocol = _ProtocolStub()
         inputMovie = _InputMovieStub(
@@ -491,6 +529,55 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
             "Output persistence must not be wrapped by a "
             "storage-backend-specific retry decorator.",
         )
+
+
+    def test_StreamGeneratorStopsWhenProtocolFails(self):
+        class InputSetStub:
+            def getUniqueValues(self, attribute):
+                return []
+
+            def isStreamOpen(self):
+                return True
+
+            def iterItems(self):
+                return iter([])
+
+        class ProtocolStub:
+            def __init__(self):
+                self._lock = threading.Lock()
+                self.itemIdReadList = []
+                self.inputSet = InputSetStub()
+                self.failed = True
+                self.insertedSteps = []
+
+            def isFailed(self):
+                return self.failed
+
+            def _initialize(self):
+                return None
+
+            def getInputMovies(self):
+                return self.inputSet
+
+            def readingOutput(self):
+                return None
+
+            def _getOutputsToCheck(self):
+                return ["outputMovies", "outputMicrographs"]
+
+            def _insertFunctionStep(self, function, *args, **kwargs):
+                self.insertedSteps.append(function.__name__)
+                return len(self.insertedSteps)
+
+            def _convertInputStep(self):
+                return None
+
+        protocol = ProtocolStub()
+
+        with patch.object(motioncorrNs.time, "sleep", side_effect=AssertionError("failed generator must not sleep")):
+            ProtMotionCorrNewStreaming.stepsGeneratorStep(protocol)
+
+        self.assertEqual(["_convertInputStep"], protocol.insertedSteps)
 
     def test_StreamGeneratorUsesOneSharedInputPreparationStep(self):
         protocol = _GeneratorProtocolStub()
