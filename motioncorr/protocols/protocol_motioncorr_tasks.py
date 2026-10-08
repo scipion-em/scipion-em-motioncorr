@@ -234,37 +234,66 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         )
 
     def _iterLogicalInputMovies(self, waitSecs):
+        """Yield each movie once, discovering only what just arrived.
+
+        Discovery is a watermark query, so a poll costs what turned up
+        rather than everything the stream has produced. Ids the producer
+        makes visible *below* the watermark afterwards would never be
+        seen that way, so once it closes the ids are listed in full once
+        and whatever is missing is picked up then.
+        """
         inputMovies = self.getInputMovies()
-        scheduledIds = set(
-            self._getPersistedOutputMovieIds()
-        )
+        scheduledIds = set(self._getPersistedOutputMovieIds())
+        self._movieWatermark = max(scheduledIds) if scheduledIds else 0
+        pendingIds = set()
 
         while True:
-            newMovies = []
+            if self.isFailed():
+                return
 
-            for movie in inputMovies.iterItems():
-                objId = movie.getObjId()
+            discoveredIds = self._discoverMovieIdsAfter(
+                inputMovies, self._movieWatermark)
 
-                if objId in scheduledIds:
-                    continue
+            if discoveredIds:
+                self._movieWatermark = max(self._movieWatermark,
+                                           max(discoveredIds))
 
-                scheduledIds.add(objId)
+            pendingIds.update(objId for objId in discoveredIds
+                              if objId not in scheduledIds)
 
-                clone = getattr(
-                    movie,
-                    'clone',
-                    None,
-                )
-                newMovies.append(
-                    clone()
-                    if callable(clone)
-                    else movie
-                )
+            producerClosed = not inputMovies.isStreamOpen()
 
-            for movie in newMovies:
+            if producerClosed:
+                # Terminal reconciliation: the one place that lists every
+                # id, and only while the declared size is still ahead of
+                # what has actually been seen.
+                knownIds = set(scheduledIds) | pendingIds
+                declaredSize = self._getDeclaredSize(inputMovies)
+
+                if declaredSize is not None and len(knownIds) < declaredSize:
+                    visibleIds = self._listAllMovieIds(inputMovies)
+
+                    if visibleIds:
+                        self._movieWatermark = max(self._movieWatermark,
+                                                   max(visibleIds))
+
+                    pendingIds.update(objId for objId in visibleIds
+                                      if objId not in scheduledIds)
+                    knownIds = set(scheduledIds) | pendingIds
+
+                self._recordTerminalProgress(
+                    inputMovies, knownIds,
+                    declaredSize is None or len(knownIds) >= declaredSize,
+                    bool(pendingIds))
+
+            for movie in self._loadMoviesByIds(inputMovies,
+                                               sorted(pendingIds)):
+                scheduledIds.add(movie.getObjId())
+                pendingIds.discard(movie.getObjId())
+
                 yield movie
 
-            if not inputMovies.isStreamOpen():
+            if producerClosed and not pendingIds:
                 break
 
             time.sleep(waitSecs)

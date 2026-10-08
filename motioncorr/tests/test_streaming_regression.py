@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from motioncorr.protocols.protocol_motioncorr import ProtMotionCorr
 from motioncorr.protocols.protocol_base import ProtMotionCorrBase
+from motioncorr.protocols.protocol_motioncorr_tasks import ProtMotionCorrTasks
 
 
 class _Value:
@@ -509,3 +510,251 @@ class TestMotionCorrCalcFrameMotionZeroDoseRegression(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _CountingInputMovies:
+    """An input Set that records how it is being asked for its contents."""
+
+    def __init__(self, ids, streamOpen=True):
+        self._ids = list(ids)
+        self._streamOpen = streamOpen
+        self.hydratedItems = 0
+        self.fullScans = 0
+        self.watermarkQueries = []
+
+    def iterItems(self, where=None, **kwargs):
+        marker = 'id IN ('
+
+        if where is not None and where.startswith(marker):
+            wanted = {int(part) for part in
+                      where[len(marker):-1].split(',') if part}
+
+            for objId in self._ids:
+                if objId in wanted:
+                    self.hydratedItems += 1
+                    yield _IdOnlyMovie(objId)
+
+            return
+
+        self.fullScans += 1
+
+        for objId in self._ids:
+            self.hydratedItems += 1
+            yield _IdOnlyMovie(objId)
+
+    def getUniqueValues(self, attributes, where=None):
+        self.watermarkQueries.append(where)
+
+        if where is None:
+            return list(self._ids)
+
+        marker = 'id > '
+        if where.startswith(marker):
+            bound = int(where[len(marker):])
+            return [objId for objId in self._ids if objId > bound]
+
+        raise AssertionError('Unexpected query: %r' % (where,))
+
+    def getSize(self):
+        return len(self._ids)
+
+    def isStreamOpen(self):
+        return self._streamOpen
+
+    def isStreamClosed(self):
+        return not self._streamOpen
+
+    def loadAllProperties(self):
+        pass
+
+    def close(self):
+        pass
+
+    def arrive(self, objId):
+        self._ids.append(objId)
+
+
+class _IdOnlyMovie:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+    def clone(self):
+        return _IdOnlyMovie(self._objId)
+
+
+class _PollCostHarness(ProtMotionCorrTasks):
+    def __init__(self, inputMovies):
+        self._inputMovies = inputMovies
+
+    def getInputMovies(self):
+        return self._inputMovies
+
+    def _getPersistedOutputMovieIds(self):
+        return set()
+
+    def isFailed(self):
+        return False
+
+    def info(self, *args):
+        pass
+
+
+class TestMotionCorrTasksPollCost(unittest.TestCase):
+    """A poll must cost what just arrived, not the whole history.
+
+    This protocol runs for as long as its producer does and the input
+    Set keeps growing, so hydrating every movie on every poll makes it
+    slower the longer it runs - exactly when there is most data.
+    """
+
+    def _drain(self, inputMovies, polls):
+        harness = _PollCostHarness(inputMovies)
+        produced = []
+        iterator = harness._iterLogicalInputMovies(waitSecs=0)
+
+        for _ in range(polls):
+            inputMovies.arrive(len(inputMovies._ids) + 1)
+
+        inputMovies._streamOpen = False
+
+        for movie in iterator:
+            produced.append(movie.getObjId())
+
+        return harness, produced
+
+    def test_APollDoesNotHydrateEveryMovieSeenSoFar(self):
+        # 200 movies already there, then three more arrive one at a time
+        # while the stream is open - which is the normal case.
+        inputMovies = _CountingInputMovies(range(1, 201))
+        harness = _PollCostHarness(inputMovies)
+        iterator = harness._iterLogicalInputMovies(waitSecs=0)
+
+        for _ in range(200):
+            next(iterator)
+
+        afterFirstPass = inputMovies.hydratedItems
+
+        for extra in (201, 202, 203):
+            inputMovies.arrive(extra)
+            next(iterator)
+
+        inputMovies._streamOpen = False
+
+        self.assertLess(
+            inputMovies.hydratedItems - afterFirstPass,
+            30,
+            "Picking up three new movies rebuilt %d objects from the "
+            "database: every poll walks the whole history."
+            % (inputMovies.hydratedItems - afterFirstPass),
+        )
+
+    def test_DiscoveryAsksOnlyForWhatIsAboveTheWatermark(self):
+        inputMovies = _CountingInputMovies(range(1, 51))
+
+        self._drain(inputMovies, polls=2)
+
+        self.assertTrue(
+            any(where and where.startswith('id > ')
+                for where in inputMovies.watermarkQueries),
+            "Discovery never asked for ids above a watermark; it listed "
+            "everything instead.",
+        )
+
+    def test_EveryMovieIsStillYieldedExactlyOnce(self):
+        inputMovies = _CountingInputMovies(range(1, 11))
+
+        _, produced = self._drain(inputMovies, polls=2)
+
+        self.assertEqual(
+            sorted(produced),
+            sorted(set(produced)),
+            "A movie was yielded twice.",
+        )
+        self.assertEqual(set(produced), set(inputMovies._ids))
+
+
+class TestMotionCorrTasksLateVisibleIds(unittest.TestCase):
+    """Ids can become visible below the watermark after it moved on."""
+
+    def test_AnIdThatTurnsUpLateIsStillProcessed(self):
+        inputMovies = _CountingInputMovies([1, 3])
+        harness = _PollCostHarness(inputMovies)
+        produced = []
+        iterator = harness._iterLogicalInputMovies(waitSecs=0)
+
+        produced.append(next(iterator).getObjId())
+        produced.append(next(iterator).getObjId())
+
+        # Id 2 only becomes visible now, below the watermark.
+        inputMovies._ids.insert(1, 2)
+        inputMovies._streamOpen = False
+
+        produced.extend(movie.getObjId() for movie in iterator)
+
+        self.assertIn(
+            2,
+            produced,
+            "Id 2 became visible after the watermark had passed it: "
+            "nothing ever looks back, so that movie is never aligned.",
+        )
+
+
+class _FailingPollHarness(_PollCostHarness):
+    """Fails part-way through the stream, as a failed step would."""
+
+    def __init__(self, inputMovies, failAfter):
+        _PollCostHarness.__init__(self, inputMovies)
+        self._failAfter = failAfter
+        self.polls = 0
+
+    def _discoverMovieIdsAfter(self, inputMovies, watermark):
+        self.polls += 1
+
+        if self.polls > 50:
+            raise AssertionError(
+                "The input generator polled %d times after the run had "
+                "failed: it keeps feeding alignment work that is thrown "
+                "away." % self.polls
+            )
+
+        return _PollCostHarness._discoverMovieIdsAfter(
+            self, inputMovies, watermark)
+
+    def isFailed(self):
+        return self.polls >= self._failAfter
+
+
+class TestMotionCorrTasksStopsFeedingAFailedRun(unittest.TestCase):
+    """Alignment is the expensive part and this generator feeds it.
+
+    Once the run has failed, everything it yields is aligned and thrown
+    away, and nothing ever ends the loop while the producer stays open.
+    """
+
+    def test_AFailedRunStopsTheInputGenerator(self):
+        inputMovies = _CountingInputMovies(range(1, 6))
+        harness = _FailingPollHarness(inputMovies, failAfter=2)
+
+        produced = list(harness._iterLogicalInputMovies(waitSecs=0))
+
+        self.assertLessEqual(
+            harness.polls,
+            2,
+            "The generator kept discovering input after the run failed.",
+        )
+        self.assertLessEqual(len(produced), 5)
+
+    def test_AHealthyRunIsNotAffected(self):
+        inputMovies = _CountingInputMovies(range(1, 6), streamOpen=False)
+        harness = _FailingPollHarness(inputMovies, failAfter=999)
+
+        produced = list(harness._iterLogicalInputMovies(waitSecs=0))
+
+        self.assertEqual(
+            sorted(movie.getObjId() for movie in produced),
+            list(range(1, 6)),
+            "A healthy run must still yield every movie.",
+        )

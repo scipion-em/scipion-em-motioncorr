@@ -10,6 +10,7 @@ from motioncorr.protocols.protocol_motioncorr_ns import (
     MotionCorrOutputs,
     ProtMotionCorrNewStreaming,
 )
+from motioncorr.protocols.protocol_base import ProtMotionCorrBase
 import motioncorr.protocols.protocol_motioncorr as motioncorrLegacy
 
 
@@ -237,6 +238,16 @@ class _GeneratorInputSetStub:
 
 
 class _GeneratorProtocolStub:
+    # Discovery now goes through the shared base helpers, so the stub
+    # borrows the real ones rather than reimplementing them.
+    _discoverMovieIdsAfter = ProtMotionCorrBase._discoverMovieIdsAfter
+    _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+    _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+    _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+    _recordTerminalProgress = ProtMotionCorrBase._recordTerminalProgress
+    ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+    TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
     def __init__(self):
         self._lock = threading.Lock()
         self.itemIdReadList = []
@@ -1085,6 +1096,25 @@ class TestMotionCorrNewStreamingRuntime(TestCase):
                 self.dark = self.originalDark
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.inputSet = MutableInputSet()
                 self.isEER = False
@@ -1287,6 +1317,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return None
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.inputSet = LogicalInputSet()
                 self.streamingSleepOnWait = ValueStub(0)
@@ -1419,6 +1468,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return list(self.objIds)
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.inputSet = InputSetStub()
                 self.outputMovies = OutputSetStub([1, 2])
@@ -1497,6 +1565,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return self._objId
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.doSaveMovie = ValueStub(False)
                 self._firstTimeOutput = False
@@ -1565,6 +1652,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return bool(self.value)
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.doApplyDoseFilter = ValueStub(True)
                 self.doSaveUnweightedMic = ValueStub(False)
@@ -1645,6 +1751,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 self.writeCalls += 1
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.outputMovies = OutputMoviesStub()
                 self.doSaveMovie = ValueStub(False)
@@ -1799,6 +1924,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return provisional
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.inputSet = InputSetStub()
                 self.inputMovies = object()
@@ -1894,6 +2038,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 )
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.outputMovies = OutputMoviesStub()
                 self.doSaveMovie = ValueStub(False)
@@ -1984,6 +2147,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 self.refreshed = True
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.inputSet = InputSetStub()
                 self.extraParams2 = ValueStub("")
@@ -2023,6 +2205,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return False
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.command = "motioncor -Gpu #"
                 self.program = "MotionCor3"
@@ -2132,6 +2333,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 ]
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.streamingSleepOnWait = ValueStub(0)
                 self.streamingBatchSize = ValueStub(10)
@@ -2198,6 +2418,33 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
 
     def test_LegacyMotionCorrKeepsDoneCompatibilityWithoutTasksSidecar(self):
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # Discovery and the failure guard now live in the shared
+            # base, so the harness borrows the real ones.
+            _discoverMovieIdsAfter = ProtMotionCorrBase._discoverMovieIdsAfter
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # The input generator checks this before each poll.
+            def isFailed(self):
+                return False
+
             def _getExtraPath(self, *parts):
                 return "/tmp/" + "/".join(parts)
 
@@ -2262,6 +2509,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 return False
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self, fileName):
                 self.inputSet = InputSetStub(fileName)
                 self.extraParams2 = ValueStub("")
@@ -2335,6 +2601,25 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
         batch = {"id": 7, "items": []}
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             def __init__(self):
                 self.lock = threading.Lock()
                 self._batchFailures = []
@@ -2383,6 +2668,33 @@ class _RefreshRequiredTasksOutput:
 class TestMotionCorrTasksLogicalOutputRestore(TestCase):
     def testResumeRefreshesPersistedOutputsBeforeReadingCompletedIds(self):
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # Discovery and the failure guard now live in the shared
+            # base, so the harness borrows the real ones.
+            _discoverMovieIdsAfter = ProtMotionCorrBase._discoverMovieIdsAfter
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # The input generator checks this before each poll.
+            def isFailed(self):
+                return False
+
             def __init__(self):
                 self.outputMovies = _RefreshRequiredTasksOutput({1, 2})
 
@@ -2405,6 +2717,33 @@ class TestMotionCorrTasksLogicalOutputRestore(TestCase):
 
     def testExistingLogicalOutputIsRefreshedBeforeReuse(self):
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # Discovery and the failure guard now live in the shared
+            # base, so the harness borrows the real ones.
+            _discoverMovieIdsAfter = ProtMotionCorrBase._discoverMovieIdsAfter
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # The input generator checks this before each poll.
+            def isFailed(self):
+                return False
+
             def __init__(self):
                 self.outputMovies = _RefreshRequiredTasksOutput({1})
 
@@ -2480,6 +2819,25 @@ class TestMotionCorrNewStreamingLogicalOutputRestore(TestCase):
         outputMics = _RefreshRequiredNsSet([1])
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             _possibleOutputs = MotionCorrOutputs
 
             def __init__(self):
@@ -2520,6 +2878,25 @@ class TestMotionCorrNewStreamingLogicalOutputRestore(TestCase):
         outputMics = _RefreshRequiredNsSet([1])
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             _possibleOutputs = MotionCorrOutputs
 
             def __init__(self):
@@ -2583,6 +2960,25 @@ class TestMotionCorrNewStreamingCanonicalOutputs(TestCase):
                 return 1.5
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             _possibleOutputs = MotionCorrOutputs
 
             def __init__(self):
@@ -2628,6 +3024,25 @@ class TestMotionCorrNewStreamingCanonicalOutputs(TestCase):
                 return 1.5
 
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+
+            # The input generator checks this before each poll.
+
+            def isFailed(self):
+
+                return False
+
             _possibleOutputs = MotionCorrOutputs
 
             def __init__(self):
@@ -2684,6 +3099,33 @@ class _RefreshRequiredCloseOutput:
 class TestMotionCorrNewStreamingTerminalRefresh(TestCase):
     def testCloseOutputStepRefreshesPersistedOutputsBeforeCheckingSize(self):
         class Harness:
+            # Discovery and the failure guard live in the
+            # shared base; borrow the real ones.
+            _discoverMovieIdsAfter = (
+                ProtMotionCorrBase._discoverMovieIdsAfter)
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # Discovery and the failure guard now live in the shared
+            # base, so the harness borrows the real ones.
+            _discoverMovieIdsAfter = ProtMotionCorrBase._discoverMovieIdsAfter
+            _loadMoviesByIds = ProtMotionCorrBase._loadMoviesByIds
+            _listAllMovieIds = ProtMotionCorrBase._listAllMovieIds
+            _getDeclaredSize = ProtMotionCorrBase._getDeclaredSize
+            _recordTerminalProgress = (
+                ProtMotionCorrBase._recordTerminalProgress)
+            ID_LOAD_BATCH_SIZE = ProtMotionCorrBase.ID_LOAD_BATCH_SIZE
+            TERMINAL_STALL_POLLS = ProtMotionCorrBase.TERMINAL_STALL_POLLS
+
+            # The input generator checks this before each poll.
+            def isFailed(self):
+                return False
+
             def __init__(self):
                 self.movies = _RefreshRequiredCloseOutput()
                 self.failedMovies = []

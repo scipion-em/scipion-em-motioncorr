@@ -185,7 +185,35 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 return
 
             with self._lock:
-                inIds = set(inMoviesSet.getUniqueValues('id'))
+                # Only the ids above the watermark are asked for; the
+                # full listing is kept for the terminal reconciliation
+                # below, where it is paid once instead of every poll.
+                newIds = self._discoverMovieIdsAfter(
+                    inMoviesSet, getattr(self, '_movieWatermark', 0))
+
+                if newIds:
+                    self._movieWatermark = max(
+                        getattr(self, '_movieWatermark', 0), max(newIds))
+
+                self._pendingMovieIds = getattr(self, '_pendingMovieIds',
+                                                set())
+                self._pendingMovieIds.update(
+                    objId for objId in newIds
+                    if objId not in self.itemIdReadList)
+
+                producerClosed = not inMoviesSet.isStreamOpen()
+
+                if producerClosed:
+                    # A producer can make an id visible below the
+                    # watermark after it moved past: list them once, here,
+                    # so nothing is left behind.
+                    inIds = set(inMoviesSet.getUniqueValues('id'))
+                    self._pendingMovieIds.update(
+                        objId for objId in inIds
+                        if objId not in self.itemIdReadList)
+                else:
+                    inIds = (set(self.itemIdReadList)
+                             | self._pendingMovieIds)
 
             # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
             # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
@@ -198,9 +226,11 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                                          needsGPU=False)
                 break
 
-            nonProcessedIds = inIds - set(self.itemIdReadList)
-            moviesToProcessDict = {objId: movie.clone() for movie in inMoviesSet.iterItems()
-                                   if (objId := movie.getObjId()) in nonProcessedIds}
+            nonProcessedIds = set(self._pendingMovieIds)
+            moviesToProcessDict = {
+                movie.getObjId(): movie
+                for movie in self._loadMoviesByIds(inMoviesSet,
+                                                   sorted(nonProcessedIds))}
             for objId, movie in moviesToProcessDict.items():
                 movieFName = movie.getFileName()
                 pMovPid = self._insertFunctionStep(
@@ -217,6 +247,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                 closeSetStepDeps.append(cOutId)
                 logger.info(cyanStr(f"Steps created for objId = {objId} - {movie.getFileName()}"))
                 self.itemIdReadList.append(objId)
+                self._pendingMovieIds.discard(objId)
 
             if self.isFailed():
                 return

@@ -45,6 +45,154 @@ logger = logging.getLogger(__name__)
 
 
 class ProtMotionCorrBase(EMProtocol):
+
+    # How many polls a closed producer may keep showing exactly the same
+    # incomplete view before the protocol gives up on it.
+    TERMINAL_STALL_POLLS = 10
+
+    def _discoverMovieIdsAfter(self, inputMovies, watermark):
+        """Ids above the watermark, without walking what came before.
+
+        The id query is answered by the Set itself; only the ids it
+        returns are ever turned back into Movies. Walking the whole Set
+        to find the few that just arrived costs more the longer the run
+        goes on, which is exactly backwards.
+        """
+        try:
+            return list(inputMovies.getUniqueValues(
+                'id', where='id > %d' % watermark))
+        except (AttributeError, NotImplementedError, TypeError):
+            # A Set that cannot answer a filtered query still has to
+            # work; it just costs more.
+            return [objId for objId in self._listAllMovieIds(inputMovies)
+                    if objId > watermark]
+
+    def _listAllMovieIds(self, inputMovies):
+        """Every id the Set can show, by whatever means it supports.
+
+        Asking for the ids alone is the cheap way; walking the Set is
+        the last resort, for a Set that cannot answer either query.
+        """
+        try:
+            return list(inputMovies.getUniqueValues('id'))
+        except (AttributeError, NotImplementedError):
+            pass
+
+        try:
+            return list(inputMovies.getIdSet())
+        except (AttributeError, NotImplementedError):
+            return [movie.getObjId() for movie in inputMovies.iterItems()]
+
+    # Ids are asked for in bounded groups rather than one enormous query.
+    ID_LOAD_BATCH_SIZE = 500
+
+    def _loadMoviesByIds(self, inputMovies, movieIds):
+        """Turn ids back into Movies, asking only for those ids.
+
+        The Set is asked for exactly the rows wanted, in bounded groups.
+        A Set that cannot answer that still works - it is walked once -
+        but then the cost follows the whole stream rather than what just
+        arrived.
+        """
+        movieIds = list(movieIds)
+
+        if not movieIds:
+            return []
+
+        loaded = []
+
+        def _clone(movie):
+            clone = getattr(movie, 'clone', None)
+
+            return clone() if callable(clone) else movie
+
+        for offset in range(0, len(movieIds), self.ID_LOAD_BATCH_SIZE):
+            group = movieIds[offset:offset + self.ID_LOAD_BATCH_SIZE]
+
+            try:
+                where = 'id IN (%s)' % ','.join(str(i) for i in group)
+                loaded.extend(_clone(movie)
+                              for movie in inputMovies.iterItems(where=where))
+            except (AttributeError, NotImplementedError, TypeError):
+                wanted = set(movieIds)
+                loaded = []
+
+                for movie in inputMovies.iterItems():
+                    if movie.getObjId() not in wanted:
+                        continue
+
+                    loaded.append(_clone(movie))
+                    wanted.discard(movie.getObjId())
+
+                    if not wanted:
+                        break
+
+                return loaded
+
+        return loaded
+
+    def _getDeclaredSize(self, inputMovies):
+        """How many items the producer says it has, when it can say.
+
+        A Set that cannot answer simply leaves the terminal checks out
+        of the picture rather than taking the run down with it.
+        """
+        getSize = getattr(inputMovies, 'getSize', None)
+
+        if not callable(getSize):
+            return None
+
+        try:
+            return getSize()
+        except Exception:
+            return None
+
+    def _recordTerminalProgress(self, inputMovies, knownIds,
+                                terminalConsistent, activeWork):
+        """Refuse to poll forever for rows that are never coming.
+
+        A producer can close declaring more items than the consumer can
+        see, and usually the rest turn up a moment later. When they do
+        not - the declared size, what is known and the watermark all stay
+        exactly as they were, poll after poll, with nothing in flight -
+        the protocol would otherwise sit there RUNNING for the rest of
+        time.
+        """
+        if terminalConsistent:
+            self._terminalStallSignature = None
+            self._terminalStallCount = 0
+
+            return
+
+        if activeWork:
+            self._terminalStallCount = 0
+
+            return
+
+        declaredSize = self._getDeclaredSize(inputMovies)
+
+        if declaredSize is None:
+            return
+
+        signature = (declaredSize, len(knownIds),
+                     getattr(self, '_movieWatermark', 0))
+
+        if signature == getattr(self, '_terminalStallSignature', None):
+            self._terminalStallCount = getattr(
+                self, '_terminalStallCount', 0) + 1
+        else:
+            self._terminalStallSignature = signature
+            self._terminalStallCount = 1
+
+        if self._terminalStallCount >= self.TERMINAL_STALL_POLLS:
+            raise RuntimeError(
+                "The input stream closed declaring %d movies but only %d "
+                "are visible, and that has not changed in %d polls with "
+                "nothing left to process. Refusing to wait for rows that "
+                "are not coming."
+                % (declaredSize, len(knownIds),
+                   self._terminalStallCount))
+
     _label = None
     stepsExecutionMode = STEPS_PARALLEL
     program = Plugin.getProgram()
