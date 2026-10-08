@@ -3138,3 +3138,92 @@ class TestMotionCorrNewStreamingTerminalRefresh(TestCase):
         ProtMotionCorrNewStreaming.closeOutputSetStep(protocol, ["movies"])
         self.assertTrue(protocol.movies.loaded)
         self.assertTrue(protocol.closed)
+
+
+class _UnhydratableInputSetStub:
+    """Lists an id the Set will never hand back as a Movie.
+
+    A row can be announced by the id query before it can actually be
+    selected. Usually it turns up a moment later; this one never does.
+    """
+
+    def __init__(self, movie, ghostId):
+        self._movie = movie
+        self._ghostId = ghostId
+        self.polls = 0
+
+    def getUniqueValues(self, attribute, where=None):
+        if where is None:
+            self.polls += 1
+
+            if self.polls > 60:
+                raise AssertionError(
+                    "The generator polled %d times for a movie that is "
+                    "never coming: the output is never closed and the "
+                    "run never ends." % self.polls
+                )
+
+        ids = [self._movie.getObjId(), self._ghostId]
+
+        if where is None:
+            return ids
+
+        bound = int(where.split('>')[1])
+
+        return [objId for objId in ids if objId > bound]
+
+    def getSize(self):
+        return 2
+
+    def isStreamOpen(self):
+        return False
+
+    def loadAllProperties(self):
+        pass
+
+    def iterItems(self, where=None):
+        # The ghost id is never handed back.
+        return iter([self._movie])
+
+
+class TestMotionCorrNsClosesWhenARowNeverArrives(TestCase):
+    """The generator only schedules the closing step once every id it
+    has seen has been turned into a movie and given steps.
+
+    An id that is listed but never selectable keeps that from ever being
+    true, so the closing step is never inserted and the output stays
+    open for good.
+    """
+
+    def test_ARowThatNeverArrivesDoesNotHangTheRun(self):
+        protocol = _GeneratorProtocolStub()
+        movie = protocol.inputSet._movie
+        protocol.inputSet = _UnhydratableInputSetStub(movie, ghostId=999)
+
+        with patch.object(motioncorrNs.time, "sleep", lambda seconds: None):
+            with self.assertRaises(RuntimeError) as raised:
+                ProtMotionCorrNewStreaming.stepsGeneratorStep(protocol)
+
+        message = str(raised.exception)
+
+        self.assertIn(
+            '2 movies', message,
+            "The failure must say how many the producer declared: %s"
+            % message)
+        self.assertIn(
+            'only 1', message,
+            "...against how many are actually visible: %s" % message)
+
+    def test_AHealthyStreamStillSchedulesTheClose(self):
+        protocol = _GeneratorProtocolStub()
+
+        with patch.object(motioncorrNs.time, "sleep", lambda seconds: None):
+            ProtMotionCorrNewStreaming.stepsGeneratorStep(protocol)
+
+        stepNames = [step["function"] for step in protocol.insertedSteps]
+
+        self.assertIn(
+            "closeOutputSetStep",
+            stepNames,
+            "A healthy closed stream must still schedule its close.",
+        )

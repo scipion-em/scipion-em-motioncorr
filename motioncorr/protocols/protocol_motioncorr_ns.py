@@ -215,6 +215,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     inIds = (set(self.itemIdReadList)
                              | self._pendingMovieIds)
 
+                if producerClosed:
+                    # A row that is listed but never selectable would
+                    # keep the closing step from ever being scheduled,
+                    # leaving the output open and the run going for the
+                    # rest of time. Scheduling here is synchronous, so a
+                    # poll that got anywhere changes what is known -
+                    # pending ids are not work in flight, they are work
+                    # that could not start.
+                    knownIds = set(self.itemIdReadList)
+                    self._recordTerminalProgress(
+                        inMoviesSet, knownIds,
+                        Counter(self.itemIdReadList) == Counter(inIds),
+                        False)
+
             # In the if statement below, Counter is used because in the objId comparison the order doesn’t matter
             # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
             # ['id_a', 'id_b'] != ['id_b', 'id_a'], but they are the same with Counter.
