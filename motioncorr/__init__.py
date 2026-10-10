@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+import sys
 from os.path import dirname
 
 import pwem
@@ -102,14 +103,21 @@ class Plugin(pwem.Plugin):
             f'cd motioncor3-{v} && '
             f'git checkout {commit} && '
             'mkdir bin && '
-            r"sed -i 's|^CONDA = .*|CONDA = $(HOME)/miniforge3|' makefile11 && "
+            r'HOST_CXX="${MOTIONCOR_HOST_CXX:-g++-11}" && '
+            r'command -v "$HOST_CXX" >/dev/null 2>&1 || { '
+            r'echo "MotionCor3 needs g++-11, or set MOTIONCOR_HOST_CXX to a CUDA-compatible g++" >&2; exit 1; } && '
             r"sed -i 's|^CUDAHOME = .*|CUDAHOME =  /usr/local/cuda|' makefile11 && "
             r"sed -i '/^CUFLAG = -Xptxas -dlcm=ca -O2 \\/,/code=sm_70$/c\CUFLAG = -Xptxas -dlcm=ca -O2 -arch=all' makefile11 && "       
             r"sed -i 's|@\$(NVCC) -g -G -m64|@\$(NVCC) -m64|' makefile11 && "
             r"sed -i '/-L\/usr\/lib64 \\/a\    -Xcompiler -no-pie \\' makefile11 && "
             r"sed -i '/^PRJLIB =/a BINARY ?= MotionCor3' makefile11 && "
             r"sed -i 's/-o MotionCor3/-o $(BINARY)/' makefile11 && "
-            f' make exe -f makefile11 BINARY={binary} CUDAHOME={dirname(pwem.Config.CUDA_LIB)} -j 16 && '
+            f'make exe -f makefile11 BINARY={binary} '
+            f'CUDAHOME={dirname(pwem.Config.CUDA_LIB)} '
+            f'CONDA="${{CONDA_PREFIX:-{sys.prefix}}}" '
+            r'CC="$HOST_CXX -std=c++11" '
+            f'NVCC="{dirname(pwem.Config.CUDA_LIB)}/bin/nvcc -std=c++11 -ccbin=$HOST_CXX" '
+            '-j 16 && '
             f'cp {binary} bin/ && '
             f'touch {MOTIONCOR_INSTALLED}'
             ]
