@@ -172,6 +172,13 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
             outputMicFn = self._getOutputMicName(movie)
 
             argsDict = self._getMcArgs()
+            # runJob uses cwd=movieFolder; resolve a gain relative to the
+            # project directory before entering this per-movie directory.
+            gainArg = argsDict.get('-Gain')
+            if gainArg:
+                gainPath = str(gainArg).strip().strip('"')
+                if not os.path.isabs(gainPath):
+                    argsDict['-Gain'] = f'"{os.path.abspath(gainPath)}"'
             argsDict['-OutMrc'] = f'"{outputMicFn}"'
             argsDict['-LogDir'] = './'
             if self.isEER:
@@ -265,9 +272,26 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
     def _getCwdPath(self, movie, path):
         return os.path.join(self._getOutputMovieFolder(movie), path)
 
+    def _getMovieRoot(self, movie):
+        """Preserve dots in movie names, especially acquisition timestamps.
+
+        The pwem implementation assumes another short suffix is a second
+        extension, truncating names such as May14_21.14.32_1.tif to May14_21.14.
+        We only strip a real compression suffix when present.
+        """
+        filename = movie.getAttributeValue('_originalFileName',
+                                           movie.getFileName())
+        root, extension = os.path.splitext(os.path.basename(filename))
+        if extension.lower() in ('.gz', '.bz2', '.zip'):
+            root, _ = os.path.splitext(root)
+        return root
+
     def _getMovieLogFile(self, movie):
+        # MotionCor3 bases the log on the actual -InTiff/-InMrc/-InEer
+        # filename, not on _originalFileName (which may differ).
+        movieRoot = os.path.splitext(os.path.basename(movie.getFileName()))[0]
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s%s-Full.log' % (self._getMovieRoot(movie),
+        return '%s%s-Full.log' % (movieRoot,
                                   '-Patch' if usePatches else '')
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
