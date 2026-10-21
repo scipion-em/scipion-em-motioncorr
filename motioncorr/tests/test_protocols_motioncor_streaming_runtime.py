@@ -103,6 +103,10 @@ class _OutputSetStub:
 class _ProtocolStub:
     _possibleOutputs = MotionCorrOutputs
 
+    def _missingResultFiles(self, movieFName):
+        # These doubles have no motioncor output on disk.
+        return []
+
     def __init__(self):
         self.failedMovies = []
         self.doSaveMovie = _ValueStub(False)
@@ -3139,6 +3143,8 @@ class TestMotionCorrNewStreamingTerminalRefresh(TestCase):
             # The input generator checks this before each poll.
             def isFailed(self):
                 return False
+
+            _possibleOutputs = MotionCorrOutputs
 
             def __init__(self):
                 self.movies = _RefreshRequiredCloseOutput()

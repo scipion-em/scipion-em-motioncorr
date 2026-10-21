@@ -38,6 +38,10 @@ class _OutputSet:
 
 
 class _NewStreamingHarness(ProtMotionCorrNewStreaming):
+
+    def _missingResultFiles(self, movieFName):
+        # These doubles have no motioncor output on disk.
+        return []
     def __init__(self):
         self.failedMovies = []
         self.sRate = 1.0

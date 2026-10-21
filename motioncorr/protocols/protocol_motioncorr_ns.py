@@ -346,6 +346,17 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if movieFName in self.failedMovies:
             return
 
+        # A movie is published to every output or to none: one whose
+        # files are not all there would otherwise reach the movies, and
+        # maybe some micrographs, and miss the rest.
+        missingFiles = self._missingResultFiles(movieFName)
+
+        if missingFiles:
+            self.failedMovies.append(movieFName)
+            logger.error(redStr(f"ERROR: Motioncor gave no {missingFiles} for "
+                                f"{movieFName}; it is left out of every output."))
+            return
+
         if self.doSaveMovie.get():
             outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
             try:
@@ -435,6 +446,22 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     logger.error(traceback.format_exc())
                     raise
 
+    def _missingResultFiles(self, movieFName: str) -> List[str]:
+        """The files this movie's outputs are built from that do not exist."""
+        if ProtMotionCorrBase._useDoseWeightedOutput(self):
+            suffixes = [DW_SUFFIX]
+        else:
+            suffixes = ['']
+        if self.splitEvenOdd.get():
+            suffixes += [EVEN_SUFFIX, ODD_SUFFIX]
+        if self.doSaveMovie.get():
+            suffixes.append(STK_SUFFIX)
+
+        fileNames = [self._getResultMicFn(movieFName, suffix=suffix)
+                     for suffix in suffixes]
+
+        return [fileName for fileName in fileNames if not exists(fileName)]
+
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         attribList = [attrib] if type(attrib) is str else attrib
         failedOutputList = []
@@ -446,6 +473,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                     loadAllProperties()
             if outputSet is None or len(outputSet) == 0:
                 failedOutputList.append(attr)
+
+        staleFailed = getattr(self, self._possibleOutputs.moviesFailed.name, None)
+
+        if not self.failedMovies and staleFailed is not None:
+            # Every movie that failed before was aligned on this Continue.
+            self.deleteOutput(staleFailed)
 
         if self.failedMovies:
             if len(failedOutputList) == len(attribList):
