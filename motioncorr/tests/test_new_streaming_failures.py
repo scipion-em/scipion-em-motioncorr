@@ -169,12 +169,16 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             def getNumberOfFrames(self):
                 return 1
 
+            def getDim(self):
+                return (4096, 4096, 1)
+
             def setAlignment(self, _):
                 pass
 
         class _OutputMovies:
             def __init__(self):
                 self.writes = 0
+                self.dim = None
 
             def __len__(self):
                 return 0
@@ -193,6 +197,9 @@ class TestMotionCorrNewStreamingFailures(TestCase):
 
             def write(self):
                 self.writes += 1
+
+            def setDim(self, dim):
+                self.dim = dim
 
         outputMovies = _OutputMovies()
         protocol._getOutputMovies = lambda: outputMovies
@@ -220,6 +227,11 @@ class TestMotionCorrNewStreamingFailures(TestCase):
             outputMovies.writes,
             "The test must reach the persisted-output checkpoint before "
             "simulating the protocol store failure.",
+        )
+        self.assertEqual(
+            (4096, 4096, 1),
+            outputMovies.dim,
+            "The first published movie gives the output its dimensions.",
         )
 
     def test_RegisterMicsIsIdempotentForAlreadyPersistedMovie(self):

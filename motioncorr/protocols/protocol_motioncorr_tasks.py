@@ -99,8 +99,12 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         self.lock = threading.Lock()
         self.processed = 0
         self.registered = 0
+        # A batch motioncor fails on is left out, and Continue aligns its
+        # movies again: the run fails only if every movie failed. An output
+        # that cannot be saved is another matter, and fails the run.
         self._batchFailures = []
         self._failedBatchIds = set()
+        self._outputWriteFailures = []
 
         self.error(f">>> {Pretty.now()}: ----------------- "
                    f"Start processing movies----------- ")
@@ -129,8 +133,14 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         # Worker failures are recorded inside Pipeline threads so emtools
         # can close all queues normally. Re-raise from the main Scipion
         # protocol thread so the step becomes FAILED instead of RUNNING.
-        if self._batchFailures:
-            raise self._batchFailures[0]
+        if self._outputWriteFailures:
+            raise self._outputWriteFailures[0]
+
+        if self._batchFailures and not self._getPersistedOutputMovieIds():
+            raise RuntimeError(
+                "Motioncor failed for every movie (%d batch(es) failed); see "
+                "the errors above. Continue aligns them again."
+                % len(self._failedBatchIds)) from self._batchFailures[0]
 
         # Mark the output as closed
         self._firstTimeOutput = False
@@ -248,7 +258,9 @@ class ProtMotionCorrTasks(ProtMotionCorr):
         pendingIds = set()
 
         while True:
-            if self.isFailed():
+            # Aligning is GPU work and this generator feeds it: once the
+            # output cannot be saved, whatever it yields is thrown away.
+            if self.isFailed() or getattr(self, '_outputWriteFailures', None):
                 return
 
             discoveredIds = self._discoverMovieIdsAfter(
@@ -610,7 +622,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
                 # Let the queue drain, but preserve the publication failure
                 # so _processAllMoviesStep can raise it in the Scipion step.
                 with self.lock:
-                    self._batchFailures.append(exc)
+                    self._outputWriteFailures.append(exc)
                 return batch
 
         return _processBatchOutput

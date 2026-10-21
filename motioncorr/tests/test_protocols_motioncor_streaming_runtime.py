@@ -2356,6 +2356,10 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
                 self.streamingSleepOnWait = ValueStub(0)
                 self.streamingBatchSize = ValueStub(10)
                 self.closedOutputs = 0
+                self.published = set()
+
+            def _getPersistedOutputMovieIds(self):
+                return self.published
 
             def error(self, message):
                 return None
@@ -2402,19 +2406,29 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
         ):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "simulated worker-thread MotionCor failure",
+                "failed for every movie",
             ):
                 motioncorrTasks.ProtMotionCorrTasks._processAllMoviesStep(
                     protocol,
                     "now",
                 )
 
-        self.assertEqual(
-            0,
-            protocol.closedOutputs,
-            "Tasks must not close outputs as successful after a worker "
-            "failure; the main Scipion step must fail instead.",
-        )
+            self.assertEqual(
+                0,
+                protocol.closedOutputs,
+                "With every movie failed the step must fail, not close the "
+                "outputs as successful.",
+            )
+
+            # A failed batch among published movies is left out instead:
+            # the run ends well and Continue aligns it again.
+            protocol.published = {1}
+            motioncorrTasks.ProtMotionCorrTasks._processAllMoviesStep(
+                protocol,
+                "now",
+            )
+
+        self.assertEqual(1, protocol.closedOutputs)
 
     def test_LegacyMotionCorrKeepsDoneCompatibilityWithoutTasksSidecar(self):
         class Harness:
@@ -2622,7 +2636,7 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
 
             def __init__(self):
                 self.lock = threading.Lock()
-                self._batchFailures = []
+                self._outputWriteFailures = []
 
             def _moveBatchOutput(self, currentBatch):
                 raise error
@@ -2635,8 +2649,8 @@ class TestMotionCorrTasksStreamingRuntime(TestCase):
         returnedBatch = processor(batch)
 
         self.assertIs(returnedBatch, batch)
-        self.assertEqual(1, len(protocol._batchFailures))
-        self.assertIs(error, protocol._batchFailures[0])
+        self.assertEqual(1, len(protocol._outputWriteFailures))
+        self.assertIs(error, protocol._outputWriteFailures[0])
 
 
 class _RefreshRequiredTasksOutput:

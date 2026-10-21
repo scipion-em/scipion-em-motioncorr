@@ -41,12 +41,20 @@ import pyworkflow.protocol.params as params
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import Image, Float
+from pwem.objects import Image, Float, Movie
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.utils import weakImport
 
 from .. import Plugin, DEFECTS_FILE_EER
 from .protocol_base import ProtMotionCorrBase
+
+# Each movie's step returns one file here as its result file. On Continue,
+# pyworkflow keeps a finished step finished only while its result files
+# exist, so removing the ones of failed movies makes their steps run again.
+STEP_RESULTS_DIR = 'STEP_RESULTS'
+# Every output a movie is published to, when the run produces it.
+OUTPUT_NAMES = ('outputMovies', 'outputMicrographs',
+                'outputMicrographsDoseWeighted')
 
 
 class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
@@ -232,6 +240,120 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
                                                     prerequisites=deps,
                                                     needsGPU=False))
         return stepsId
+
+    # ------------------------- failed movies ----------------------------
+    def _insertAllSteps(self):
+        self._prepareFailedForRetry()
+        ProtAlignMovies._insertAllSteps(self)
+
+    def processMovieStep(self, movieDict, hasAlignment):
+        ProtAlignMovies.processMovieStep(self, movieDict, hasAlignment)
+
+        movie = Movie()
+        movie.setAttributesFromDict(movieDict, setBasic=True,
+                                    ignoreMissing=True)
+
+        return self._stepResultFiles([movie.getObjId()])
+
+    def _stepResultPath(self, movieId):
+        return self._getExtraPath(STEP_RESULTS_DIR, '%06d.TXT' % movieId)
+
+    def _stepResultFiles(self, movieIds):
+        """Result files of a movie's step, whatever became of the movie:
+        a failed one has its file removed when the next run starts."""
+        pwutils.makePath(self._getExtraPath(STEP_RESULTS_DIR))
+        paths = [self._stepResultPath(movieId) for movieId in movieIds]
+
+        for path in paths:
+            open(path, 'a').close()
+
+        return paths
+
+    def _publishedMovieIds(self):
+        """Movies in every output there is: one only in some still lacks
+        the others."""
+        published = None
+
+        for outputName in OUTPUT_NAMES:
+            outputSet = getattr(self, outputName, None)
+
+            if outputSet is not None:
+                ids = set(outputSet.getIdSet())
+                published = ids if published is None else published & ids
+
+        return published or set()
+
+    def _prepareFailedForRetry(self):
+        """Have Continue align again the movies that failed.
+
+        pwem counts a movie done by its DONE marker and its line in
+        DONE/all.TXT, and pyworkflow does not run a finished step again:
+        all three go for the movies that failed and are not published.
+        """
+        failedIds = set(self._readFailedList()) - self._publishedMovieIds()
+
+        if not failedIds:
+            return
+
+        for movieId in failedIds:
+            pwutils.cleanPath(self._stepResultPath(movieId))
+            movie = Movie()
+            movie.setObjId(movieId)
+            pwutils.cleanPath(self._getMovieDone(movie))
+
+        doneIds = [movieId for movieId in self._readDoneList()
+                   if movieId not in failedIds]
+
+        with open(self._getAllDone(), 'w') as handle:
+            handle.writelines('%d\n' % movieId for movieId in doneIds)
+
+    def _movieResultExists(self, movie):
+        """Whether every micrograph this movie's outputs are built from
+        exists: a movie is published to all of them or to none."""
+        names = []
+
+        if self._createOutputMicrographs():
+            names.append(self._getOutputMicName(movie))
+        if self._createOutputWeightedMicrographs():
+            names.append(self._getOutputMicWtName(movie))
+        if self._doSplitEvenOdd():
+            names.extend([self._getOutputMicEvenName(movie),
+                          self._getOutputMicOddName(movie)])
+
+        return all(os.path.exists(self._getExtraPath(name)) for name in names)
+
+    def _updateOutputSets(self, newDone, streamMode):
+        failed = [movie for movie in newDone
+                  if not self._movieResultExists(movie)]
+
+        if failed:
+            self.error("Movie(s) %s gave no aligned micrograph and are left "
+                       "out; Continue aligns them again."
+                       % [movie.getObjId() for movie in failed])
+            self._writeFailedList(failed)
+
+        self.__dict__.setdefault('_handledMovieIds', set()).update(
+            movie.getObjId() for movie in newDone)
+        ProtAlignMovies._updateOutputSets(
+            self, [movie for movie in newDone if movie not in failed],
+            streamMode)
+
+    def _checkNewOutput(self):
+        ProtAlignMovies._checkNewOutput(self)
+
+        if getattr(self, 'finished', False):
+            self._failIfEveryMovieFailed()
+
+    def _failIfEveryMovieFailed(self):
+        """A failed movie is left out; the run fails only when that
+        happened to every movie."""
+        if getattr(self, '_handledMovieIds', None) and not any(
+                getattr(self, outputName, None) is not None
+                and getattr(self, outputName).getSize()
+                for outputName in OUTPUT_NAMES):
+            raise Exception("Motioncor failed for every one of the %d "
+                            "movies; see the errors above. Continue aligns "
+                            "them again." % len(self._handledMovieIds))
 
     def waitForThreadStep(self):
         # Quick and dirty (maybe desperate) way to wait

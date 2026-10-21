@@ -673,17 +673,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
             self._defineOutputs(**{attrName: outputMovies})
 
+            createdSet = outputMovies
             outputMovies = getattr(
                 self,
                 attrName,
                 outputMovies,
             )
+            # Only a different object needs to reload what was just written: the
+            # created Set already holds it, and while empty it has stored no properties
             loadAllProperties = getattr(
                 outputMovies,
                 'loadAllProperties',
                 None,
             )
-            if callable(loadAllProperties):
+            if outputMovies is not createdSet and callable(loadAllProperties):
                 loadAllProperties()
 
             enableAppend = getattr(
@@ -771,17 +774,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
             self._defineOutputs(**{outputName: outputMics})
 
+            createdSet = outputMics
             outputMics = getattr(
                 self,
                 outputName,
                 outputMics,
             )
+            # Only a different object needs to reload what was just written: the
+            # created Set already holds it, and while empty it has stored no properties
             loadAllProperties = getattr(
                 outputMics,
                 'loadAllProperties',
                 None,
             )
-            if callable(loadAllProperties):
+            if outputMics is not createdSet and callable(loadAllProperties):
                 loadAllProperties()
 
             enableAppend = getattr(
