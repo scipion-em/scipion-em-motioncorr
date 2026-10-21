@@ -52,6 +52,8 @@ from .protocol_base import ProtMotionCorrBase
 # pyworkflow keeps a finished step finished only while its result files
 # exist, so removing the ones of failed movies makes their steps run again.
 STEP_RESULTS_DIR = 'STEP_RESULTS'
+# Image extensions a movie root must not end with, see _getMovieRoot.
+IMAGE_EXTENSIONS = ('.mrc', '.mrcs', '.tif', '.tiff', '.eer')
 # Every output a movie is published to, when the run produces it.
 OUTPUT_NAMES = ('outputMovies', 'outputMicrographs',
                 'outputMicrographsDoseWeighted')
@@ -334,9 +336,16 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
         self.__dict__.setdefault('_handledMovieIds', set()).update(
             movie.getObjId() for movie in newDone)
-        ProtAlignMovies._updateOutputSets(
-            self, [movie for movie in newDone if movie not in failed],
-            streamMode)
+        published = [movie for movie in newDone if movie not in failed]
+
+        if not published and streamMode != pwobj.Set.STREAM_CLOSED:
+            return
+
+        # pwem takes the first movie it is given for the output summary:
+        # only while there is a movie to give, and no output yet.
+        self._firstTimeOutput = (bool(published)
+                                 and getattr(self, 'outputMovies', None) is None)
+        ProtAlignMovies._updateOutputSets(self, published, streamMode)
 
     def _checkNewOutput(self):
         ProtAlignMovies._checkNewOutput(self)
@@ -401,6 +410,18 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
         extension, truncating names such as May14_21.14.32_1.tif to May14_21.14.
         We only strip a real compression suffix when present.
         """
+        root = self._getMovieFileRoot(movie)
+        # A movie named like movie.mrc.eer keeps an image extension in its
+        # root, and MotionCor cuts the output name it is given at it: asked
+        # for movie.mrc_aligned_mic.mrc it writes movie.mrc, which is never
+        # found again.
+        root, extension = os.path.splitext(root)
+        if extension.lower() not in IMAGE_EXTENSIONS:
+            root += extension
+        return root
+
+    def _getMovieFileRoot(self, movie):
+        """The movie's file name without its extension (or compression)."""
         filename = movie.getAttributeValue('_originalFileName',
                                            movie.getFileName())
         root, extension = os.path.splitext(os.path.basename(filename))

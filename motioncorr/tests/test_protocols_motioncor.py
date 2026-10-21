@@ -182,3 +182,6 @@ class TestMotioncorAlignMovies(BaseTest):
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
+        # The micrograph of a movie named like movie.mrc.eer must be found:
+        # an existing but empty output passed here before.
+        self.assertEqual(1, prot.outputMicrographsDoseWeighted.getSize())

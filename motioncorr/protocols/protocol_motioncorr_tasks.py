@@ -658,7 +658,7 @@ class ProtMotionCorrTasks(ProtMotionCorr):
             return False
 
         def _moveMovieFiles(movie):
-            movieRoot = 'output/' + ProtMotionCorr._getMovieRoot(self, movie)
+            movieRoot = 'output/' + ProtMotionCorr._getMovieFileRoot(self, movie)
             self.debug(f"Moving output for movie: {movieRoot}")
 
             if applyDose:
