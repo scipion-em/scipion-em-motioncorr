@@ -431,11 +431,26 @@ class ProtMotionCorr(ProtMotionCorrBase, ProtAlignMovies):
 
     def _getMovieLogFile(self, movie):
         # MotionCor3 bases the log on the actual -InTiff/-InMrc/-InEer
-        # filename, not on _originalFileName (which may differ).
+        # filename, not on _originalFileName (which may differ). For a
+        # movie named like movie.mrc.eer it may also cut that name at the
+        # image extension left inside it, as it does with the output name:
+        # the name actually written, in the movie folder or already moved
+        # to extra, is the one used.
         movieRoot = os.path.splitext(os.path.basename(movie.getFileName()))[0]
+        roots = [movieRoot]
+        innerRoot, innerExtension = os.path.splitext(movieRoot)
+        if innerExtension.lower() in IMAGE_EXTENSIONS:
+            roots.append(innerRoot)
         usePatches = self.patchX != 0 or self.patchY != 0
-        return '%s%s-Full.log' % (movieRoot,
-                                  '-Patch' if usePatches else '')
+        names = ['%s%s-Full.log' % (root, '-Patch' if usePatches else '')
+                 for root in roots]
+
+        for name in names[1:]:
+            if (os.path.exists(self._getExtraPath(name))
+                    or os.path.exists(self._getCwdPath(movie, name))):
+                return name
+
+        return names[0]
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
