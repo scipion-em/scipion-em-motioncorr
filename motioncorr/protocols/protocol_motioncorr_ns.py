@@ -42,7 +42,7 @@ import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
+from pwem.objects import SetOfMovies, SetOfMicrographs, SetOfCTF, CTFModel, Movie, Micrograph, MovieAlignment, Image
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport
@@ -57,6 +57,7 @@ EVEN_SUFFIX = '_EVN'
 ODD_SUFFIX = '_ODD'
 DW_SUFFIX = '_DW'
 STK_SUFFIX = '_Stk'
+CTF_SUFFIX = '_Ctf'
 
 
 class MotionCorrOutputs(Enum):
@@ -65,6 +66,7 @@ class MotionCorrOutputs(Enum):
     micrographsDW = SetOfMicrographs()
     micrographsEven = SetOfMicrographs()
     micrographsOdd = SetOfMicrographs()
+    ctfs = SetOfCTF()
 
 
 class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
@@ -348,6 +350,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         micsDW = getattr(self, self._possibleOutputs.micrographsDW.name, None)
         micsEven = getattr(self, self._possibleOutputs.micrographsEven.name, None)
         micsOdd = getattr(self, self._possibleOutputs.micrographsOdd.name, None)
+        ctfs = getattr(self, self._possibleOutputs.ctfs.name, None)
+
         if self.splitEvenOdd.get():
             outputList.append(micsEven)
             outputList.append(micsOdd)
@@ -355,6 +359,7 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputList.append(micsDW)
         else:
             outputList.append(mics)
+        outputList.append(ctfs)
 
         if movies and None not in outputList:
             for item in movies:
@@ -369,6 +374,14 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
         return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
+
+    def _getResultCtfFn(self, movieFName: str, suffix: str = '') -> str:
+        bName = removeBaseExt(movieFName).replace('.mrc', '')
+        return self._getExtraPath(f'{bName}_aligned_mic{CTF_SUFFIX}.txt')
+    
+    def _getResultPsdFn(self, movieFName: str, suffix: str = '') -> str:
+            bName = removeBaseExt(movieFName).replace('.mrc', '')
+            return self._getExtraPath(f'{bName}_aligned_mic{CTF_SUFFIX}.mrc')
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
@@ -417,6 +430,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                       inMovie: Movie, outputName: str,
                       suffix: str = '') -> None:
         outMicSet = self._getOutputMics(outputName, suffix=suffix)
+        outCtfSet = self._getOutputCTFs(self._possibleOutputs.ctfs.name)
+
         outMic = Micrograph()
         outMic.copyInfo(inMovie)
         micFn = self._getResultMicFn(movieFName, suffix=suffix)
@@ -426,11 +441,23 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         self.setMicPlotInfo(outMic, movieFName)
         if suffix in [DW_SUFFIX, '']:
             self.setMicsEvenOdd(movieFName, outMic)
-        # Data persistence
+
+        outCtf = CTFModel()
+        ctfFn = self._getResultCtfFn(movieFName)
+        psdFn = self._getResultPsdFn(movieFName)
+        outCtf = self._readCtfModel(outCtf, ctfFn, psdFn)
+
+        # Data persistence (mics)
         outMicSet.append(outMic)
         outMicSet.update(outMic)
         outMicSet.write()
+        # Data persistence (ctf)
+        outCtfSet.append(outCtf)
+        outCtfSet.update(outCtf)
+        outCtfSet.write()
+
         self._store(outMicSet)
+        self._store(outCtfSet)
 
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name
@@ -495,6 +522,21 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             self._defineOutputs(**{outputName: outputMics})
             self._defineSourceRelation(inputMoviesPointer, outputMics)
         return outputMics
+
+    def _getOutputCTFs(self, outputName: str) -> SetOfCTF:
+        outputCtfs = getattr(self, outputName, None)
+        if outputCtfs:
+            outputCtfs.enableAppend()
+        else:
+            inputMoviesPointer = self.getInputMovies(asPointer=True)
+            outputCtfs = SetOfCTF.create(self._getPath(), template='ctfs')
+            outputCtfs.copyInfo(self.getInputMovies())
+            outputCtfs.setStreamState(Set.STREAM_OPEN)
+            outputCtfs.write()  # Write set properties, otherwise it may expose the set (sqlite) without properties.
+
+            self._defineOutputs(**{outputName: outputCtfs})
+            self._defineSourceRelation(inputMoviesPointer, outputCtfs)
+        return outputCtfs
 
     def _getOutputsToCheck(self) -> List[str]:
         outputsToCheck = [
@@ -566,6 +608,71 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         except IndexError:
             logger.error(redStr(f"Expected {nframes} frames, found less. "
                                 f"Check movie {movieFName}"))
+
+    def _readCtfModel(self, ctfModel: CTFModel, ctfFn: str, psdFn: Optional[str] = None) -> CTFModel:
+        """Read MotionCor CTF txt and populate a Scipion CTFModel.
+
+        Expected numeric fields (typical MotionCor output):
+          [defocusU, defocusV, defocusAngle, phaseShiftRad, fit, resolution]
+        Some variants may prepend an index:
+          [idx, defocusU, defocusV, defocusAngle, phaseShiftRad, fit, resolution]
+        """
+
+        def _setWrongDefocus(model: CTFModel):
+            """Set invalid CTF values to mimic cistem import fallback."""
+            model.setDefocusU(-999)
+            model.setDefocusV(-1)
+            model.setDefocusAngle(-999)
+            model.setFitQuality(-999)
+            model.setResolution(-999)
+
+        try:
+            values = np.loadtxt(ctfFn, dtype=float, comments='#')
+            values = np.atleast_1d(values).ravel()
+
+            # Support both 6-column MotionCor output and 7-column variants
+            # that include a leading item index.
+            has_index = (
+                values.size >= 7 and
+                values[0] < 1000 and
+                values[1] > 1000 and
+                values[2] > 1000
+            )
+            i0 = 1 if has_index else 0
+
+            if values.size < i0 + 6:
+                raise ValueError(f"Not enough CTF columns in {ctfFn}: {values}")
+
+            defocusU = float(values[i0 + 0])
+            defocusV = float(values[i0 + 1])
+            defocusAngle = float(values[i0 + 2])
+            phaseShiftRad = float(values[i0 + 3])
+            ctfFit = float(values[i0 + 4])
+            ctfResolution = float(values[i0 + 5])
+
+            invalid = np.isnan(values).any() or defocusU < 0 or defocusV < 0
+
+            if invalid:
+                logger.warning(f"Invalid CTF values in {ctfFn}: {values}")
+                _setWrongDefocus(ctfModel)
+            else:
+                ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
+                ctfModel.setFitQuality(ctfFit)
+                ctfModel.setResolution(ctfResolution)
+
+                # Keep cistem behavior: avoid creating phaseShift if value is zero.
+                phaseShiftDeg = float(np.rad2deg(phaseShiftRad))
+                if phaseShiftDeg != 0.0:
+                    ctfModel.setPhaseShift(phaseShiftDeg)
+
+        except Exception as e:
+            logger.warning(f"Could not parse CTF file {ctfFn}: {e}")
+            _setWrongDefocus(ctfModel)
+
+        if psdFn and exists(psdFn):
+            ctfModel.setPsdFile(psdFn)
+
+        return ctfModel
 
     @staticmethod
     def createGlobalAlignmentPlot(meanX: List[float],

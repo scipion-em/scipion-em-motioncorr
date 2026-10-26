@@ -1,3 +1,5 @@
+4.0.2:
+  - Enable CTF estimation
 4.0.1:
  Users:
   - Improve the installer with the expected paths by Scipion and removing debug flags.

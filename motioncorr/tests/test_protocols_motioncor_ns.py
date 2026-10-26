@@ -28,8 +28,10 @@
 # *
 # **************************************************************************
 import os.path
+import tempfile
 
 from pwem.protocols import ProtImportMovies
+from pwem.objects import CTFModel
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
@@ -182,3 +184,64 @@ class TestMotioncorNSAlignMovies(BaseTest):
 
         self._checkOutput(prot)
         self._checkGainFile(prot)
+
+
+class TestMotioncorNSReadCtfModel(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def _assertStandardizedAngle(self, ctfAngle, rawAngle, places=2):
+        """setStandardDefocus normalizes astigmatism angle to [0, 180)."""
+        expected = rawAngle % 180.0
+        self.assertAlmostEqual(ctfAngle, expected, places=places)
+
+    def test_readCtfModel_motioncor_txt(self):
+        prot = self.newProtocol(ProtMotionCorrNewStreaming)
+
+        ctf_content = (
+            "# Columns: #1 micrograph number; #2 - defocus 1 [A]; #3 - defocus 2; #4 - azimuth\n"
+            "# of astigmatism; #5 - additional phase shift [radian]; #6 - cross correlation;\n"
+            "#7 - spacing (in Angstroms) up to which CTF rings were fit successfully\n"
+            "  11744.11   11479.96   -50.57     0.10    0.06715   17.2973\n"
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctf_fn = os.path.join(tmpdir, "movie_aligned_mic_Ctf.txt")
+            psd_fn = os.path.join(tmpdir, "movie_aligned_mic_Ctf.mrc")
+
+            with open(ctf_fn, "w") as fh:
+                fh.write(ctf_content)
+
+            with open(psd_fn, "wb") as fh:
+                fh.write(b"\0")
+
+            ctf = prot._readCtfModel(CTFModel(), ctf_fn, psd_fn)
+
+            self.assertAlmostEqual(ctf.getDefocusU(), 11744.11, places=2)
+            self.assertAlmostEqual(ctf.getDefocusV(), 11479.96, places=2)
+            self._assertStandardizedAngle(ctf.getDefocusAngle(), -50.57)
+            self.assertAlmostEqual(ctf.getFitQuality(), 0.06715, places=5)
+            self.assertAlmostEqual(ctf.getResolution(), 17.2973, places=4)
+            self.assertAlmostEqual(ctf.getPhaseShift(), 5.72957795, places=5)
+            self.assertEqual(ctf.getPsdFile(), psd_fn)
+
+    def test_readCtfModel_with_leading_index(self):
+        prot = self.newProtocol(ProtMotionCorrNewStreaming)
+
+        # Variant with leading micrograph index:
+        # [idx, defocusU, defocusV, defocusAngle, phaseShiftRad, fit, resolution]
+        ctf_content = "1 12153.57 11175.66 -52.43 0.00 0.09779 13.0612\n"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctf_fn = os.path.join(tmpdir, "movie_aligned_mic_Ctf.txt")
+            with open(ctf_fn, "w") as fh:
+                fh.write(ctf_content)
+
+            ctf = prot._readCtfModel(CTFModel(), ctf_fn)
+
+            self.assertAlmostEqual(ctf.getDefocusU(), 12153.57, places=2)
+            self.assertAlmostEqual(ctf.getDefocusV(), 11175.66, places=2)
+            self._assertStandardizedAngle(ctf.getDefocusAngle(), -52.43)
+            self.assertAlmostEqual(ctf.getFitQuality(), 0.09779, places=5)
+            self.assertAlmostEqual(ctf.getResolution(), 13.0612, places=4)
