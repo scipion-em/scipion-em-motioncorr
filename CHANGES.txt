@@ -1,3 +1,13 @@
+4.1.0:
+ Users:
+  - Streaming is reliable: Continue/Resume picks up where the run stopped: it reruns the steps an interrupted run left unfinished, without hanging, losing or repeating items
+  - Failed movies are left out of every output and aligned again on Continue; the run fails only if every movie failed
+  - Each movie is published to every output or to none; the failed-movies output goes away once Continue aligned them all
+  - Movies named like movie.mrc.eer find their micrograph and alignment log
+  - The dose-weighted output is made only when the movies really have dose information
+  - MotionCor3 compiles with CUDA-compatible compilers
+ Developers:
+  - Streaming no longer depends on the database backend (logical outputs, watermark discovery)
 4.0.1:
  Users:
   - Improve the installer with the expected paths by Scipion and removing debug flags.

@@ -35,7 +35,7 @@ from pyworkflow import SPA, TOMO
 from .constants import *
 
 
-__version__ = '4.0.1'
+__version__ = '4.1.0'
 _references = ['Zheng2017']
 
 
