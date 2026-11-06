@@ -47,6 +47,7 @@ MRCS_EXT = '.mrcs'
 MRC_EXT = '.mrc'
 EVEN_SUFFIX = '_EVN'
 ODD_SUFFIX = '_ODD'
+CTF_SUFFIX = '_Ctf'
 OUTPUT_TSM_FAILED_NAME = "FailedTiltSeriesMovies"
 
 
@@ -273,12 +274,13 @@ class ProtTsMotionCorr(ProtMotionCorrBase):
     def _getResultImgs(self, tsId: str, suffix: str = '') -> List[str]:
         imagesDir = Path(self._getTsResultsPath(tsId))
         pattern = f'*{suffix}{MRC_EXT}'
-        exclusionWords = [EVEN_SUFFIX, ODD_SUFFIX] if suffix == '' else []
-        if exclusionWords:
-            finalList = [str(p) for p in imagesDir.glob(pattern) if
-                         not any(exclusionWord in p.name for exclusionWord in exclusionWords)]
-        else:
-            finalList = [str(p) for p in imagesDir.glob(pattern)]
+        exclusionWords = [CTF_SUFFIX]
+        if suffix == '':
+            exclusionWords.extend([EVEN_SUFFIX, ODD_SUFFIX])
+
+        finalList = [str(p) for p in imagesDir.glob(pattern) if
+                     not any(exclusionWord in p.name for exclusionWord in exclusionWords)]
+
         return sorted(finalList)
 
     @retry_on_sqlite_lock(log=logger)

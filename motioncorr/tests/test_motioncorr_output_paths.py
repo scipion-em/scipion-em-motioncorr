@@ -28,6 +28,7 @@ class _NamingProtocol:
     patchX = 5
     patchY = 5
     _getMovieRoot = ProtMotionCorr._getMovieRoot
+    _getMovieFileRoot = ProtMotionCorr._getMovieFileRoot
     _getOutputMicName = ProtMotionCorr._getOutputMicName
     _getMovieLogFile = ProtMotionCorr._getMovieLogFile
 

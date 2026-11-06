@@ -42,7 +42,8 @@ import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.gui.plotter import Plotter
-from pwem.objects import SetOfMovies, SetOfMicrographs, Movie, Micrograph, MovieAlignment, Image
+from pwem.objects import (SetOfMovies, SetOfMicrographs, SetOfCTF, CTFModel, Movie, Micrograph,
+                          MovieAlignment, Image)
 from pyworkflow.object import Set, CsvList, Float, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cyanStr, Message, redStr, removeBaseExt, getExt, weakImport
@@ -56,6 +57,7 @@ EVEN_SUFFIX = '_EVN'
 ODD_SUFFIX = '_ODD'
 DW_SUFFIX = '_DW'
 STK_SUFFIX = '_Stk'
+CTF_SUFFIX = '_Ctf'
 
 
 class MotionCorrOutputs(Enum):
@@ -65,6 +67,7 @@ class MotionCorrOutputs(Enum):
     micrographsEven = SetOfMicrographs()
     micrographsOdd = SetOfMicrographs()
     moviesFailed = SetOfMovies()
+    ctfs = SetOfCTF()
 
 
 class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
@@ -147,6 +150,15 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                       label='Split & sum odd/even frames?',
                       help='Generate odd and even sums using odd and even frames '
                            'respectively when this option is enabled.')
+
+        form.addParam('estimateCtf', params.BooleanParam, default=False,
+                      label='Estimate CTF?',
+                      help='MotionCor3 also estimates the CTF of each aligned '
+                           'micrograph, in the same run, with the spherical '
+                           'aberration and amplitude contrast of the input '
+                           'movies. The CTFs are published in the ctfs output. '
+                           'A movie whose CTF cannot be read is left out of '
+                           'every output and aligned again on Continue.')
 
         form.addParam('doSaveMovie', params.BooleanParam, default=False,
                       expertLevel=cons.LEVEL_ADVANCED,
@@ -299,6 +311,12 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         self.isEER = getExt(firstItem.getFileName()) == ".eer"
 
+        if ProtMotionCorrNewStreaming._estimatesCtf(self) and None in self._getCtfAcquisitionValues():
+            raise RuntimeError(
+                "Input movies have no spherical aberration or amplitude "
+                "contrast, needed to estimate the CTF."
+            )
+
         if (self.doApplyDoseFilter.get()
                 and not self._hasValidDose()):
             raise RuntimeError(
@@ -356,6 +374,20 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             logger.error(redStr(f"ERROR: Motioncor gave no {missingFiles} for "
                                 f"{movieFName}; it is left out of every output."))
             return
+
+        ctfModel = None
+        if ProtMotionCorrNewStreaming._estimatesCtf(self):
+            try:
+                # Read before anything is published, so a movie whose CTF
+                # cannot be read reaches no output
+                ctfModel = self._readCtfModel(CTFModel(),
+                                              self._getResultCtfFn(movieFName),
+                                              self._getResultPsdFn(movieFName))
+            except Exception as e:
+                self.failedMovies.append(movieFName)
+                logger.error(redStr(f"ERROR: Reading the CTF of {movieFName} failed "
+                                    f"with the exception {e}; it is left out of every output."))
+                return
 
         if self.doSaveMovie.get():
             outMovieFn = self._getResultMicFn(movieFName, suffix=STK_SUFFIX)
@@ -437,6 +469,10 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                         if not self._registerMics(movieFName, inMovie, outputName, suffix=ODD_SUFFIX):
                             return
 
+                    # CTF --------------------------------------------------------------------
+                    if ctfModel is not None:
+                        self._registerCtf(inMovie, ctfModel)
+
                     # Close explicitly the outputs (for streaming)
                     self.closeOutputsForStreaming()
 
@@ -459,6 +495,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
 
         fileNames = [self._getResultMicFn(movieFName, suffix=suffix)
                      for suffix in suffixes]
+        if ProtMotionCorrNewStreaming._estimatesCtf(self):
+            fileNames.append(self._getResultCtfFn(movieFName))
 
         return [fileName for fileName in fileNames if not exists(fileName)]
 
@@ -529,6 +567,9 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
                            % self.getInputMovies().getSize())
             if self.splitEvenOdd.get() and self.doApplyDoseFilter.get():
                 summary.append('Even/odd outputs are dose-weighted!')
+            ctfs = getattr(self, self._possibleOutputs.ctfs.name, None)
+            if ctfs is not None:
+                summary.append('Estimated the CTF of %d micrographs.' % ctfs.getSize())
         else:
             summary.append('Output is not ready')
 
@@ -563,6 +604,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
             outputList.append(micsDW)
         else:
             outputList.append(mics)
+        if ProtMotionCorrNewStreaming._estimatesCtf(self):
+            outputList.append(getattr(self, self._possibleOutputs.ctfs.name, None))
 
         if movies is not None and None not in outputList:
             for outputSet in [movies] + outputList:
@@ -598,6 +641,48 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
     def _getResultMicFn(self, movieFName: str, suffix: str = '') -> str:
         bName = removeBaseExt(movieFName).replace('.mrc', '')
         return self._getExtraPath(f'{bName}_aligned_mic{suffix}.mrc')
+
+    def _estimatesCtf(self) -> bool:
+        estimateCtf = getattr(self, 'estimateCtf', None)
+        return bool(estimateCtf.get()) if estimateCtf is not None else False
+
+    def _getResultCtfFn(self, movieFName: str) -> str:
+        """The CTF values MotionCor3 writes next to the micrograph."""
+        return self._getResultMicFn(movieFName, suffix=CTF_SUFFIX)[:-len('.mrc')] + '.txt'
+
+    def _getResultPsdFn(self, movieFName: str) -> str:
+        """The power spectrum MotionCor3 writes with the CTF."""
+        return self._getResultMicFn(movieFName, suffix=CTF_SUFFIX)
+
+    @staticmethod
+    def _readCtfModel(ctfModel: CTFModel, ctfFn: str, psdFn: Optional[str] = None) -> CTFModel:
+        """Fill the CTF model from the CTF file MotionCor3 writes; raise when it cannot be read.
+
+        Its values are [defocusU, defocusV, defocusAngle, phaseShift (radians), fit, resolution],
+        with the micrograph number before them in MotionCor3's own files.
+        """
+        values = np.atleast_1d(np.loadtxt(ctfFn, dtype=float, comments='#')).ravel()
+        # The micrograph number is small; defocus values are thousands of Angstroms
+        hasIndex = (values.size >= 7 and values[0] < 1000
+                    and values[1] > 1000 and values[2] > 1000)
+        first = 1 if hasIndex else 0
+        if values.size < first + 6:
+            raise ValueError(f"Not enough CTF values in {ctfFn}: {values}")
+
+        defocusU, defocusV, defocusAngle, phaseShiftRad, fit, resolution = (
+            float(value) for value in values[first:first + 6])
+        if np.isnan(values).any() or defocusU <= 0 or defocusV <= 0:
+            raise ValueError(f"No usable CTF in {ctfFn}: {values}")
+
+        ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
+        ctfModel.setFitQuality(fit)
+        ctfModel.setResolution(resolution)
+        phaseShift = float(np.rad2deg(phaseShiftRad))
+        if phaseShift != 0.0:
+            ctfModel.setPhaseShift(phaseShift)
+        if psdFn and exists(psdFn):
+            ctfModel.setPsdFile(psdFn)
+        return ctfModel
 
     def setMicPlotInfo(self, mic: Micrograph, movieFName: str) -> None:
         mic.plotGlobal = Image(location=self._getPlotGlobal(movieFName))
@@ -682,6 +767,55 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         outMicSet.write()
         self._store(outMicSet)
         return True
+
+    def _registerCtf(self, inMovie: Movie, ctfModel: CTFModel) -> None:
+        """Publish the CTF of this movie's micrograph (once), with the micrograph's id."""
+        outCtfSet = self._getOutputCtfs()
+        if len(outCtfSet) > 0 and inMovie.getObjId() in outCtfSet:
+            return
+        outputMics = getattr(self, self._getMicsOutputName())
+        ctfModel.copyObjId(inMovie)
+        ctfModel.setMicrograph(outputMics[inMovie.getObjId()])
+        # Data persistence
+        outCtfSet.append(ctfModel)
+        outCtfSet.update(ctfModel)
+        outCtfSet.write()
+        self._store(outCtfSet)
+
+    def _getMicsOutputName(self) -> str:
+        if ProtMotionCorrBase._useDoseWeightedOutput(self):
+            return self._possibleOutputs.micrographsDW.name
+        return self._possibleOutputs.micrographs.name
+
+    def _getOutputCtfs(self) -> SetOfCTF:
+        attrName = self._possibleOutputs.ctfs.name
+        outputCtfs = getattr(self, attrName, None)
+        if outputCtfs is not None:
+            loadAllProperties = getattr(outputCtfs, 'loadAllProperties', None)
+            if callable(loadAllProperties):
+                loadAllProperties()
+            outputCtfs.enableAppend()
+            return outputCtfs
+
+        outputMics = getattr(self, self._getMicsOutputName())
+        outputCtfs = SetOfCTF.create(self._getPath(), template='ctfs')
+        outputCtfs.setMicrographs(outputMics)
+        outputCtfs.setStreamState(Set.STREAM_OPEN)
+        outputCtfs.write()  # Persist set properties before exposing the streaming output.
+
+        self._defineOutputs(**{attrName: outputCtfs})
+
+        createdSet = outputCtfs
+        outputCtfs = getattr(self, attrName, outputCtfs)
+        loadAllProperties = getattr(outputCtfs, 'loadAllProperties', None)
+        if outputCtfs is not createdSet and callable(loadAllProperties):
+            loadAllProperties()
+        enableAppend = getattr(outputCtfs, 'enableAppend', None)
+        if callable(enableAppend):
+            enableAppend()
+
+        self._defineCtfRelation(outputMics, outputCtfs)
+        return outputCtfs
 
     def _getOutputMovies(self) -> SetOfMovies:
         attrName = self._possibleOutputs.movies.name
@@ -845,6 +979,8 @@ class ProtMotionCorrNewStreaming(ProtMotionCorrBase, ProtStreamingBase):
         if self.splitEvenOdd.get():
             outputsToCheck.append(self._possibleOutputs.micrographsEven.name)
             outputsToCheck.append(self._possibleOutputs.micrographsOdd.name)
+        if ProtMotionCorrNewStreaming._estimatesCtf(self):
+            outputsToCheck.append(self._possibleOutputs.ctfs.name)
         return outputsToCheck
 
     def closeOutputsForStreaming(self):

@@ -165,6 +165,28 @@ class TestMotioncorNSAlignMovies(BaseTest):
         self._checkAlignment(getattr(prot, prot._possibleOutputs.movies.name)[1],
                              (1, 16), [0, 0, 0, 0])
 
+    def test_mrcs_ctf(self):
+        print(magentaStr("\n==> Testing motioncor - mrcs movies, estimating the CTF:"))
+        prot = self.newProtocol(ProtMotionCorrNewStreaming,
+                                objLabel='mrcs - motioncor + CTF',
+                                patchX=0, patchY=0, estimateCtf=True)
+        inputMovies = getattr(self.protImport2, self.protImport2._possibleOutputs.outputMovies.name, None)
+        prot.inputMovies.set(inputMovies)
+        self.launchProtocol(prot)
+
+        self._checkOutput(prot)
+        mics = getattr(prot, prot._possibleOutputs.micrographsDW.name)
+        ctfs = getattr(prot, prot._possibleOutputs.ctfs.name, None)
+        self.assertIsNotNone(ctfs, "Output SetOfCTF was not created.")
+        self.assertEqual(ctfs.getSize(), mics.getSize(),
+                         "Every micrograph must have its CTF.")
+        for ctf in ctfs:
+            self.assertGreater(ctf.getDefocusU(), 0)
+            self.assertGreater(ctf.getDefocusV(), 0)
+            self.assertEqual(ctf.getMicrograph().getObjId(), ctf.getObjId())
+            self.assertTrue(os.path.exists(ctf.getMicrograph().getFileName()))
+        self.assertEqual(ctfs.getMicrographs().getSize(), mics.getSize())
+
     def test_eer(self):
         print(magentaStr("\n==> Testing motioncor - eer movies:"))
         protImport = self.runImportMovies(

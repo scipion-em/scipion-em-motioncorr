@@ -509,6 +509,14 @@ class ProtMotionCorrBase(EMProtocol):
             # '-LogDir': './'
             # '-FmRef': 0
         }
+        estimatesCtf = getattr(self, '_estimatesCtf', None)
+        if callable(estimatesCtf) and estimatesCtf():
+            # With a spherical aberration MotionCor3 also estimates the CTF
+            # of the sum (-Cs 0 above turns it off)
+            sphericalAberration, amplitudeContrast = self._getCtfAcquisitionValues()
+            argsDict['-Cs'] = sphericalAberration
+            argsDict['-AmpContrast'] = amplitudeContrast
+
         if self.isEER:
             argsDict.update({'-EerSampling': self.eerSampling.get() + 1,
                              '-FmIntFile': self._getExtraPath("FmIntFile.txt")})
@@ -696,6 +704,36 @@ class ProtMotionCorrBase(EMProtocol):
             itemValue if value is None else value
             for value, itemValue in zip(values, itemValues)
         )
+
+    def _estimatesCtf(self):
+        """ Whether MotionCor3 is asked to estimate the CTF too: only the
+        protocols that offer it say so. """
+        return False
+
+    def _getCtfAcquisitionValues(self):
+        """ The spherical aberration and amplitude contrast the CTF is
+        estimated with, from the input movies' acquisition (the first movie's
+        while the streaming Set has not got them yet); None when unknown. """
+        if not hasattr(self, '_cachedCtfAcquisitionValues'):
+            values = (None, None)
+            inputMovies = self.getInputMovies()
+            sources = [inputMovies]
+            getFirstItem = getattr(inputMovies, 'getFirstItem', None)
+            if callable(getFirstItem):
+                sources.append(getFirstItem())
+            for source in sources:
+                getAcquisition = getattr(source, 'getAcquisition', None)
+                acquisition = getAcquisition() if callable(getAcquisition) else None
+                if acquisition is None:
+                    continue
+                values = (acquisition.getSphericalAberration(),
+                          acquisition.getAmplitudeContrast())
+                if None not in values:
+                    break
+            if None in values:
+                return values
+            self._cachedCtfAcquisitionValues = values
+        return self._cachedCtfAcquisitionValues
 
     def _getCachedAcquisitionValues(self):
         # Cache plain scalars so later loadAllProperties() refreshes cannot

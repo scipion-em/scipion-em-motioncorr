@@ -6,8 +6,11 @@
   - Movies named like movie.mrc.eer find their micrograph and alignment log
   - The dose-weighted output is made only when the movies really have dose information
   - MotionCor3 compiles with CUDA-compatible compilers
+  - Movie alignment (new streaming) can estimate the CTF with MotionCor3 in the same run ("Estimate CTF?", off by default): the CTFs are published in the ctfs output, each linked to its micrograph, and a movie whose CTF cannot be read is left out and aligned again on Continue. The other motioncor protocols keep running MotionCor3 without CTF (-Cs 0)
  Developers:
   - Streaming no longer depends on the database backend (logical outputs, watermark discovery)
+4.0.2:
+  - Enable CTF estimation
 4.0.1:
  Users:
   - Improve the installer with the expected paths by Scipion and removing debug flags.
